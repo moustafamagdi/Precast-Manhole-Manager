@@ -106,6 +106,8 @@ namespace Hatco.PrecastManholeManager.Services
                     log.Info($"Accepted penetration records: {request.AcceptedRecords.Count}");
 
                     var existing = CollectManagedOpenings(doc, wallIds, log);
+                    var unmanaged = CollectUnmanagedOpenings(doc, wallIds, log);
+
                     var existingByKey = existing
                         .GroupBy(x => x.Data.SourceKey)
                         .ToDictionary(g => g.Key, g => g.First());
@@ -145,14 +147,35 @@ namespace Hatco.PrecastManholeManager.Services
                                 }
                                 else
                                 {
-                                    Opening created = CreateOpening(doc, record);
-                                    OpeningStorageService.Write(created, record);
+                                    Opening orphan = FindMatchingUnmanagedOpening(unmanaged, record);
+                                    if (orphan != null)
+                                    {
+                                        OpeningStorageService.Write(orphan, record);
+                                        unmanaged.Remove(orphan);
 
-                                    result.Created++;
-                                    log.Info(
-                                        $"CREATED Opening={created.Id.IntegerValue} Wall={record.HostWallId} " +
-                                        $"Key='{record.SourceKey}' SourceShape='{record.Shape}' " +
-                                        $"NativeCut={record.CutWidthMm:0.#}x{record.CutHeightMm:0.#}mm");
+                                        result.Updated++;
+                                        log.Info(
+                                            $"ADOPTED ExistingOpening={orphan.Id.IntegerValue} Wall={record.HostWallId} " +
+                                            $"Key='{record.SourceKey}' NativeCut={record.CutWidthMm:0.#}x{record.CutHeightMm:0.#}mm");
+                                    }
+                                    else
+                                    {
+                                        using (var sub = new SubTransaction(doc))
+                                        {
+                                            sub.Start();
+
+                                            Opening created = CreateOpening(doc, record);
+                                            OpeningStorageService.Write(created, record);
+
+                                            sub.Commit();
+
+                                            result.Created++;
+                                            log.Info(
+                                                $"CREATED Opening={created.Id.IntegerValue} Wall={record.HostWallId} " +
+                                                $"Key='{record.SourceKey}' SourceShape='{record.Shape}' " +
+                                                $"NativeCut={record.CutWidthMm:0.#}x{record.CutHeightMm:0.#}mm");
+                                        }
+                                    }
                                 }
                             }
                             catch (Exception ex)
@@ -237,6 +260,75 @@ namespace Hatco.PrecastManholeManager.Services
 
             log.Info($"Existing managed openings on selected manhole walls: {list.Count}");
             return list;
+        }
+
+        private static List<Opening> CollectUnmanagedOpenings(
+            Document doc,
+            HashSet<int> wallIds,
+            DiagnosticLogger log)
+        {
+            var list = new List<Opening>();
+
+            foreach (Opening opening in new FilteredElementCollector(doc).OfClass(typeof(Opening)).Cast<Opening>())
+            {
+                if (opening.Host == null || !wallIds.Contains(opening.Host.Id.IntegerValue))
+                    continue;
+
+                ManagedOpeningData data;
+                if (OpeningStorageService.TryRead(opening, out data))
+                    continue;
+
+                list.Add(opening);
+            }
+
+            log.Info($"Unmanaged openings on selected manhole walls: {list.Count}");
+            return list;
+        }
+
+        private static Opening FindMatchingUnmanagedOpening(
+            IEnumerable<Opening> openings,
+            PenetrationRecord record)
+        {
+            const double centerToleranceMm = 5.0;
+            const double sizeToleranceMm = 5.0;
+
+            foreach (Opening opening in openings)
+            {
+                if (opening.Host == null || opening.Host.Id.IntegerValue != record.HostWallId)
+                    continue;
+
+                if (!opening.IsRectBoundary || opening.BoundaryRect == null || opening.BoundaryRect.Count < 2)
+                    continue;
+
+                XYZ p0 = opening.BoundaryRect[0];
+                XYZ p1 = opening.BoundaryRect[1];
+
+                XYZ center = (p0 + p1) * 0.5;
+                double centerXmm = UnitUtil.FtToMm(center.X);
+                double centerYmm = UnitUtil.FtToMm(center.Y);
+                double centerZmm = UnitUtil.FtToMm(center.Z);
+
+                double horizontalFt = Math.Sqrt(
+                    Math.Pow(p1.X - p0.X, 2) +
+                    Math.Pow(p1.Y - p0.Y, 2));
+
+                double widthMm = UnitUtil.FtToMm(horizontalFt);
+                double heightMm = UnitUtil.FtToMm(Math.Abs(p1.Z - p0.Z));
+
+                bool centerMatches =
+                    Math.Abs(centerXmm - record.Xmm) <= centerToleranceMm &&
+                    Math.Abs(centerYmm - record.Ymm) <= centerToleranceMm &&
+                    Math.Abs(centerZmm - record.Zmm) <= centerToleranceMm;
+
+                bool sizeMatches =
+                    Math.Abs(widthMm - record.CutWidthMm) <= sizeToleranceMm &&
+                    Math.Abs(heightMm - record.CutHeightMm) <= sizeToleranceMm;
+
+                if (centerMatches && sizeMatches)
+                    return opening;
+            }
+
+            return null;
         }
 
         private static bool Matches(ManagedOpeningData data, PenetrationRecord record)
