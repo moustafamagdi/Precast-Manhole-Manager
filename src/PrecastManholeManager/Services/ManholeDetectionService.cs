@@ -105,6 +105,13 @@ namespace Hatco.PrecastManholeManager.Services
             result.Walls = picked.OrderBy(w => w.Number).ToList();
             ComputeDimensions(result);
 
+            string geometryWarning = ValidateDetectedGeometry(result);
+            if (!string.IsNullOrWhiteSpace(geometryWarning))
+            {
+                result.Warning = geometryWarning;
+                _log.Warn(result.Warning);
+            }
+
             _log.Info("Assigned wall numbers:");
             foreach (var w in result.Walls)
                 _log.Info(w.ToString());
@@ -148,6 +155,80 @@ namespace Hatco.PrecastManholeManager.Services
                 minZ < double.MaxValue && maxZ > double.MinValue
                     ? maxZ - minZ
                     : 0;
+        }
+
+        private static string ValidateDetectedGeometry(ManholeDetectionResult result)
+        {
+            ManholeWall w1 = result.Walls.First(x => x.Number == 1);
+            ManholeWall w2 = result.Walls.First(x => x.Number == 2);
+            ManholeWall w3 = result.Walls.First(x => x.Number == 3);
+            ManholeWall w4 = result.Walls.First(x => x.Number == 4);
+
+            const double parallelDotMin = 0.95;
+            const double perpendicularDotMax = 0.20;
+            const double oppositeVectorDotMax = -0.80;
+            double symmetryToleranceFt = UnitUtil.MmToFt(150);
+
+            if (Math.Abs(w1.Direction.DotProduct(w4.Direction)) < parallelDotMin ||
+                Math.Abs(w2.Direction.DotProduct(w3.Direction)) < parallelDotMin)
+            {
+                return "Detected walls do not form the required opposite parallel pairs W1-W4 and W2-W3.";
+            }
+
+            if (Math.Abs(w1.Direction.DotProduct(w2.Direction)) > perpendicularDotMax)
+            {
+                return "Detected wall pairs are not sufficiently perpendicular.";
+            }
+
+            XYZ v1 = Flatten(w1.MidPoint - result.Center);
+            XYZ v4 = Flatten(w4.MidPoint - result.Center);
+            XYZ v2 = Flatten(w2.MidPoint - result.Center);
+            XYZ v3 = Flatten(w3.MidPoint - result.Center);
+
+            if (v1.GetLength() < 1e-9 || v2.GetLength() < 1e-9 ||
+                v3.GetLength() < 1e-9 || v4.GetLength() < 1e-9)
+            {
+                return "One or more detected wall midpoints are too close to the foundation center.";
+            }
+
+            if (v1.Normalize().DotProduct(v4.Normalize()) > oppositeVectorDotMax ||
+                v2.Normalize().DotProduct(v3.Normalize()) > oppositeVectorDotMax)
+            {
+                return "Detected opposite walls do not lie on opposite sides of the foundation center.";
+            }
+
+            double d1 = GeometryUtil.DistancePointToUnboundedLine2D(result.Center, w1.Axis);
+            double d4 = GeometryUtil.DistancePointToUnboundedLine2D(result.Center, w4.Axis);
+            double d2 = GeometryUtil.DistancePointToUnboundedLine2D(result.Center, w2.Axis);
+            double d3 = GeometryUtil.DistancePointToUnboundedLine2D(result.Center, w3.Axis);
+
+            if (Math.Abs(d1 - d4) > symmetryToleranceFt ||
+                Math.Abs(d2 - d3) > symmetryToleranceFt)
+            {
+                return "Detected wall pairs are not symmetric around the selected foundation center.";
+            }
+
+            if (result.ClearW1W4Ft <= UnitUtil.MmToFt(300) ||
+                result.ClearW2W3Ft <= UnitUtil.MmToFt(300))
+            {
+                return "Detected manhole clear dimension is implausibly small.";
+            }
+
+            double ratio = result.ClearW1W4Ft > result.ClearW2W3Ft
+                ? result.ClearW1W4Ft / result.ClearW2W3Ft
+                : result.ClearW2W3Ft / result.ClearW1W4Ft;
+
+            if (ratio > 2.0)
+            {
+                return "Detected manhole clear dimensions are strongly disproportionate and require review.";
+            }
+
+            return null;
+        }
+
+        private static XYZ Flatten(XYZ p)
+        {
+            return new XYZ(p.X, p.Y, 0);
         }
 
         private static double ClearDistanceBetweenParallelWalls(Wall a, Wall b)
