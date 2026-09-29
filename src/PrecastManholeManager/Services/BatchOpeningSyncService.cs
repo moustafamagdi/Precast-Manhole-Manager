@@ -198,6 +198,7 @@ namespace Hatco.PrecastManholeManager.Services
             XYZ p1 = center - tangent * halfWidth - XYZ.BasisZ * halfHeight;
             XYZ p2 = center + tangent * halfWidth + XYZ.BasisZ * halfHeight;
 
+            OpeningJoinPreparationService.UnjoinConflictingGeometry(doc, wall, record, null);
             return doc.Create.NewOpening(wall, p1, p2);
         }
 
