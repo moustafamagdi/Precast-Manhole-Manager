@@ -8,6 +8,16 @@ namespace Hatco.PrecastManholeManager.Infrastructure
         private const string RootFolderName = "Precast Manhole Manager";
         private const string LogsFolderName = "Logs";
 
+        public static string GetManufacturerExportsFolder()
+        {
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string root = Path.Combine(desktop, RootFolderName);
+            string exports = Path.Combine(root, "Manufacturer Exports");
+
+            Directory.CreateDirectory(exports);
+            return exports;
+        }
+
         public static string GetLogsFolder()
         {
             string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
