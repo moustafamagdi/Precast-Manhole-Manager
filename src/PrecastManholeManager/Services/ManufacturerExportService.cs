@@ -170,16 +170,26 @@ namespace Hatco.PrecastManholeManager.Services
             OpeningManholeLinkData link,
             ManholeDataRecord manhole)
         {
-            double sourceHeightMm = InferSourceHeightMm(managed);
-            double absoluteInvertMm = managed.Zmm - (sourceHeightMm / 2.0);
-            double invertFromBaseMm = absoluteInvertMm - manhole.BaseTopZmm;
-
             double offsetMm = CalculateOffsetFromWallStart(doc, managed.HostWallId, managed.Xmm, managed.Ymm, managed.Zmm);
 
             string category = string.Empty;
             string systemName = string.Empty;
             string familyType = string.Empty;
-            TryResolveSourceDetails(doc, managed, out category, out systemName, out familyType);
+            double sourceHeightMm = 0.0;
+
+            TryResolveSourceDetails(
+                doc,
+                managed,
+                out category,
+                out systemName,
+                out familyType,
+                out sourceHeightMm);
+
+            if (sourceHeightMm <= 0)
+                sourceHeightMm = InferSourceHeightMm(managed);
+
+            double absoluteInvertMm = managed.Zmm - (sourceHeightMm / 2.0);
+            double invertFromBaseMm = absoluteInvertMm - manhole.BaseTopZmm;
 
             return new OpeningExportRow
             {
@@ -247,11 +257,13 @@ namespace Hatco.PrecastManholeManager.Services
             ManagedOpeningData managed,
             out string category,
             out string systemName,
-            out string familyType)
+            out string familyType,
+            out double sourceHeightMm)
         {
             category = string.Empty;
             systemName = string.Empty;
             familyType = string.Empty;
+            sourceHeightMm = 0.0;
 
             RevitLinkInstance link = host.GetElement(new ElementId(managed.LinkInstanceId)) as RevitLinkInstance;
             Document linkDoc = link?.GetLinkDocument();
@@ -278,6 +290,33 @@ namespace Hatco.PrecastManholeManager.Services
             familyType = type?.Name ?? source.Name ?? string.Empty;
 
             systemName = GetParameterText(source, "System Name", "System Type", "System Classification");
+
+            double diameterFt = GetDouble(source, BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+            if (diameterFt <= 0)
+                diameterFt = GetDouble(source, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+
+            if (diameterFt > 0)
+            {
+                sourceHeightMm = UnitUtil.FtToMm(diameterFt);
+                return;
+            }
+
+            double heightFt = GetDouble(source, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+            if (heightFt <= 0)
+            {
+                Parameter hp = source.LookupParameter("Height");
+                if (hp != null && hp.StorageType == StorageType.Double)
+                    heightFt = hp.AsDouble();
+            }
+
+            if (heightFt > 0)
+                sourceHeightMm = UnitUtil.FtToMm(heightFt);
+        }
+
+        private static double GetDouble(Element e, BuiltInParameter bip)
+        {
+            Parameter p = e.get_Parameter(bip);
+            return p != null && p.StorageType == StorageType.Double ? p.AsDouble() : 0.0;
         }
 
         private static string GetParameterText(Element e, params string[] names)
