@@ -27,6 +27,7 @@ namespace Hatco.PrecastManholeManager.Services
             builder.AddSimpleField("HostWallId", typeof(int));
             builder.AddSimpleField("WallNumber", typeof(int));
             builder.AddSimpleField("SourceShape", typeof(string));
+            builder.AddSimpleField("AdoptedManual", typeof(bool));
 
             AddLengthField(builder, "CutWidthMm");
             AddLengthField(builder, "CutHeightMm");
@@ -59,6 +60,7 @@ namespace Hatco.PrecastManholeManager.Services
             entity.Set(schema.GetField("HostWallId"), record.HostWallId);
             entity.Set(schema.GetField("WallNumber"), record.WallNumber);
             entity.Set(schema.GetField("SourceShape"), record.Shape ?? string.Empty);
+            entity.Set(schema.GetField("AdoptedManual"), false);
 
             SetMillimeters(entity, schema, "CutWidthMm", record.CutWidthMm);
             SetMillimeters(entity, schema, "CutHeightMm", record.CutHeightMm);
@@ -69,6 +71,32 @@ namespace Hatco.PrecastManholeManager.Services
 
             entity.Set(schema.GetField("UpdatedUtc"), DateTime.UtcNow.ToString("O"));
 
+            opening.SetEntity(entity);
+        }
+
+        public static void WriteAdoptedManual(Opening opening, PenetrationRecord record)
+        {
+            Schema schema = GetOrCreateSchema();
+            var entity = new Entity(schema);
+
+            entity.Set(schema.GetField("SourceKey"), record.SourceKey);
+            entity.Set(schema.GetField("LinkInstanceId"), record.LinkInstanceId);
+            entity.Set(schema.GetField("LinkedElementId"), record.LinkedElementId);
+            entity.Set(schema.GetField("LinkedUniqueId"), record.LinkedUniqueId ?? string.Empty);
+            entity.Set(schema.GetField("LinkName"), record.LinkName ?? string.Empty);
+            entity.Set(schema.GetField("HostWallId"), record.HostWallId);
+            entity.Set(schema.GetField("WallNumber"), record.WallNumber);
+            entity.Set(schema.GetField("SourceShape"), record.Shape ?? string.Empty);
+            entity.Set(schema.GetField("AdoptedManual"), true);
+
+            SetMillimeters(entity, schema, "CutWidthMm", record.ExistingOpeningWidthMm);
+            SetMillimeters(entity, schema, "CutHeightMm", record.ExistingOpeningHeightMm);
+            SetMillimeters(entity, schema, "ClearanceMm", record.ClearanceMm);
+            SetMillimeters(entity, schema, "Xmm", record.Xmm);
+            SetMillimeters(entity, schema, "Ymm", record.Ymm);
+            SetMillimeters(entity, schema, "Zmm", record.Zmm);
+
+            entity.Set(schema.GetField("UpdatedUtc"), DateTime.UtcNow.ToString("O"));
             opening.SetEntity(entity);
         }
 
@@ -87,6 +115,7 @@ namespace Hatco.PrecastManholeManager.Services
                 SourceKey = entity.Get<string>(schema.GetField("SourceKey")),
                 HostWallId = entity.Get<int>(schema.GetField("HostWallId")),
                 WallNumber = entity.Get<int>(schema.GetField("WallNumber")),
+                AdoptedManual = entity.Get<bool>(schema.GetField("AdoptedManual")),
                 CutWidthMm = GetMillimeters(entity, schema, "CutWidthMm"),
                 CutHeightMm = GetMillimeters(entity, schema, "CutHeightMm"),
                 Xmm = GetMillimeters(entity, schema, "Xmm"),
@@ -114,6 +143,7 @@ namespace Hatco.PrecastManholeManager.Services
         public string SourceKey { get; set; }
         public int HostWallId { get; set; }
         public int WallNumber { get; set; }
+        public bool AdoptedManual { get; set; }
         public double CutWidthMm { get; set; }
         public double CutHeightMm { get; set; }
         public double Xmm { get; set; }
