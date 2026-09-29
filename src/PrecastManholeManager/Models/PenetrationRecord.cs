@@ -72,6 +72,22 @@ namespace Hatco.PrecastManholeManager.Models
                 ? ExistingOpeningWidthMm.ToString("0.#", CultureInfo.InvariantCulture) + " x " +
                   ExistingOpeningHeightMm.ToString("0.#", CultureInfo.InvariantCulture) + " mm"
                 : string.Empty;
+
+        public void RefreshManualOpeningStatus()
+        {
+            if (ExistingOpeningId <= 0 || ExistingOpeningStatus == "MANAGED")
+                return;
+
+            const double sizeToleranceMm = 20.0;
+            bool sufficient =
+                ExistingOpeningWidthMm + sizeToleranceMm >= CutWidthMm &&
+                ExistingOpeningHeightMm + sizeToleranceMm >= CutHeightMm;
+
+            ExistingOpeningStatus = sufficient ? "EXISTING SUFFICIENT" : "EXISTING TOO SMALL";
+
+            if (!sufficient)
+                AdoptExistingOpening = false;
+        }
         public bool Accepted
         {
             get => _accepted;
@@ -92,6 +108,7 @@ namespace Hatco.PrecastManholeManager.Models
                 _clearanceMm = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(OpeningSize));
+                RefreshManualOpeningStatus();
                 OnPropertyChanged(nameof(ExistingOpeningStatus));
             }
         }
