@@ -38,6 +38,11 @@ namespace Hatco.PrecastManholeManager.Services
 
             _log.Info($"Revit link instances found: {links.Count}");
 
+            XYZ scanMin;
+            XYZ scanMax;
+            BuildScanBounds(manhole, out scanMin, out scanMax);
+            _log.Info($"Local scan envelope Min={Fmt(scanMin)} Max={Fmt(scanMax)}");
+
             foreach (var link in links)
             {
                 Document linkDoc = link.GetLinkDocument();
@@ -58,6 +63,7 @@ namespace Hatco.PrecastManholeManager.Services
                     .ToElements();
 
                 _log.Info($"MEP curve candidates in link: {elements.Count}");
+                int localCandidates = 0;
 
                 foreach (Element e in elements)
                 {
@@ -71,6 +77,11 @@ namespace Hatco.PrecastManholeManager.Services
 
                         Curve hostCurve = lc.Curve.CreateTransformed(tr);
                         if (hostCurve == null) continue;
+
+                        if (!CurveTouchesBox(hostCurve, scanMin, scanMax))
+                            continue;
+
+                        localCandidates++;
 
                         foreach (var wall in manhole.Walls)
                         {
@@ -95,10 +106,116 @@ namespace Hatco.PrecastManholeManager.Services
                         _log.Error($"Error scanning linked element {e.Id.IntegerValue} in '{link.Name}'.", ex);
                     }
                 }
+
+                _log.Info($"MEP curves inside local manhole scan envelope: {localCandidates}");
             }
 
+            MarkPossibleDuplicates(records);
             _log.Info($"Total detected penetration intersections: {records.Count}");
             return records;
+        }
+
+        private void BuildScanBounds(ManholeDetectionResult manhole, out XYZ min, out XYZ max)
+        {
+            double margin = UnitUtil.MmToFt(1000);
+            double minX = manhole.FoundationBox.Min.X;
+            double minY = manhole.FoundationBox.Min.Y;
+            double minZ = manhole.FoundationBox.Min.Z;
+            double maxX = manhole.FoundationBox.Max.X;
+            double maxY = manhole.FoundationBox.Max.Y;
+            double maxZ = manhole.FoundationBox.Max.Z;
+
+            foreach (var mw in manhole.Walls)
+            {
+                BoundingBoxXYZ b = mw.Wall.get_BoundingBox(null);
+                if (b == null) continue;
+
+                minX = Math.Min(minX, b.Min.X);
+                minY = Math.Min(minY, b.Min.Y);
+                minZ = Math.Min(minZ, b.Min.Z);
+                maxX = Math.Max(maxX, b.Max.X);
+                maxY = Math.Max(maxY, b.Max.Y);
+                maxZ = Math.Max(maxZ, b.Max.Z);
+            }
+
+            min = new XYZ(minX - margin, minY - margin, minZ - margin);
+            max = new XYZ(maxX + margin, maxY + margin, maxZ + margin);
+        }
+
+        private static bool CurveTouchesBox(Curve curve, XYZ min, XYZ max)
+        {
+            IList<XYZ> points;
+            try
+            {
+                points = curve.Tessellate();
+            }
+            catch
+            {
+                points = new List<XYZ>
+                {
+                    curve.GetEndPoint(0),
+                    curve.GetEndPoint(1)
+                };
+            }
+
+            if (points == null || points.Count == 0)
+                return false;
+
+            double cMinX = points.Min(p => p.X);
+            double cMinY = points.Min(p => p.Y);
+            double cMinZ = points.Min(p => p.Z);
+            double cMaxX = points.Max(p => p.X);
+            double cMaxY = points.Max(p => p.Y);
+            double cMaxZ = points.Max(p => p.Z);
+
+            return cMinX <= max.X && cMaxX >= min.X &&
+                   cMinY <= max.Y && cMaxY >= min.Y &&
+                   cMinZ <= max.Z && cMaxZ >= min.Z;
+        }
+
+        private void MarkPossibleDuplicates(List<PenetrationRecord> records)
+        {
+            const double offsetToleranceMm = 75.0;
+            const double invertToleranceMm = 75.0;
+
+            for (int i = 0; i < records.Count; i++)
+            {
+                for (int j = i + 1; j < records.Count; j++)
+                {
+                    PenetrationRecord a = records[i];
+                    PenetrationRecord b = records[j];
+
+                    if (a.WallNumber != b.WallNumber) continue;
+                    if (!string.Equals(a.Category, b.Category, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!string.Equals(NormalizeSize(a.Size), NormalizeSize(b.Size), StringComparison.OrdinalIgnoreCase)) continue;
+                    if (Math.Abs(a.OffsetFromWallStartMm - b.OffsetFromWallStartMm) > offsetToleranceMm) continue;
+                    if (Math.Abs(a.InvertMm - b.InvertMm) > invertToleranceMm) continue;
+                    if (string.Equals(a.LinkName, b.LinkName, StringComparison.OrdinalIgnoreCase)) continue;
+
+                    string noteA = $"POSSIBLE_DUPLICATE with {b.LinkName} / Element {b.LinkedElementId}";
+                    string noteB = $"POSSIBLE_DUPLICATE with {a.LinkName} / Element {a.LinkedElementId}";
+
+                    a.Notes = AppendNote(a.Notes, noteA);
+                    b.Notes = AppendNote(b.Notes, noteB);
+
+                    _log.Warn(
+                        $"Possible duplicate penetration across links: W{a.WallNumber}, Size='{a.Size}', " +
+                        $"A='{a.LinkName}' Elem={a.LinkedElementId} Invert={a.InvertMm:F1}mm, " +
+                        $"B='{b.LinkName}' Elem={b.LinkedElementId} Invert={b.InvertMm:F1}mm");
+                }
+            }
+        }
+
+        private static string NormalizeSize(string size)
+        {
+            if (string.IsNullOrWhiteSpace(size)) return string.Empty;
+            return new string(size.Where(char.IsDigit).ToArray());
+        }
+
+        private static string AppendNote(string existing, string addition)
+        {
+            if (string.IsNullOrWhiteSpace(existing)) return addition;
+            return existing + " | " + addition;
         }
 
         private IEnumerable<XYZ> IntersectionsWithWall(Wall wall, Curve curve)
