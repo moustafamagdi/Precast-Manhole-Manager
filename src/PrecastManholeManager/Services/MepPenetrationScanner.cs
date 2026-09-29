@@ -30,6 +30,7 @@ namespace Hatco.PrecastManholeManager.Services
         {
             var records = new List<PenetrationRecord>();
             _log.WriteHeader("MEP LINK SCAN");
+            _log.Info("Detection mode: WallCenterPlane (independent of existing wall openings).");
 
             var links = new FilteredElementCollector(_host)
                 .OfClass(typeof(RevitLinkInstance))
