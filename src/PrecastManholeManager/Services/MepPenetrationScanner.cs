@@ -261,6 +261,12 @@ namespace Hatco.PrecastManholeManager.Services
             double verticalHalfSizeFt;
             GetSizeAndHalfHeight(element, out size, out verticalHalfSizeFt);
 
+            string shape;
+            double diameterMm;
+            double widthMm;
+            double heightMm;
+            GetOpeningGeometry(element, out shape, out diameterMm, out widthMm, out heightMm);
+
             double invertFt = point.Z - verticalHalfSizeFt;
             double offsetFt = OffsetFromWallStart(wall, point);
 
@@ -272,6 +278,11 @@ namespace Hatco.PrecastManholeManager.Services
                 FamilyType = GetTypeText(element),
                 SystemName = GetParameterText(element, "System Name", "System Type", "System Classification"),
                 Size = size,
+                Shape = shape,
+                DiameterMm = diameterMm,
+                WidthMm = widthMm,
+                HeightMm = heightMm,
+                ClearanceMm = 50.0,
                 WallNumber = wall.Number,
                 HostWallId = wall.Wall.Id.IntegerValue,
                 Xmm = UnitUtil.FtToMm(point.X),
@@ -353,6 +364,54 @@ namespace Hatco.PrecastManholeManager.Services
 
             if (string.IsNullOrWhiteSpace(size))
                 size = GetParameterText(e, "Diameter", "Width", "Height");
+        }
+
+        private static void GetOpeningGeometry(
+            Element e,
+            out string shape,
+            out double diameterMm,
+            out double widthMm,
+            out double heightMm)
+        {
+            shape = "Review";
+            diameterMm = 0;
+            widthMm = 0;
+            heightMm = 0;
+
+            double diameterFt = GetDouble(e, BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
+            if (diameterFt <= 0)
+                diameterFt = GetDouble(e, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+
+            if (diameterFt <= 0)
+                diameterFt = GetNamedDouble(e, "Diameter");
+
+            if (diameterFt > 0)
+            {
+                shape = "Round";
+                diameterMm = UnitUtil.FtToMm(diameterFt);
+                return;
+            }
+
+            double widthFt = GetDouble(e, BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
+            double heightFt = GetDouble(e, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+
+            if (widthFt <= 0)
+                widthFt = GetNamedDouble(e, "Width");
+            if (heightFt <= 0)
+                heightFt = GetNamedDouble(e, "Height");
+
+            if (widthFt > 0 && heightFt > 0)
+            {
+                shape = "Rectangular";
+                widthMm = UnitUtil.FtToMm(widthFt);
+                heightMm = UnitUtil.FtToMm(heightFt);
+            }
+        }
+
+        private static double GetNamedDouble(Element e, string parameterName)
+        {
+            Parameter p = e.LookupParameter(parameterName);
+            return p != null && p.StorageType == StorageType.Double ? p.AsDouble() : 0;
         }
 
         private static double GetDouble(Element e, BuiltInParameter bip)
