@@ -160,7 +160,7 @@ namespace Hatco.PrecastManholeManager.Services
                                     int oldId = current.Opening.Id.IntegerValue;
                                     doc.Delete(current.Opening.Id);
 
-                                    Opening updated = CreateOpening(doc, record);
+                                    Opening updated = CreateOpening(doc, record, log);
                                     OpeningStorageService.Write(updated, record);
 
                                     result.Updated++;
@@ -223,7 +223,7 @@ namespace Hatco.PrecastManholeManager.Services
                                         {
                                             sub.Start();
 
-                                            Opening created = CreateOpening(doc, record);
+                                            Opening created = CreateOpening(doc, record, log);
                                             OpeningStorageService.Write(created, record);
 
                                             sub.Commit();
@@ -414,7 +414,7 @@ namespace Hatco.PrecastManholeManager.Services
                    Math.Abs(data.CutHeightMm - record.CutHeightMm) <= geometryToleranceMm;
         }
 
-        private static Opening CreateOpening(Document doc, PenetrationRecord record)
+        private static Opening CreateOpening(Document doc, PenetrationRecord record, DiagnosticLogger log)
         {
             if (record.CutWidthMm <= 0 || record.CutHeightMm <= 0)
                 throw new InvalidOperationException("Opening size is unresolved. Review the penetration size before creation.");
@@ -446,7 +446,7 @@ namespace Hatco.PrecastManholeManager.Services
             XYZ lowerLeft = center - tangent * halfWidth - XYZ.BasisZ * halfHeight;
             XYZ upperRight = center + tangent * halfWidth + XYZ.BasisZ * halfHeight;
 
-            OpeningJoinPreparationService.UnjoinConflictingGeometry(doc, wall, record, null);
+            OpeningJoinPreparationService.UnjoinConflictingGeometry(doc, wall, record, log);
             return doc.Create.NewOpening(wall, lowerLeft, upperRight);
         }
 
