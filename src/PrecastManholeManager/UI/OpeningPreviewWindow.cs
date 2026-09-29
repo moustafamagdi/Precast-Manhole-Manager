@@ -7,6 +7,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Interop;
+using Autodesk.Revit.DB;
+using Autodesk.Revit.UI;
 using Hatco.PrecastManholeManager.Infrastructure;
 using Hatco.PrecastManholeManager.Models;
 
@@ -16,14 +18,22 @@ namespace Hatco.PrecastManholeManager.UI
     {
         private static OpeningPreviewWindow _activeWindow;
 
+        private readonly Document _document;
+        private readonly List<int> _wallIds;
         private readonly List<PenetrationRecord> _records;
         private readonly TextBox _clearanceBox;
         private readonly DataGrid _grid;
         private readonly TextBlock _status;
+        private readonly OpeningSyncExternalEventHandler _syncHandler;
+        private readonly ExternalEvent _syncEvent;
+        private readonly Button _syncButton;
+        private bool _syncPending;
 
         public static void ShowModeless(
+            Document document,
             int foundationId,
             string wallSummary,
+            IList<int> wallIds,
             IList<PenetrationRecord> records)
         {
             if (_activeWindow != null)
@@ -39,17 +49,24 @@ namespace Hatco.PrecastManholeManager.UI
                 }
             }
 
-            _activeWindow = new OpeningPreviewWindow(foundationId, wallSummary, records);
+            _activeWindow = new OpeningPreviewWindow(document, foundationId, wallSummary, wallIds, records);
             _activeWindow.Closed += (s, e) => _activeWindow = null;
             _activeWindow.Show();
         }
 
         private OpeningPreviewWindow(
+            Document document,
             int foundationId,
             string wallSummary,
+            IList<int> wallIds,
             IList<PenetrationRecord> records)
         {
+            _document = document;
+            _wallIds = wallIds?.ToList() ?? new List<int>();
             _records = records?.ToList() ?? new List<PenetrationRecord>();
+
+            _syncHandler = new OpeningSyncExternalEventHandler(OnSyncCompleted);
+            _syncEvent = ExternalEvent.Create(_syncHandler);
 
             Title = "Precast Manhole Manager - Opening Preview";
             Width = 1320;
@@ -140,10 +157,20 @@ namespace Hatco.PrecastManholeManager.UI
             var export = new Button
             {
                 Content = "Export Accepted CSV",
-                Padding = new Thickness(10, 4, 10, 4)
+                Padding = new Thickness(10, 4, 10, 4),
+                Margin = new Thickness(0, 0, 8, 0)
             };
             export.Click += Export_Click;
             controls.Children.Add(export);
+
+            _syncButton = new Button
+            {
+                Content = "Create / Update Openings",
+                Padding = new Thickness(12, 4, 12, 4),
+                ToolTip = "Creates native Revit wall openings for accepted rows. Round penetrations currently use a rectangular envelope."
+            };
+            _syncButton.Click += Sync_Click;
+            controls.Children.Add(_syncButton);
 
             _grid = BuildGrid();
             _grid.ItemsSource = _records;
@@ -169,6 +196,11 @@ namespace Hatco.PrecastManholeManager.UI
             close.Click += (s, e) => Close();
             DockPanel.SetDock(close, Dock.Right);
             footer.Children.Add(close);
+
+            Closed += (s, e) =>
+            {
+                try { _syncEvent?.Dispose(); } catch { }
+            };
 
             UpdateStatus();
         }
@@ -273,6 +305,102 @@ namespace Hatco.PrecastManholeManager.UI
 
             _grid.Items.Refresh();
             UpdateStatus();
+        }
+
+        private void Sync_Click(object sender, RoutedEventArgs e)
+        {
+            if (_syncPending)
+                return;
+
+            _grid.CommitEdit(DataGridEditingUnit.Cell, true);
+            _grid.CommitEdit(DataGridEditingUnit.Row, true);
+
+            List<PenetrationRecord> accepted = _records
+                .Where(r => r.Accepted)
+                .Select(CloneRecord)
+                .ToList();
+
+            int unresolved = accepted.Count(r => r.CutWidthMm <= 0 || r.CutHeightMm <= 0);
+            if (unresolved > 0)
+            {
+                MessageBox.Show(
+                    this,
+                    unresolved + " accepted penetration(s) have unresolved opening dimensions. Review their sizes before creation.",
+                    "Precast Manhole Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            int roundCount = accepted.Count(r => string.Equals(r.Shape, "Round", StringComparison.OrdinalIgnoreCase));
+
+            _syncHandler.SetRequest(new OpeningSyncRequest
+            {
+                Document = _document,
+                ManholeWallIds = _wallIds.ToList(),
+                AcceptedRecords = accepted
+            });
+
+            _syncPending = true;
+            _syncButton.IsEnabled = false;
+            _status.Text = "Opening sync queued in Revit..." +
+                           (roundCount > 0 ? " Round penetrations will use rectangular envelopes in this build." : string.Empty);
+
+            ExternalEventRequest status = _syncEvent.Raise();
+            if (status != ExternalEventRequest.Accepted)
+            {
+                _syncPending = false;
+                _syncButton.IsEnabled = true;
+                _status.Text = "Could not queue opening sync. ExternalEvent status: " + status;
+            }
+        }
+
+        private void OnSyncCompleted(OpeningSyncResult result)
+        {
+            _syncPending = false;
+            _syncButton.IsEnabled = true;
+
+            _status.Text = result + " | Log: " + result.LogPath;
+
+            if (result.Failed > 0)
+            {
+                MessageBox.Show(
+                    this,
+                    result + "\n\nReview log:\n" + result.LogPath,
+                    "Opening Sync Completed With Errors",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        private static PenetrationRecord CloneRecord(PenetrationRecord r)
+        {
+            return new PenetrationRecord
+            {
+                LinkName = r.LinkName,
+                LinkInstanceId = r.LinkInstanceId,
+                LinkedElementId = r.LinkedElementId,
+                LinkedUniqueId = r.LinkedUniqueId,
+                Category = r.Category,
+                FamilyType = r.FamilyType,
+                SystemName = r.SystemName,
+                Size = r.Size,
+                WallNumber = r.WallNumber,
+                HostWallId = r.HostWallId,
+                Xmm = r.Xmm,
+                Ymm = r.Ymm,
+                Zmm = r.Zmm,
+                InvertMm = r.InvertMm,
+                InvertAboveBaseMm = r.InvertAboveBaseMm,
+                OffsetFromWallStartMm = r.OffsetFromWallStartMm,
+                Notes = r.Notes,
+                Shape = r.Shape,
+                DiameterMm = r.DiameterMm,
+                WidthMm = r.WidthMm,
+                HeightMm = r.HeightMm,
+                ClearanceMm = r.ClearanceMm,
+                Accepted = r.Accepted
+            };
         }
 
         private void Export_Click(object sender, RoutedEventArgs e)
