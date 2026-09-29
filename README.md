@@ -227,3 +227,57 @@ The final dialog reports:
 - Opening review count
 - Data carriers saved
 - Openings linked
+
+
+## Manufacturer Excel workbook
+
+Use **Hatco > Precast Tools > Export Excel** after saving or batch-processing manholes.
+
+The command creates:
+`Desktop\Precast Manhole Manager\Manufacturer Exports\Precast_Manholes_yyyyMMdd_HHmmss.xlsx`
+
+Workbook structure:
+
+### MANHOLES
+Project-wide manhole summary:
+- Manhole No.
+- Foundation ID
+- Clear dimensions
+- Outer dimensions
+- Wall height
+- Base thickness
+- Base top elevation
+- W1/W2/W3/W4 IDs
+- Opening count
+
+### OPENINGS
+Project-wide opening schedule:
+- Manhole
+- Wall
+- Opening number/code
+- Opening width/height
+- Offset
+- Invert from base
+- Absolute invert
+- Center elevation
+- Managed / Adopted Manual
+- Service/system/type
+- Opening Element ID
+- Source link / source Element ID / UniqueId
+- Status
+
+### One sheet per manhole
+Each saved manhole gets its own formatted sheet containing:
+- General manhole data
+- Clear/outer dimensions
+- Height and base thickness
+- Opening count
+- W1, W2, W3, W4 sections
+- Opening code
+- Size
+- Offset
+- Invert from base
+- Absolute invert
+- Service/system/source
+
+The XLSX writer is dependency-free and does not require Microsoft Excel or third-party NuGet packages on the Revit workstation.
