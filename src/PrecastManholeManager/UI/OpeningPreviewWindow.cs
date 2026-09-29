@@ -113,7 +113,7 @@ namespace Hatco.PrecastManholeManager.UI
 
             header.Children.Add(new TextBlock
             {
-                Text = "PHASE 2 / 3 - OPENING PREVIEW & SYNC",
+                Text = "PRECAST MANHOLE MANAGER - PHASE 2 / 3 / 4",
                 FontSize = 18,
                 FontWeight = FontWeights.SemiBold
             });
@@ -412,7 +412,8 @@ namespace Hatco.PrecastManholeManager.UI
             {
                 _manholeData.ManholeNumber = result.ManholeNumber;
                 _status.Text =
-                    $"Manhole '{result.ManholeNumber}' saved. Carrier ElementId={result.CarrierElementId} | Log: {result.LogPath}";
+                    $"Manhole '{result.ManholeNumber}' saved. Carrier={result.CarrierElementId} | " +
+                    $"Linked openings={result.LinkedOpenings} | Log: {result.LogPath}";
             }
             else
             {
