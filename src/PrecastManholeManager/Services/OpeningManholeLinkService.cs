@@ -42,7 +42,7 @@ namespace Hatco.PrecastManholeManager.Services
             foreach (IGrouping<int, LinkCandidate> wallGroup in items
                          .GroupBy(x => x.Managed.HostWallId))
             {
-                int wallNumber = ResolveWallNumber(doc, wallGroup.Key, manholeNumber);
+                int wallNumber = wallGroup.Select(x => x.Managed.WallNumber).FirstOrDefault();
 
                 int index = 1;
                 foreach (LinkCandidate item in wallGroup
@@ -71,39 +71,6 @@ namespace Hatco.PrecastManholeManager.Services
             }
 
             return linked;
-        }
-
-        private static int ResolveWallNumber(Document doc, int wallId, string manholeNumber)
-        {
-            // Wall number is already persisted in the managed opening source schema.
-            foreach (Opening opening in new FilteredElementCollector(doc)
-                         .OfClass(typeof(Opening))
-                         .Cast<Opening>())
-            {
-                ManagedOpeningData data;
-                if (!OpeningStorageService.TryRead(opening, out data))
-                    continue;
-
-                if (data.HostWallId != wallId)
-                    continue;
-
-                return ReadManagedWallNumber(opening);
-            }
-
-            return 0;
-        }
-
-        private static int ReadManagedWallNumber(Opening opening)
-        {
-            Guid openingSchemaGuid = new Guid("5B3286B5-3707-4D43-A6AF-AFC2A44871A4");
-            Schema schema = Schema.Lookup(openingSchemaGuid);
-            if (schema == null) return 0;
-
-            Entity entity = opening.GetEntity(schema);
-            if (!entity.IsValid()) return 0;
-
-            Field field = schema.GetField("WallNumber");
-            return field == null ? 0 : entity.Get<int>(field);
         }
 
         private static Schema GetOrCreateSchema()
