@@ -182,3 +182,48 @@ The TXT log is intentionally verbose and should be shared when a detection resul
    - Invert from base
    - Source service
 6. Share the Phase 5 TXT log if any row is missing or incorrect.
+
+
+## Batch processing
+
+Two additional commands are available under **Hatco > Precast Tools**:
+
+### Batch Selected
+- Select multiple Structural Foundations manually.
+- Processes only those selected elements.
+- Existing saved manhole numbers are preserved.
+- New manholes are auto-numbered as `MH-001`, `MH-002`, etc.
+- Each manhole is processed in its own Revit transaction.
+- Geometry warnings cause that manhole to be skipped as **NEEDS REVIEW** while the batch continues.
+
+### Batch All
+- Automatically finds Structural Foundations whose element/type naming suggests a manhole:
+  - `MANHOLE`
+  - `_MH`
+  - `MH_`
+  - `PRECAST ... MH`
+- Shows a confirmation dialog before modifying the model.
+- Processes valid manholes in a deterministic spatial order.
+- Preserves existing saved manhole numbers and continues numbering new ones.
+
+### Batch workflow
+For each valid manhole the batch:
+1. Detects the four walls.
+2. Scans linked MEP penetrations.
+3. Classifies existing manual openings.
+4. Leaves sufficient manual openings untouched.
+5. Creates/updates/removes only add-in-managed openings.
+6. Never auto-modifies adopted manual openings that need review.
+7. Creates/updates the manhole data carrier.
+8. Links managed openings to the saved manhole.
+9. Writes one consolidated timestamped TXT batch log.
+
+The final dialog reports:
+- Foundations selected
+- Valid / Needs Review / Failed
+- Penetrations found
+- Manual sufficient / too-small openings
+- Openings created / updated / unchanged / removed
+- Opening review count
+- Data carriers saved
+- Openings linked
