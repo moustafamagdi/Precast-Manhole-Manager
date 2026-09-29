@@ -12,9 +12,9 @@ namespace Hatco.PrecastManholeManager.Infrastructure
     {
         public static string Export(IEnumerable<PenetrationRecord> records)
         {
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string logsFolder = OutputPathService.GetLogsFolder();
             string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-            string path = Path.Combine(desktop, "PrecastManholePenetrations_" + stamp + ".csv");
+            string path = Path.Combine(logsFolder, "PrecastManholePenetrations_" + stamp + ".csv");
 
             var sb = new StringBuilder();
             sb.AppendLine("Link,LinkedElementId,Category,FamilyType,System,Size,WallNo,HostWallId,X_mm,Y_mm,Z_mm,Invert_mm,InvertAboveBase_mm,OffsetFromWallStart_mm,Notes");
