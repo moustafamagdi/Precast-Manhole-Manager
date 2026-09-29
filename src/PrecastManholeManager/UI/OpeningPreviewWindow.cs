@@ -35,8 +35,12 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly Button _saveManholeButton;
         private readonly ManholeDataSyncExternalEventHandler _manholeHandler;
         private readonly ExternalEvent _manholeEvent;
+        private readonly ManufacturerExportExternalEventHandler _exportHandler;
+        private readonly ExternalEvent _exportEvent;
+        private readonly Button _manufacturerExportButton;
         private bool _syncPending;
         private bool _manholePending;
+        private bool _exportPending;
 
         public static void ShowModeless(
             Document document,
@@ -82,6 +86,9 @@ namespace Hatco.PrecastManholeManager.UI
 
             _manholeHandler = new ManholeDataSyncExternalEventHandler(OnManholeSyncCompleted);
             _manholeEvent = ExternalEvent.Create(_manholeHandler);
+
+            _exportHandler = new ManufacturerExportExternalEventHandler(OnManufacturerExportCompleted);
+            _exportEvent = ExternalEvent.Create(_exportHandler);
 
             Title = "Precast Manhole Manager - Opening Preview";
             Width = 1320;
@@ -164,6 +171,14 @@ namespace Hatco.PrecastManholeManager.UI
             };
             _saveManholeButton.Click += SaveManhole_Click;
             manholeControls.Children.Add(_saveManholeButton);
+
+            _manufacturerExportButton = new Button
+            {
+                Content = "Export Manufacturer Data",
+                Padding = new Thickness(12, 4, 12, 4)
+            };
+            _manufacturerExportButton.Click += ManufacturerExport_Click;
+            manholeControls.Children.Add(_manufacturerExportButton);
 
             var controls = new WrapPanel { Orientation = Orientation.Horizontal };
             header.Children.Add(controls);
@@ -257,6 +272,7 @@ namespace Hatco.PrecastManholeManager.UI
             {
                 try { _syncEvent?.Dispose(); } catch { }
                 try { _manholeEvent?.Dispose(); } catch { }
+                try { _exportEvent?.Dispose(); } catch { }
             };
 
             UpdateStatus();
@@ -462,6 +478,63 @@ namespace Hatco.PrecastManholeManager.UI
                 OuterW2W3Mm = d.OuterW2W3Mm,
                 WallHeightMm = d.WallHeightMm
             };
+        }
+
+        private void ManufacturerExport_Click(object sender, RoutedEventArgs e)
+        {
+            if (_exportPending)
+                return;
+
+            _exportHandler.SetRequest(new ManufacturerExportRequest
+            {
+                Document = _document
+            });
+
+            _exportPending = true;
+            _manufacturerExportButton.IsEnabled = false;
+            _status.Text = "Exporting all saved manholes for manufacturer...";
+
+            ExternalEventRequest status = _exportEvent.Raise();
+            if (status != ExternalEventRequest.Accepted)
+            {
+                _exportPending = false;
+                _manufacturerExportButton.IsEnabled = true;
+                _status.Text = "Could not queue manufacturer export. ExternalEvent status: " + status;
+            }
+        }
+
+        private void OnManufacturerExportCompleted(ManufacturerExportResult result)
+        {
+            _exportPending = false;
+            _manufacturerExportButton.IsEnabled = true;
+
+            if (result == null ||
+                string.IsNullOrWhiteSpace(result.SummaryCsvPath) ||
+                string.IsNullOrWhiteSpace(result.OpeningsCsvPath))
+            {
+                _status.Text = "Manufacturer export failed. Check the latest log.";
+                if (result != null && !string.IsNullOrWhiteSpace(result.LogPath))
+                {
+                    MessageBox.Show(
+                        this,
+                        "Manufacturer export failed.\n\nLog:\n" + result.LogPath,
+                        "Manufacturer Export Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                return;
+            }
+
+            _status.Text =
+                $"Manufacturer export complete | Manholes={result.ManholeCount} | Openings={result.OpeningCount}";
+
+            MessageBox.Show(
+                this,
+                $"Manufacturer export completed.\n\nManholes: {result.ManholeCount}\nOpenings: {result.OpeningCount}\n\n" +
+                $"Summary:\n{result.SummaryCsvPath}\n\nOpenings:\n{result.OpeningsCsvPath}\n\nLog:\n{result.LogPath}",
+                "Manufacturer Export",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         private void Sync_Click(object sender, RoutedEventArgs e)
