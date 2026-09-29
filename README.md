@@ -86,8 +86,47 @@ The preview now includes a **Manhole No.** field and **Save Manhole Data**.
 - Persists an opening code such as `MH-001-W2-O01`.
 - Writes a separate timestamped Phase 4 diagnostic log.
 
-### Phase 5 — Scheduling/export
-Manhole schedule + opening schedule + manufacturer-oriented CSV/Excel export.
+### Phase 5 — Manufacturer export (current)
+The preview now includes **Export Manufacturer Data**.
+
+Exports all saved manholes in the active Revit document, not only the currently selected manhole.
+
+Output folder:
+`Desktop\Precast Manhole Manager\Manufacturer Exports\`
+
+Files created per export run:
+
+- `Manholes_Summary_yyyyMMdd_HHmmss.csv`
+  - Manhole number
+  - Foundation ID
+  - Clear dimensions W1-W4 / W2-W3
+  - Outer dimensions W1-W4 / W2-W3
+  - Wall height
+  - Base thickness
+  - Base top elevation
+  - W1/W2/W3/W4 host wall IDs
+
+- `Manhole_Openings_yyyyMMdd_HHmmss.csv`
+  - Manhole number
+  - Wall number
+  - Opening number and full opening code
+  - Revit opening Element ID
+  - Actual opening width and height
+  - Managed vs Adopted Manual
+  - Horizontal offset from the stable wall start
+  - Invert from base
+  - Absolute invert
+  - Center elevation
+  - Service category
+  - System name
+  - Family/type
+  - Source Revit link
+  - Linked source Element ID / UniqueId
+  - Export status
+
+Invert is resolved from the linked MEP element size when the source link is available. If the source cannot be resolved, the exporter falls back to the persisted opening/source geometry data.
+
+A separate timestamped TXT diagnostic log is also created in the normal `Logs` folder.
 
 ### Phase 6 — Precast elevations
 Generate wall elevation views/sheets W1-W4 with dimensions, opening IDs, offsets, and invert data.
@@ -127,3 +166,19 @@ The TXT log is intentionally verbose and should be shared when a detection resul
    - Number of linked openings
 5. Re-scan the same foundation and confirm the same manhole number is prefilled.
 6. Re-save and confirm no duplicate data carrier is created.
+
+
+## Phase 5 test
+1. Make sure at least one manhole has been saved with **Save Manhole Data**.
+2. Make sure its openings are managed/adopted and linked to that manhole.
+3. Click **Export Manufacturer Data**.
+4. Confirm two CSV files are created under:
+   `Desktop\Precast Manhole Manager\Manufacturer Exports\`
+5. Check the opening schedule against Revit:
+   - Manhole No.
+   - W1/W2/W3/W4
+   - Opening size
+   - Offset
+   - Invert from base
+   - Source service
+6. Share the Phase 5 TXT log if any row is missing or incorrect.
