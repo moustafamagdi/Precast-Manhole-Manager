@@ -67,8 +67,38 @@ namespace Hatco.PrecastManholeManager.Services
                         throw new InvalidOperationException("The Revit document is no longer valid.");
 
                     Document activeDoc = app.ActiveUIDocument?.Document;
-                    if (activeDoc == null || activeDoc != doc)
-                        throw new InvalidOperationException("Return to the Revit document where the preview was created, then run Create / Update again.");
+
+                    log.Info($"Request document: Title='{doc.Title}', Path='{doc.PathName}', IsReadOnly={doc.IsReadOnly}, IsModifiable={doc.IsModifiable}");
+
+                    if (activeDoc == null)
+                    {
+                        log.Warn("ActiveUIDocument is null during ExternalEvent. Proceeding with the valid request document.");
+                    }
+                    else
+                    {
+                        log.Info($"Active document: Title='{activeDoc.Title}', Path='{activeDoc.PathName}'");
+
+                        bool sameDocument =
+                            object.ReferenceEquals(activeDoc, doc) ||
+                            activeDoc.Equals(doc) ||
+                            (
+                                string.Equals(activeDoc.Title, doc.Title, StringComparison.OrdinalIgnoreCase) &&
+                                string.Equals(activeDoc.PathName ?? string.Empty, doc.PathName ?? string.Empty, StringComparison.OrdinalIgnoreCase)
+                            );
+
+                        if (!sameDocument)
+                        {
+                            log.Warn(
+                                "Active Revit document differs from the document that created the preview. " +
+                                "The sync will still target the original valid document stored by the preview.");
+                        }
+                    }
+
+                    if (doc.IsReadOnly)
+                        throw new InvalidOperationException("The Revit document is read-only and cannot be modified.");
+
+                    if (doc.IsLinked)
+                        throw new InvalidOperationException("The target document is a linked document and cannot be modified.");
 
                     HashSet<int> wallIds = new HashSet<int>(request.ManholeWallIds);
                     log.Info($"Document: {doc.Title}");
