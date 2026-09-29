@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Precast Manhole Manager</Name>
+    <Assembly>PrecastManholeManager.dll</Assembly>
+    <AddInId>8E352236-84F2-47A5-96BF-12F95DFD93F7</AddInId>
+    <FullClassName>Hatco.PrecastManholeManager.App</FullClassName>
+    <VendorId>HATCO</VendorId>
+    <VendorDescription>HATCO BIM Tools</VendorDescription>
+  </AddIn>
+</RevitAddIns>
