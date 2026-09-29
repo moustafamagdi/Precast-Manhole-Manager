@@ -17,13 +17,17 @@ namespace Hatco.PrecastManholeManager.Infrastructure
             string path = Path.Combine(logsFolder, "PrecastManholePenetrations_" + stamp + ".csv");
 
             var sb = new StringBuilder();
-            sb.AppendLine("Accepted,Link,LinkedElementId,Category,FamilyType,System,MEP_Size,Shape,Diameter_mm,Width_mm,Height_mm,ClearancePerSide_mm,RecommendedOpening,WallNo,HostWallId,X_mm,Y_mm,Z_mm,Invert_mm,InvertAboveBase_mm,OffsetFromWallStart_mm,Notes");
+            sb.AppendLine("Accepted,ExistingOpeningStatus,ExistingOpeningId,ExistingOpeningSize,AdoptExisting,Link,LinkedElementId,Category,FamilyType,System,MEP_Size,Shape,Diameter_mm,Width_mm,Height_mm,ClearancePerSide_mm,RecommendedOpening,WallNo,HostWallId,X_mm,Y_mm,Z_mm,Invert_mm,InvertAboveBase_mm,OffsetFromWallStart_mm,Notes");
 
             foreach (PenetrationRecord r in records ?? Enumerable.Empty<PenetrationRecord>())
             {
                 sb.AppendLine(string.Join(",", new string[]
                 {
                     r.Accepted ? "Yes" : "No",
+                    Csv(r.ExistingOpeningStatus),
+                    r.ExistingOpeningId.ToString(CultureInfo.InvariantCulture),
+                    Csv(r.ExistingOpeningSize),
+                    r.AdoptExistingOpening ? "Yes" : "No",
                     Csv(r.LinkName),
                     r.LinkedElementId.ToString(CultureInfo.InvariantCulture),
                     Csv(r.Category),
