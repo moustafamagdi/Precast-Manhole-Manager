@@ -48,8 +48,9 @@ namespace Hatco.PrecastManholeManager.Infrastructure
 
         private static string Q(string value)
         {
-            string safe = (value ?? string.Empty).Replace(""", """");
-            return """ + safe + """;
+            string quote = ((char)34).ToString();
+            string safe = (value ?? string.Empty).Replace(quote, quote + quote);
+            return quote + safe + quote;
         }
     }
 }
