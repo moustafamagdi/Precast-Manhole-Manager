@@ -80,6 +80,35 @@ namespace Hatco.PrecastManholeManager.Commands
                     string wallSummary = string.Join(" | ",
                         manhole.Walls.Select(w => $"W{w.Number}:{w.Wall.Id.IntegerValue}"));
 
+                    var existingManholeData = ManholeDataCarrierService.ReadForFoundation(
+                        doc,
+                        foundation.UniqueId,
+                        foundation.Id.IntegerValue);
+
+                    string suggestedManholeNumber =
+                        existingManholeData?.ManholeNumber ??
+                        ("MH-" + foundation.Id.IntegerValue);
+
+                    var manholeData = new Hatco.PrecastManholeManager.Models.ManholeDataRecord
+                    {
+                        ManholeNumber = suggestedManholeNumber,
+                        FoundationId = foundation.Id.IntegerValue,
+                        FoundationUniqueId = foundation.UniqueId,
+                        Wall1Id = manhole.Walls.First(w => w.Number == 1).Wall.Id.IntegerValue,
+                        Wall2Id = manhole.Walls.First(w => w.Number == 2).Wall.Id.IntegerValue,
+                        Wall3Id = manhole.Walls.First(w => w.Number == 3).Wall.Id.IntegerValue,
+                        Wall4Id = manhole.Walls.First(w => w.Number == 4).Wall.Id.IntegerValue,
+                        CenterXmm = UnitUtil.FtToMm(manhole.Center.X),
+                        CenterYmm = UnitUtil.FtToMm(manhole.Center.Y),
+                        BaseTopZmm = UnitUtil.FtToMm(manhole.FoundationTopZ),
+                        BaseThicknessMm = UnitUtil.FtToMm(manhole.FoundationThicknessFt),
+                        ClearW1W4Mm = UnitUtil.FtToMm(manhole.ClearW1W4Ft),
+                        ClearW2W3Mm = UnitUtil.FtToMm(manhole.ClearW2W3Ft),
+                        OuterW1W4Mm = UnitUtil.FtToMm(manhole.OuterW1W4Ft),
+                        OuterW2W3Mm = UnitUtil.FtToMm(manhole.OuterW2W3Ft),
+                        WallHeightMm = UnitUtil.FtToMm(manhole.WallHeightFt)
+                    };
+
                     log.WriteHeader("PHASE 2 PREVIEW");
                     log.Info("Opening preview launched.");
                     log.Info("Default clearance per side: 50 mm.");
@@ -90,7 +119,8 @@ namespace Hatco.PrecastManholeManager.Commands
                         foundation.Id.IntegerValue,
                         wallSummary,
                         manhole.Walls.Select(w => w.Wall.Id.IntegerValue).ToList(),
-                        penetrations);
+                        penetrations,
+                        manholeData);
 
                     return Result.Succeeded;
                 }
