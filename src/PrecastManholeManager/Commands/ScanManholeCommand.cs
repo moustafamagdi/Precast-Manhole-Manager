@@ -11,7 +11,7 @@ using Hatco.PrecastManholeManager.UI;
 
 namespace Hatco.PrecastManholeManager.Commands
 {
-    [Transaction(TransactionMode.ReadOnly)]
+    [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public sealed class ScanManholeCommand : IExternalCommand
     {
