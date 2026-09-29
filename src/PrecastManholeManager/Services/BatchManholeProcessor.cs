@@ -60,6 +60,23 @@ namespace Hatco.PrecastManholeManager.Services
                 LogPath = log?.LogPath
             };
 
+            int totalLinks;
+            int loadedLinks;
+            int loadedMepLinks;
+            EvaluateLinkAvailability(doc, out totalLinks, out loadedLinks, out loadedMepLinks);
+
+            log?.Info(
+                "Batch link preflight: TotalLinks=" + totalLinks +
+                " LoadedLinks=" + loadedLinks +
+                " LoadedMEPLinks=" + loadedMepLinks);
+
+            if (loadedMepLinks == 0)
+            {
+                throw new InvalidOperationException(
+                    "Batch processing stopped: no loaded Revit link containing Pipes, Ducts, Cable Trays, or Conduits is available. " +
+                    "Load the required MEP links before running Batch Selected / Batch All.");
+            }
+
             List<ManholeDataRecord> existingManholes = ManholeDataCarrierService.ReadAll(doc);
             HashSet<string> usedNumbers = new HashSet<string>(
                 existingManholes
@@ -174,6 +191,49 @@ namespace Hatco.PrecastManholeManager.Services
             log?.Info(result.ToString());
 
             return result;
+        }
+
+        private static void EvaluateLinkAvailability(
+            Document doc,
+            out int totalLinks,
+            out int loadedLinks,
+            out int loadedMepLinks)
+        {
+            List<RevitLinkInstance> links = new FilteredElementCollector(doc)
+                .OfClass(typeof(RevitLinkInstance))
+                .Cast<RevitLinkInstance>()
+                .ToList();
+
+            totalLinks = links.Count;
+            loadedLinks = 0;
+            loadedMepLinks = 0;
+
+            BuiltInCategory[] categories =
+            {
+                BuiltInCategory.OST_PipeCurves,
+                BuiltInCategory.OST_DuctCurves,
+                BuiltInCategory.OST_CableTray,
+                BuiltInCategory.OST_Conduit
+            };
+
+            foreach (RevitLinkInstance link in links)
+            {
+                Document linkDoc = link.GetLinkDocument();
+                if (linkDoc == null)
+                    continue;
+
+                loadedLinks++;
+
+                var filter = new ElementMulticategoryFilter(categories);
+                bool hasMep = new FilteredElementCollector(linkDoc)
+                    .WherePasses(filter)
+                    .WhereElementIsNotElementType()
+                    .Take(1)
+                    .Any();
+
+                if (hasMep)
+                    loadedMepLinks++;
+            }
         }
 
         private static ManholeDataRecord BuildDataRecord(
