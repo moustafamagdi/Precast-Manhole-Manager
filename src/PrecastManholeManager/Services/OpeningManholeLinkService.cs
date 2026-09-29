@@ -73,6 +73,29 @@ namespace Hatco.PrecastManholeManager.Services
             return linked;
         }
 
+        public static bool TryReadLink(Opening opening, out OpeningManholeLinkData data)
+        {
+            data = null;
+            if (opening == null) return false;
+
+            Schema schema = Schema.Lookup(SchemaGuid);
+            if (schema == null) return false;
+
+            Entity entity = opening.GetEntity(schema);
+            if (!entity.IsValid()) return false;
+
+            data = new OpeningManholeLinkData
+            {
+                ManholeNumber = entity.Get<string>(schema.GetField("ManholeNumber")),
+                FoundationId = entity.Get<int>(schema.GetField("FoundationId")),
+                WallNumber = entity.Get<int>(schema.GetField("WallNumber")),
+                OpeningNumber = entity.Get<string>(schema.GetField("OpeningNumber")),
+                OpeningCode = entity.Get<string>(schema.GetField("OpeningCode"))
+            };
+
+            return true;
+        }
+
         private static Schema GetOrCreateSchema()
         {
             Schema schema = Schema.Lookup(SchemaGuid);
@@ -119,5 +142,14 @@ namespace Hatco.PrecastManholeManager.Services
             public Opening Opening { get; set; }
             public ManagedOpeningData Managed { get; set; }
         }
+    }
+
+    internal sealed class OpeningManholeLinkData
+    {
+        public string ManholeNumber { get; set; }
+        public int FoundationId { get; set; }
+        public int WallNumber { get; set; }
+        public string OpeningNumber { get; set; }
+        public string OpeningCode { get; set; }
     }
 }
