@@ -11,6 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="RevitAPI">
       <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPI.dll</HintPath>
       <Private>false</Private>
