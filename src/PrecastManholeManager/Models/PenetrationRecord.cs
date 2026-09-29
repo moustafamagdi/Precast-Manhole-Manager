@@ -10,7 +10,9 @@ namespace Hatco.PrecastManholeManager.Models
         private double _clearanceMm = 50.0;
 
         public string LinkName { get; set; }
+        public int LinkInstanceId { get; set; }
         public int LinkedElementId { get; set; }
+        public string LinkedUniqueId { get; set; }
         public string Category { get; set; }
         public string FamilyType { get; set; }
         public string SystemName { get; set; }
@@ -71,6 +73,12 @@ namespace Hatco.PrecastManholeManager.Models
                 return "Review";
             }
         }
+
+        public double CutWidthMm => Shape == "Round" ? OpeningDiameterMm : OpeningWidthMm;
+        public double CutHeightMm => Shape == "Round" ? OpeningDiameterMm : OpeningHeightMm;
+        public string SourceKey => LinkInstanceId.ToString(CultureInfo.InvariantCulture) + "|" +
+                                   (LinkedUniqueId ?? LinkedElementId.ToString(CultureInfo.InvariantCulture)) + "|" +
+                                   HostWallId.ToString(CultureInfo.InvariantCulture);
 
         public string WallLabel => "W" + WallNumber;
         public string OffsetDisplay => OffsetFromWallStartMm.ToString("0.#", CultureInfo.InvariantCulture);
