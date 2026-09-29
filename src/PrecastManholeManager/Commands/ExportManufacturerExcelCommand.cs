@@ -7,7 +7,7 @@ using Hatco.PrecastManholeManager.Services;
 
 namespace Hatco.PrecastManholeManager.Commands
 {
-    [Transaction(TransactionMode.ReadOnly)]
+    [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
     public sealed class ExportManufacturerExcelCommand : IExternalCommand
     {
