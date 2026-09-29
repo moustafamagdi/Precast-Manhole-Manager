@@ -12,9 +12,9 @@ namespace Hatco.PrecastManholeManager.Infrastructure
 
         public DiagnosticLogger()
         {
-            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+            string logsFolder = OutputPathService.GetLogsFolder();
             string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
-            LogPath = Path.Combine(desktop, $"PrecastManholeManager_{stamp}.txt");
+            LogPath = Path.Combine(logsFolder, $"PrecastManholeManager_{stamp}.txt");
             _writer = new StreamWriter(LogPath, false, new UTF8Encoding(true)) { AutoFlush = true };
 
             WriteHeader("SESSION START");
@@ -22,6 +22,7 @@ namespace Hatco.PrecastManholeManager.Infrastructure
             Info($"User: {Environment.UserName}");
             Info($"Process bitness: {(Environment.Is64BitProcess ? "64-bit" : "32-bit")}");
             Info($".NET: {Environment.Version}");
+            Info($"Output folder: {logsFolder}");
         }
 
         public void WriteHeader(string title)
