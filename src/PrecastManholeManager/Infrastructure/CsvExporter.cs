@@ -43,7 +43,13 @@ namespace Hatco.PrecastManholeManager.Infrastructure
             return path;
         }
 
-        private static string F(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
-        private static string Q(string value) => """ + (value ?? string.Empty).Replace(""", """") + """;
+        private static string F(double value) =>
+            value.ToString("0.###", CultureInfo.InvariantCulture);
+
+        private static string Q(string value)
+        {
+            string safe = (value ?? string.Empty).Replace(""", """");
+            return """ + safe + """;
+        }
     }
 }
