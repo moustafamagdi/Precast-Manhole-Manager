@@ -7,6 +7,7 @@ using Autodesk.Revit.UI.Selection;
 using Hatco.PrecastManholeManager.Infrastructure;
 using Hatco.PrecastManholeManager.Selection;
 using Hatco.PrecastManholeManager.Services;
+using Hatco.PrecastManholeManager.UI;
 
 namespace Hatco.PrecastManholeManager.Commands
 {
@@ -76,19 +77,18 @@ namespace Hatco.PrecastManholeManager.Commands
                     if (!string.IsNullOrWhiteSpace(manhole.Warning))
                         log.Warn(manhole.Warning);
 
-                    string warning = string.IsNullOrWhiteSpace(manhole.Warning)
-                        ? string.Empty
-                        : $"\n\nReview warning:\n{manhole.Warning}";
+                    string wallSummary = string.Join(" | ",
+                        manhole.Walls.Select(w => $"W{w.Number}:{w.Wall.Id.IntegerValue}"));
 
-                    TaskDialog.Show(
-                        "Precast Manhole Manager - Phase 1",
-                        $"Read-only diagnostic scan completed.\n\n" +
-                        $"Foundation: {foundation.Id.IntegerValue}\n" +
-                        $"Walls: {string.Join(" | ", manhole.Walls.Select(w => $"W{w.Number}:{w.Wall.Id.IntegerValue}"))}\n" +
-                        $"Detected penetrations: {penetrations.Count}\n\n" +
-                        $"TXT Log:\n{log.LogPath}\n\n" +
-                        $"CSV:\n{csvPath}" +
-                        warning);
+                    log.WriteHeader("PHASE 2 PREVIEW");
+                    log.Info("Opening preview launched.");
+                    log.Info("Default clearance per side: 50 mm.");
+                    log.Info("No Revit model elements were modified.");
+
+                    OpeningPreviewWindow.ShowModeless(
+                        foundation.Id.IntegerValue,
+                        wallSummary,
+                        penetrations);
 
                     return Result.Succeeded;
                 }
