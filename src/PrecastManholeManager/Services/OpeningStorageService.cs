@@ -86,6 +86,7 @@ namespace Hatco.PrecastManholeManager.Services
                 OpeningId = opening.Id.IntegerValue,
                 SourceKey = entity.Get<string>(schema.GetField("SourceKey")),
                 HostWallId = entity.Get<int>(schema.GetField("HostWallId")),
+                WallNumber = entity.Get<int>(schema.GetField("WallNumber")),
                 CutWidthMm = GetMillimeters(entity, schema, "CutWidthMm"),
                 CutHeightMm = GetMillimeters(entity, schema, "CutHeightMm"),
                 Xmm = GetMillimeters(entity, schema, "Xmm"),
@@ -112,6 +113,7 @@ namespace Hatco.PrecastManholeManager.Services
         public int OpeningId { get; set; }
         public string SourceKey { get; set; }
         public int HostWallId { get; set; }
+        public int WallNumber { get; set; }
         public double CutWidthMm { get; set; }
         public double CutHeightMm { get; set; }
         public double Xmm { get; set; }
