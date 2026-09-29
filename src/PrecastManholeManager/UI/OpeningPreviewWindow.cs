@@ -14,12 +14,37 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal sealed class OpeningPreviewWindow : Window
     {
+        private static OpeningPreviewWindow _activeWindow;
+
         private readonly List<PenetrationRecord> _records;
         private readonly TextBox _clearanceBox;
         private readonly DataGrid _grid;
         private readonly TextBlock _status;
 
-        public OpeningPreviewWindow(
+        public static void ShowModeless(
+            int foundationId,
+            string wallSummary,
+            IList<PenetrationRecord> records)
+        {
+            if (_activeWindow != null)
+            {
+                try
+                {
+                    _activeWindow.Activate();
+                    return;
+                }
+                catch
+                {
+                    _activeWindow = null;
+                }
+            }
+
+            _activeWindow = new OpeningPreviewWindow(foundationId, wallSummary, records);
+            _activeWindow.Closed += (s, e) => _activeWindow = null;
+            _activeWindow.Show();
+        }
+
+        private OpeningPreviewWindow(
             int foundationId,
             string wallSummary,
             IList<PenetrationRecord> records)
