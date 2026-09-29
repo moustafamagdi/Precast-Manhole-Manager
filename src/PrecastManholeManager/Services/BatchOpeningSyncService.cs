@@ -192,6 +192,8 @@ namespace Hatco.PrecastManholeManager.Services
                 UnitUtil.MmToFt(record.Ymm),
                 UnitUtil.MmToFt(record.Zmm));
 
+            center = OpeningHostPlaneService.MoveToWallSolidMidPlane(wall, center);
+
             double halfWidth = UnitUtil.MmToFt(record.CutWidthMm) / 2.0;
             double halfHeight = UnitUtil.MmToFt(record.CutHeightMm) / 2.0;
 
