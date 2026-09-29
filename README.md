@@ -65,8 +65,26 @@ The modeless preview now includes **Create / Update Openings**.
 - Unchecked/stale managed openings on the selected manhole walls are removed.
 - Current limitation: Revit native wall Opening only supports rectangular openings. Round pipe penetrations therefore use a square rectangular envelope equal to the recommended opening diameter. A true round void-family implementation will replace this after the sync engine is validated.
 
-### Phase 4 — Manhole data carrier
-Create one lightweight Generic Model data carrier per manhole and persist manhole identity/dimensions.
+### Phase 4 — Manhole data carrier (current)
+The preview now includes a **Manhole No.** field and **Save Manhole Data**.
+
+- Creates one tiny Generic Model `DirectShape` data carrier at the manhole center.
+- Reuses the same carrier on later runs for the same Structural Foundation.
+- Writes the manhole number into the carrier `Mark` parameter.
+- Stores detailed manhole metadata using Extensible Storage:
+  - Foundation ID / UniqueId
+  - W1 / W2 / W3 / W4 element IDs
+  - Base top elevation
+  - Base thickness
+  - Clear W1-W4 dimension
+  - Clear W2-W3 dimension
+  - Outer W1-W4 dimension
+  - Outer W2-W3 dimension
+  - Wall height
+- Links all managed openings on the four manhole walls to the manhole.
+- Numbers openings per wall as `O01`, `O02`, etc.
+- Persists an opening code such as `MH-001-W2-O01`.
+- Writes a separate timestamped Phase 4 diagnostic log.
 
 ### Phase 5 — Scheduling/export
 Manhole schedule + opening schedule + manufacturer-oriented CSV/Excel export.
@@ -98,3 +116,14 @@ The post-build step copies the DLL and add-in manifest to:
    - `PrecastManholePenetrations_yyyyMMdd_HHmmss.csv`
 
 The TXT log is intentionally verbose and should be shared when a detection result is wrong; it includes document/link data, selected IDs, wall candidates, geometry, intersections, sizes, and exceptions.
+
+
+## Phase 4 test
+1. Scan a manhole that already has managed Phase 3 openings.
+2. In the preview, enter a meaningful manhole number such as `MH-001`.
+3. Click **Save Manhole Data**.
+4. Confirm the footer reports:
+   - Carrier element ID
+   - Number of linked openings
+5. Re-scan the same foundation and confirm the same manhole number is prefilled.
+6. Re-save and confirm no duplicate data carrier is created.
