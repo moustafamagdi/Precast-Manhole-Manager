@@ -15,24 +15,46 @@ namespace Hatco.PrecastManholeManager
             try
             {
                 try { application.CreateRibbonTab(TabName); }
-                catch { /* tab already exists */ }
+                catch { }
 
                 RibbonPanel panel = application.GetRibbonPanels(TabName)
                     .FirstOrDefault(p => p.Name.Equals(PanelName, StringComparison.OrdinalIgnoreCase))
                     ?? application.CreateRibbonPanel(TabName, PanelName);
 
                 string assemblyPath = Assembly.GetExecutingAssembly().Location;
-                var buttonData = new PushButtonData(
-                    "PrecastManholeScan",
-                    "Scan\nManhole",
-                    assemblyPath,
-                    typeof(Commands.ScanManholeCommand).FullName)
-                {
-                    ToolTip = "Phase 1 read-only diagnostic scan for a precast manhole and linked MEP penetrations."
-                };
 
-                if (panel.GetItems().All(i => i.Name != buttonData.Name))
-                    panel.AddItem(buttonData);
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "PrecastManholeScan",
+                        "Scan\nManhole",
+                        assemblyPath,
+                        typeof(Commands.ScanManholeCommand).FullName)
+                    {
+                        ToolTip = "Scan one manhole, review penetrations, sync openings, save data, and export manufacturer data."
+                    });
+
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "PrecastManholeBatchSelected",
+                        "Batch\nSelected",
+                        assemblyPath,
+                        typeof(Commands.BatchSelectedManholesCommand).FullName)
+                    {
+                        ToolTip = "Process multiple selected manhole Structural Foundations in one run."
+                    });
+
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "PrecastManholeBatchAll",
+                        "Batch\nAll",
+                        assemblyPath,
+                        typeof(Commands.BatchAllManholesCommand).FullName)
+                    {
+                        ToolTip = "Find likely manhole Structural Foundations by MH / MANHOLE naming and process them in one run."
+                    });
 
                 return Result.Succeeded;
             }
@@ -42,6 +64,15 @@ namespace Hatco.PrecastManholeManager
             }
         }
 
-        public Result OnShutdown(UIControlledApplication application) => Result.Succeeded;
+        private static void AddButton(RibbonPanel panel, PushButtonData data)
+        {
+            if (panel.GetItems().All(i => i.Name != data.Name))
+                panel.AddItem(data);
+        }
+
+        public Result OnShutdown(UIControlledApplication application)
+        {
+            return Result.Succeeded;
+        }
     }
 }
