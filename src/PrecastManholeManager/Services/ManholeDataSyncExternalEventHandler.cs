@@ -17,6 +17,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool Success { get; set; }
         public int CarrierElementId { get; set; }
         public string ManholeNumber { get; set; }
+        public int LinkedOpenings { get; set; }
         public string LogPath { get; set; }
         public string Message { get; set; }
     }
@@ -77,14 +78,22 @@ namespace Hatco.PrecastManholeManager.Services
 
                         DirectShape carrier = ManholeDataCarrierService.CreateOrUpdate(doc, data);
 
+                        int linkedOpenings = OpeningManholeLinkService.LinkManagedOpenings(
+                            doc,
+                            data.ManholeNumber,
+                            data.FoundationId,
+                            new[] { data.Wall1Id, data.Wall2Id, data.Wall3Id, data.Wall4Id });
+
                         tx.Commit();
 
                         result.Success = true;
                         result.CarrierElementId = carrier.Id.IntegerValue;
                         result.ManholeNumber = data.ManholeNumber;
+                        result.LinkedOpenings = linkedOpenings;
                         result.Message = "Manhole data carrier saved successfully.";
 
                         log.Info($"Carrier ElementId={carrier.Id.IntegerValue}");
+                        log.Info($"Managed openings linked to manhole: {linkedOpenings}");
                     }
                 }
                 catch (Exception ex)
