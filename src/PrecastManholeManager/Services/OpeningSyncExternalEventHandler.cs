@@ -21,13 +21,14 @@ namespace Hatco.PrecastManholeManager.Services
         public int Updated { get; set; }
         public int Unchanged { get; set; }
         public int Adopted { get; set; }
+        public int NeedsReview { get; set; }
         public int Removed { get; set; }
         public int Failed { get; set; }
         public string LogPath { get; set; }
 
         public override string ToString()
         {
-            return $"Created: {Created} | Updated: {Updated} | Unchanged: {Unchanged} | Adopted: {Adopted} | Removed: {Removed} | Failed: {Failed}";
+            return $"Created: {Created} | Updated: {Updated} | Unchanged: {Unchanged} | Adopted: {Adopted} | Review: {NeedsReview} | Removed: {Removed} | Failed: {Failed}";
         }
     }
 
@@ -132,6 +133,17 @@ namespace Hatco.PrecastManholeManager.Services
                                     {
                                         result.Unchanged++;
                                         log.Info($"UNCHANGED Opening={current.Opening.Id.IntegerValue} Key='{record.SourceKey}'");
+                                        continue;
+                                    }
+
+                                    if (current.Data.AdoptedManual)
+                                    {
+                                        result.NeedsReview++;
+                                        log.Warn(
+                                            $"ADOPTED MANUAL NEEDS REVIEW Opening={current.Opening.Id.IntegerValue} " +
+                                            $"Key='{record.SourceKey}'. Existing manual opening will NOT be modified automatically. " +
+                                            $"Stored={current.Data.CutWidthMm:0.#}x{current.Data.CutHeightMm:0.#}mm " +
+                                            $"Required={record.CutWidthMm:0.#}x{record.CutHeightMm:0.#}mm");
                                         continue;
                                     }
 
