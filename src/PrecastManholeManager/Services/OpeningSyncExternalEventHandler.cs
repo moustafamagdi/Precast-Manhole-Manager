@@ -20,13 +20,14 @@ namespace Hatco.PrecastManholeManager.Services
         public int Created { get; set; }
         public int Updated { get; set; }
         public int Unchanged { get; set; }
+        public int Adopted { get; set; }
         public int Removed { get; set; }
         public int Failed { get; set; }
         public string LogPath { get; set; }
 
         public override string ToString()
         {
-            return $"Created: {Created} | Updated: {Updated} | Unchanged: {Unchanged} | Removed: {Removed} | Failed: {Failed}";
+            return $"Created: {Created} | Updated: {Updated} | Unchanged: {Unchanged} | Adopted: {Adopted} | Removed: {Removed} | Failed: {Failed}";
         }
     }
 
@@ -147,6 +148,33 @@ namespace Hatco.PrecastManholeManager.Services
                                 }
                                 else
                                 {
+                                    if (record.AdoptExistingOpening &&
+                                        record.ExistingOpeningId > 0 &&
+                                        string.Equals(record.ExistingOpeningStatus, "EXISTING SUFFICIENT", StringComparison.Ordinal))
+                                    {
+                                        Opening manual = doc.GetElement(new ElementId(record.ExistingOpeningId)) as Opening;
+                                        if (manual == null)
+                                            throw new InvalidOperationException($"Manual opening {record.ExistingOpeningId} was not found.");
+
+                                        if (manual.Host == null || manual.Host.Id.IntegerValue != record.HostWallId)
+                                            throw new InvalidOperationException($"Manual opening {record.ExistingOpeningId} is not hosted by wall {record.HostWallId}.");
+
+                                        ManagedOpeningData alreadyManaged;
+                                        if (OpeningStorageService.TryRead(manual, out alreadyManaged))
+                                            throw new InvalidOperationException($"Opening {record.ExistingOpeningId} is already managed.");
+
+                                        OpeningStorageService.WriteAdoptedManual(manual, record);
+                                        OpeningAdoptionStorageService.MarkAdoptedManual(manual);
+                                        unmanaged.Remove(manual);
+
+                                        result.Adopted++;
+                                        log.Info(
+                                            $"ADOPTED MANUAL Opening={manual.Id.IntegerValue} Wall={record.HostWallId} " +
+                                            $"Key='{record.SourceKey}' Existing={record.ExistingOpeningWidthMm:0.#}x{record.ExistingOpeningHeightMm:0.#}mm " +
+                                            $"Required={record.CutWidthMm:0.#}x{record.CutHeightMm:0.#}mm");
+                                        continue;
+                                    }
+
                                     Opening orphan = FindMatchingUnmanagedOpening(unmanaged, record);
                                     if (orphan != null)
                                     {
@@ -335,12 +363,24 @@ namespace Hatco.PrecastManholeManager.Services
         {
             const double geometryToleranceMm = 1.0;
 
-            return data.HostWallId == record.HostWallId &&
-                   Math.Abs(data.CutWidthMm - record.CutWidthMm) <= geometryToleranceMm &&
-                   Math.Abs(data.CutHeightMm - record.CutHeightMm) <= geometryToleranceMm &&
-                   Math.Abs(data.Xmm - record.Xmm) <= geometryToleranceMm &&
-                   Math.Abs(data.Ymm - record.Ymm) <= geometryToleranceMm &&
-                   Math.Abs(data.Zmm - record.Zmm) <= geometryToleranceMm;
+            bool sourcePositionMatches =
+                data.HostWallId == record.HostWallId &&
+                Math.Abs(data.Xmm - record.Xmm) <= geometryToleranceMm &&
+                Math.Abs(data.Ymm - record.Ymm) <= geometryToleranceMm &&
+                Math.Abs(data.Zmm - record.Zmm) <= geometryToleranceMm;
+
+            if (!sourcePositionMatches)
+                return false;
+
+            if (data.AdoptedManual)
+            {
+                const double adoptedSizeToleranceMm = 20.0;
+                return data.CutWidthMm + adoptedSizeToleranceMm >= record.CutWidthMm &&
+                       data.CutHeightMm + adoptedSizeToleranceMm >= record.CutHeightMm;
+            }
+
+            return Math.Abs(data.CutWidthMm - record.CutWidthMm) <= geometryToleranceMm &&
+                   Math.Abs(data.CutHeightMm - record.CutHeightMm) <= geometryToleranceMm;
         }
 
         private static Opening CreateOpening(Document doc, PenetrationRecord record)
