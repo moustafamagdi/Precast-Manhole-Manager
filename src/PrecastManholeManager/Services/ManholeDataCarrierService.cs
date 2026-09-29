@@ -19,10 +19,9 @@ namespace Hatco.PrecastManholeManager.Services
             DirectShape carrier = FindByFoundation(doc, data.FoundationUniqueId, data.FoundationId);
             if (carrier == null)
             {
-                carrier = DirectShape.CreateElement(doc, new ElementId(BuiltInCategory.OST_GenericModel));
+                carrier = DirectShape.CreateElement(doc, new ElementId((int)BuiltInCategory.OST_GenericModel));
                 carrier.ApplicationId = "HATCO.PrecastManholeManager";
                 carrier.ApplicationDataId = data.Key;
-                carrier.Name = "Precast Manhole Data Carrier";
                 carrier.SetShape(new List<GeometryObject> { CreateMarkerSolid(data) });
             }
             else
