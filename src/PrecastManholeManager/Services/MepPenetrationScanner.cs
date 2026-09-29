@@ -220,30 +220,93 @@ namespace Hatco.PrecastManholeManager.Services
 
         private IEnumerable<XYZ> IntersectionsWithWall(Wall wall, Curve curve)
         {
-            var seen = new List<XYZ>();
-            foreach (Solid solid in GeometryUtil.GetSolids(wall, _log))
+            // IMPORTANT:
+            // Do not intersect against the current wall Solid here.
+            // Once Phase 3 creates an opening, the MEP centerline passes through empty space
+            // and a solid/curve test returns no hit. Instead, intersect against the wall's
+            // original location plane and then validate that the point lies inside the wall extents.
+            if (!(wall.Location is LocationCurve wallLocation) || !(wallLocation.Curve is Line wallAxis))
+                yield break;
+
+            XYZ a = wallAxis.GetEndPoint(0);
+            XYZ b = wallAxis.GetEndPoint(1);
+
+            XYZ tangent = b - a;
+            tangent = new XYZ(tangent.X, tangent.Y, 0.0);
+            if (tangent.GetLength() < 1e-9)
+                yield break;
+
+            tangent = tangent.Normalize();
+            XYZ normal = new XYZ(-tangent.Y, tangent.X, 0.0);
+
+            BoundingBoxXYZ wallBox = wall.get_BoundingBox(null);
+            if (wallBox == null)
+                yield break;
+
+            double xyTolerance = UnitUtil.MmToFt(10.0);
+            double zTolerance = UnitUtil.MmToFt(10.0);
+            double wallLength = wallAxis.Length;
+
+            IList<XYZ> points;
+            try
             {
-                SolidCurveIntersection sci = null;
-                try
+                points = curve.Tessellate();
+            }
+            catch
+            {
+                points = new List<XYZ>
                 {
-                    sci = solid.IntersectWithCurve(curve, new SolidCurveIntersectionOptions());
+                    curve.GetEndPoint(0),
+                    curve.GetEndPoint(1)
+                };
+            }
+
+            if (points == null || points.Count < 2)
+                yield break;
+
+            var seen = new List<XYZ>();
+
+            for (int i = 0; i < points.Count - 1; i++)
+            {
+                XYZ p0 = points[i];
+                XYZ p1 = points[i + 1];
+
+                double d0 = (p0 - a).DotProduct(normal);
+                double d1 = (p1 - a).DotProduct(normal);
+
+                // Segment does not cross the wall center plane.
+                if ((d0 > xyTolerance && d1 > xyTolerance) ||
+                    (d0 < -xyTolerance && d1 < -xyTolerance))
+                    continue;
+
+                double denominator = d0 - d1;
+                XYZ hit;
+
+                if (Math.Abs(denominator) < 1e-9)
+                {
+                    // Segment lies effectively on the wall plane. This is not a through-wall penetration.
+                    continue;
                 }
-                catch (Exception ex)
+                else
                 {
-                    _log.Error($"Solid/curve intersection failed for wall {wall.Id.IntegerValue}.", ex);
+                    double t = d0 / denominator;
+                    if (t < -1e-6 || t > 1.000001)
+                        continue;
+
+                    hit = p0 + (p1 - p0) * t;
                 }
 
-                if (sci == null) continue;
+                double along = (hit - a).DotProduct(tangent);
+                if (along < -xyTolerance || along > wallLength + xyTolerance)
+                    continue;
 
-                for (int i = 0; i < sci.SegmentCount; i++)
+                if (hit.Z < wallBox.Min.Z - zTolerance || hit.Z > wallBox.Max.Z + zTolerance)
+                    continue;
+
+                if (seen.All(x => x.DistanceTo(hit) > UnitUtil.MmToFt(5.0)))
                 {
-                    Curve seg = sci.GetCurveSegment(i);
-                    XYZ p = seg.Evaluate(0.5, true);
-                    if (seen.All(x => x.DistanceTo(p) > UnitUtil.MmToFt(5)))
-                    {
-                        seen.Add(p);
-                        yield return p;
-                    }
+                    seen.Add(hit);
+                    yield return hit;
                 }
             }
         }
