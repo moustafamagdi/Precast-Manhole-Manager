@@ -11,6 +11,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Hatco.PrecastManholeManager.Infrastructure;
 using Hatco.PrecastManholeManager.Models;
+using Hatco.PrecastManholeManager.Services;
 
 namespace Hatco.PrecastManholeManager.UI
 {
@@ -98,7 +99,7 @@ namespace Hatco.PrecastManholeManager.UI
 
             header.Children.Add(new TextBlock
             {
-                Text = "PHASE 2 - OPENING PREVIEW",
+                Text = "PHASE 2 / 3 - OPENING PREVIEW & SYNC",
                 FontSize = 18,
                 FontWeight = FontWeights.SemiBold
             });
