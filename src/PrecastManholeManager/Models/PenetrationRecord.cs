@@ -9,6 +9,7 @@ namespace Hatco.PrecastManholeManager.Models
         private bool _accepted = true;
         private double _clearanceMm = 50.0;
         private string _existingOpeningStatus = "NONE";
+        private bool _adoptExistingOpening;
 
         public string LinkName { get; set; }
         public int LinkInstanceId { get; set; }
@@ -54,6 +55,23 @@ namespace Hatco.PrecastManholeManager.Models
         public bool HasManualTooSmallOpening =>
             ExistingOpeningId > 0 &&
             ExistingOpeningStatus == "EXISTING TOO SMALL";
+
+        public bool AdoptExistingOpening
+        {
+            get => _adoptExistingOpening;
+            set
+            {
+                if (_adoptExistingOpening == value) return;
+                _adoptExistingOpening = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string ExistingOpeningSize =>
+            ExistingOpeningId > 0
+                ? ExistingOpeningWidthMm.ToString("0.#", CultureInfo.InvariantCulture) + " x " +
+                  ExistingOpeningHeightMm.ToString("0.#", CultureInfo.InvariantCulture) + " mm"
+                : string.Empty;
         public bool Accepted
         {
             get => _accepted;
