@@ -13,6 +13,12 @@ namespace Hatco.PrecastManholeManager.Services
         public BoundingBoxXYZ FoundationBox { get; set; }
         public XYZ Center { get; set; }
         public double FoundationTopZ { get; set; }
+        public double FoundationThicknessFt { get; set; }
+        public double ClearW1W4Ft { get; set; }
+        public double ClearW2W3Ft { get; set; }
+        public double OuterW1W4Ft { get; set; }
+        public double OuterW2W3Ft { get; set; }
+        public double WallHeightFt { get; set; }
         public List<ManholeWall> Walls { get; set; } = new List<ManholeWall>();
         public List<int> CandidateWallIds { get; set; } = new List<int>();
         public string Warning { get; set; }
@@ -47,6 +53,7 @@ namespace Hatco.PrecastManholeManager.Services
                 (box.Min.Y + box.Max.Y) / 2.0,
                 (box.Min.Z + box.Max.Z) / 2.0);
             result.FoundationTopZ = box.Max.Z;
+            result.FoundationThicknessFt = box.Max.Z - box.Min.Z;
 
             _log.Info($"Foundation BBox Min={Fmt(box.Min)} Max={Fmt(box.Max)}");
             _log.Info($"Foundation Center={Fmt(result.Center)} TopZ={result.FoundationTopZ:F6} ft ({UnitUtil.FtToMm(result.FoundationTopZ):F1} mm)");
@@ -96,12 +103,78 @@ namespace Hatco.PrecastManholeManager.Services
 
             NumberWalls(picked, result.Center);
             result.Walls = picked.OrderBy(w => w.Number).ToList();
+            ComputeDimensions(result);
 
             _log.Info("Assigned wall numbers:");
             foreach (var w in result.Walls)
                 _log.Info(w.ToString());
 
+            _log.Info(
+                $"Manhole dimensions: Clear W1-W4={UnitUtil.FtToMm(result.ClearW1W4Ft):F1} mm, " +
+                $"Clear W2-W3={UnitUtil.FtToMm(result.ClearW2W3Ft):F1} mm, " +
+                $"Outer W1-W4={UnitUtil.FtToMm(result.OuterW1W4Ft):F1} mm, " +
+                $"Outer W2-W3={UnitUtil.FtToMm(result.OuterW2W3Ft):F1} mm, " +
+                $"WallHeight={UnitUtil.FtToMm(result.WallHeightFt):F1} mm, " +
+                $"BaseThickness={UnitUtil.FtToMm(result.FoundationThicknessFt):F1} mm");
+
             return result;
+        }
+
+        private static void ComputeDimensions(ManholeDetectionResult result)
+        {
+            ManholeWall w1 = result.Walls.First(x => x.Number == 1);
+            ManholeWall w2 = result.Walls.First(x => x.Number == 2);
+            ManholeWall w3 = result.Walls.First(x => x.Number == 3);
+            ManholeWall w4 = result.Walls.First(x => x.Number == 4);
+
+            result.ClearW1W4Ft = ClearDistanceBetweenParallelWalls(w1.Wall, w4.Wall);
+            result.ClearW2W3Ft = ClearDistanceBetweenParallelWalls(w2.Wall, w3.Wall);
+
+            result.OuterW1W4Ft = OuterDistanceBetweenParallelWalls(w1.Wall, w4.Wall);
+            result.OuterW2W3Ft = OuterDistanceBetweenParallelWalls(w2.Wall, w3.Wall);
+
+            double minZ = double.MaxValue;
+            double maxZ = double.MinValue;
+
+            foreach (ManholeWall mw in result.Walls)
+            {
+                BoundingBoxXYZ b = mw.Wall.get_BoundingBox(null);
+                if (b == null) continue;
+                minZ = Math.Min(minZ, b.Min.Z);
+                maxZ = Math.Max(maxZ, b.Max.Z);
+            }
+
+            result.WallHeightFt =
+                minZ < double.MaxValue && maxZ > double.MinValue
+                    ? maxZ - minZ
+                    : 0;
+        }
+
+        private static double ClearDistanceBetweenParallelWalls(Wall a, Wall b)
+        {
+            double centerDistance = WallAxisDistance(a, b);
+            return Math.Max(0, centerDistance - (a.Width / 2.0) - (b.Width / 2.0));
+        }
+
+        private static double OuterDistanceBetweenParallelWalls(Wall a, Wall b)
+        {
+            double centerDistance = WallAxisDistance(a, b);
+            return centerDistance + (a.Width / 2.0) + (b.Width / 2.0);
+        }
+
+        private static double WallAxisDistance(Wall a, Wall b)
+        {
+            Line lineA = ((LocationCurve)a.Location).Curve as Line;
+            Line lineB = ((LocationCurve)b.Location).Curve as Line;
+
+            XYZ midA = lineA.Evaluate(0.5, true);
+            XYZ midB = lineB.Evaluate(0.5, true);
+
+            XYZ tangent = lineA.Direction;
+            tangent = new XYZ(tangent.X, tangent.Y, 0).Normalize();
+            XYZ normal = new XYZ(-tangent.Y, tangent.X, 0);
+
+            return Math.Abs((midB - midA).DotProduct(normal));
         }
 
         private ManholeWall BuildCandidate(Wall wall, XYZ center)
