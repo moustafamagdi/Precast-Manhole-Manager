@@ -313,6 +313,20 @@ namespace Hatco.PrecastManholeManager.UI
             });
 
             grid.Columns.Add(TextColumn("Opening", nameof(PenetrationRecord.OpeningSize), 120));
+            grid.Columns.Add(TextColumn("Existing Status", nameof(PenetrationRecord.ExistingOpeningStatus), 150));
+            grid.Columns.Add(TextColumn("Existing Size", nameof(PenetrationRecord.ExistingOpeningSize), 125));
+
+            grid.Columns.Add(new DataGridCheckBoxColumn
+            {
+                Header = "Adopt",
+                Binding = new WpfBinding(nameof(PenetrationRecord.AdoptExistingOpening))
+                {
+                    Mode = BindingMode.TwoWay,
+                    UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
+                },
+                Width = 60
+            });
+
             grid.Columns.Add(TextColumn("Link", nameof(PenetrationRecord.LinkName), 260));
             grid.Columns.Add(TextColumn("Element ID", nameof(PenetrationRecord.LinkedElementId), 95));
             grid.Columns.Add(TextColumn("Notes", nameof(PenetrationRecord.Notes), 260));
@@ -458,10 +472,46 @@ namespace Hatco.PrecastManholeManager.UI
             _grid.CommitEdit(DataGridEditingUnit.Cell, true);
             _grid.CommitEdit(DataGridEditingUnit.Row, true);
 
+            List<PenetrationRecord> invalidAdoptions = _records
+                .Where(r => r.AdoptExistingOpening &&
+                            !string.Equals(r.ExistingOpeningStatus, "EXISTING SUFFICIENT", StringComparison.Ordinal))
+                .ToList();
+
+            if (invalidAdoptions.Count > 0)
+            {
+                MessageBox.Show(
+                    this,
+                    "Adopt is only allowed for EXISTING SUFFICIENT openings.",
+                    "Precast Manhole Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
             List<PenetrationRecord> accepted = _records
-                .Where(r => r.Accepted)
+                .Where(r =>
+                    r.AdoptExistingOpening ||
+                    (r.Accepted &&
+                     !string.Equals(r.ExistingOpeningStatus, "EXISTING SUFFICIENT", StringComparison.Ordinal) &&
+                     !string.Equals(r.ExistingOpeningStatus, "EXISTING TOO SMALL", StringComparison.Ordinal)))
                 .Select(CloneRecord)
                 .ToList();
+
+            int tooSmall = _records.Count(r =>
+                r.Accepted &&
+                string.Equals(r.ExistingOpeningStatus, "EXISTING TOO SMALL", StringComparison.Ordinal));
+
+            if (tooSmall > 0)
+            {
+                MessageBox.Show(
+                    this,
+                    tooSmall + " penetration(s) have an existing opening that is too small. " +
+                    "They will not be modified automatically. Clear their Use checkbox or resize them manually.",
+                    "Existing Opening Too Small",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
 
             int unresolved = accepted.Count(r => r.CutWidthMm <= 0 || r.CutHeightMm <= 0);
             if (unresolved > 0)
@@ -542,6 +592,11 @@ namespace Hatco.PrecastManholeManager.UI
                 WidthMm = r.WidthMm,
                 HeightMm = r.HeightMm,
                 ClearanceMm = r.ClearanceMm,
+                ExistingOpeningId = r.ExistingOpeningId,
+                ExistingOpeningWidthMm = r.ExistingOpeningWidthMm,
+                ExistingOpeningHeightMm = r.ExistingOpeningHeightMm,
+                ExistingOpeningStatus = r.ExistingOpeningStatus,
+                AdoptExistingOpening = r.AdoptExistingOpening,
                 Accepted = r.Accepted
             };
         }
@@ -575,7 +630,10 @@ namespace Hatco.PrecastManholeManager.UI
         {
             int accepted = _records.Count(r => r.Accepted);
             int review = _records.Count(r => string.Equals(r.OpeningSize, "Review", StringComparison.OrdinalIgnoreCase));
-            _status.Text = $"Accepted: {accepted}/{_records.Count}    |    Need size review: {review}";
+            int manualOk = _records.Count(r => string.Equals(r.ExistingOpeningStatus, "EXISTING SUFFICIENT", StringComparison.Ordinal));
+            int manualSmall = _records.Count(r => string.Equals(r.ExistingOpeningStatus, "EXISTING TOO SMALL", StringComparison.Ordinal));
+            _status.Text =
+                $"Use: {accepted}/{_records.Count} | Existing OK: {manualOk} | Existing Too Small: {manualSmall} | Need size review: {review}";
         }
     }
 }
