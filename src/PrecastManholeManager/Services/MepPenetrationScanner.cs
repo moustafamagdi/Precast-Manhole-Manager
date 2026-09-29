@@ -273,7 +273,9 @@ namespace Hatco.PrecastManholeManager.Services
             return new PenetrationRecord
             {
                 LinkName = link.Name,
+                LinkInstanceId = link.Id.IntegerValue,
                 LinkedElementId = element.Id.IntegerValue,
+                LinkedUniqueId = element.UniqueId,
                 Category = category,
                 FamilyType = GetTypeText(element),
                 SystemName = GetParameterText(element, "System Name", "System Type", "System Classification"),
