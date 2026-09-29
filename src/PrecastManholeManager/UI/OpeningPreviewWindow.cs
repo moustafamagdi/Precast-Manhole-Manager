@@ -38,9 +38,13 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly ManufacturerExportExternalEventHandler _exportHandler;
         private readonly ExternalEvent _exportEvent;
         private readonly Button _manufacturerExportButton;
+        private readonly ManufacturerExcelExportExternalEventHandler _excelExportHandler;
+        private readonly ExternalEvent _excelExportEvent;
+        private readonly Button _excelExportButton;
         private bool _syncPending;
         private bool _manholePending;
         private bool _exportPending;
+        private bool _excelExportPending;
 
         public static void ShowModeless(
             Document document,
@@ -89,6 +93,9 @@ namespace Hatco.PrecastManholeManager.UI
 
             _exportHandler = new ManufacturerExportExternalEventHandler(OnManufacturerExportCompleted);
             _exportEvent = ExternalEvent.Create(_exportHandler);
+
+            _excelExportHandler = new ManufacturerExcelExportExternalEventHandler(OnManufacturerExcelExportCompleted);
+            _excelExportEvent = ExternalEvent.Create(_excelExportHandler);
 
             Title = "Precast Manhole Manager - Opening Preview";
             Width = 1320;
@@ -174,11 +181,20 @@ namespace Hatco.PrecastManholeManager.UI
 
             _manufacturerExportButton = new Button
             {
-                Content = "Export Manufacturer Data",
-                Padding = new Thickness(12, 4, 12, 4)
+                Content = "Export CSV",
+                Padding = new Thickness(12, 4, 12, 4),
+                Margin = new Thickness(0, 0, 8, 0)
             };
             _manufacturerExportButton.Click += ManufacturerExport_Click;
             manholeControls.Children.Add(_manufacturerExportButton);
+
+            _excelExportButton = new Button
+            {
+                Content = "Export Excel Workbook",
+                Padding = new Thickness(12, 4, 12, 4)
+            };
+            _excelExportButton.Click += ManufacturerExcelExport_Click;
+            manholeControls.Children.Add(_excelExportButton);
 
             var controls = new WrapPanel { Orientation = Orientation.Horizontal };
             header.Children.Add(controls);
@@ -273,6 +289,7 @@ namespace Hatco.PrecastManholeManager.UI
                 try { _syncEvent?.Dispose(); } catch { }
                 try { _manholeEvent?.Dispose(); } catch { }
                 try { _exportEvent?.Dispose(); } catch { }
+                try { _excelExportEvent?.Dispose(); } catch { }
             };
 
             UpdateStatus();
@@ -478,6 +495,61 @@ namespace Hatco.PrecastManholeManager.UI
                 OuterW2W3Mm = d.OuterW2W3Mm,
                 WallHeightMm = d.WallHeightMm
             };
+        }
+
+        private void ManufacturerExcelExport_Click(object sender, RoutedEventArgs e)
+        {
+            if (_excelExportPending)
+                return;
+
+            _excelExportHandler.SetRequest(new ManufacturerExcelExportRequest
+            {
+                Document = _document
+            });
+
+            _excelExportPending = true;
+            _excelExportButton.IsEnabled = false;
+            _status.Text = "Building manufacturer Excel workbook...";
+
+            ExternalEventRequest status = _excelExportEvent.Raise();
+            if (status != ExternalEventRequest.Accepted)
+            {
+                _excelExportPending = false;
+                _excelExportButton.IsEnabled = true;
+                _status.Text = "Could not queue Excel export. ExternalEvent status: " + status;
+            }
+        }
+
+        private void OnManufacturerExcelExportCompleted(ManufacturerExcelExportResult result)
+        {
+            _excelExportPending = false;
+            _excelExportButton.IsEnabled = true;
+
+            if (result == null || string.IsNullOrWhiteSpace(result.WorkbookPath))
+            {
+                _status.Text = "Excel export failed. Check the latest log.";
+                if (result != null && !string.IsNullOrWhiteSpace(result.LogPath))
+                {
+                    MessageBox.Show(
+                        this,
+                        "Excel export failed.\n\nLog:\n" + result.LogPath,
+                        "Excel Export Failed",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+                return;
+            }
+
+            _status.Text =
+                $"Excel workbook complete | Manholes={result.ManholeCount} | Openings={result.OpeningCount}";
+
+            MessageBox.Show(
+                this,
+                $"Excel workbook created.\n\nManholes: {result.ManholeCount}\nOpenings: {result.OpeningCount}\n\n" +
+                $"Workbook:\n{result.WorkbookPath}\n\nLog:\n{result.LogPath}",
+                "Manufacturer Excel Export",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
         }
 
         private void ManufacturerExport_Click(object sender, RoutedEventArgs e)
