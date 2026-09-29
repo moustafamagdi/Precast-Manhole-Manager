@@ -110,11 +110,17 @@ namespace Hatco.PrecastManholeManager.Services
             {
                 OpeningId = opening.Id.IntegerValue,
                 SourceKey = entity.Get<string>(schema.GetField("SourceKey")),
+                LinkInstanceId = entity.Get<int>(schema.GetField("LinkInstanceId")),
+                LinkedElementId = entity.Get<int>(schema.GetField("LinkedElementId")),
+                LinkedUniqueId = entity.Get<string>(schema.GetField("LinkedUniqueId")),
+                LinkName = entity.Get<string>(schema.GetField("LinkName")),
+                SourceShape = entity.Get<string>(schema.GetField("SourceShape")),
                 HostWallId = entity.Get<int>(schema.GetField("HostWallId")),
                 WallNumber = entity.Get<int>(schema.GetField("WallNumber")),
                 AdoptedManual = OpeningAdoptionStorageService.IsAdoptedManual(opening),
                 CutWidthMm = GetMillimeters(entity, schema, "CutWidthMm"),
                 CutHeightMm = GetMillimeters(entity, schema, "CutHeightMm"),
+                ClearanceMm = GetMillimeters(entity, schema, "ClearanceMm"),
                 Xmm = GetMillimeters(entity, schema, "Xmm"),
                 Ymm = GetMillimeters(entity, schema, "Ymm"),
                 Zmm = GetMillimeters(entity, schema, "Zmm")
@@ -138,11 +144,17 @@ namespace Hatco.PrecastManholeManager.Services
     {
         public int OpeningId { get; set; }
         public string SourceKey { get; set; }
+        public int LinkInstanceId { get; set; }
+        public int LinkedElementId { get; set; }
+        public string LinkedUniqueId { get; set; }
+        public string LinkName { get; set; }
+        public string SourceShape { get; set; }
         public int HostWallId { get; set; }
         public int WallNumber { get; set; }
         public bool AdoptedManual { get; set; }
         public double CutWidthMm { get; set; }
         public double CutHeightMm { get; set; }
+        public double ClearanceMm { get; set; }
         public double Xmm { get; set; }
         public double Ymm { get; set; }
         public double Zmm { get; set; }
