@@ -147,6 +147,16 @@ namespace Hatco.PrecastManholeManager.Services
                                         continue;
                                     }
 
+                                    string fitReason;
+                                    if (!OpeningFitValidationService.TryValidate(doc, record, out fitReason))
+                                    {
+                                        result.NeedsReview++;
+                                        log.Warn(
+                                            $"NEEDS REVIEW Source={record.LinkedElementId} Wall={record.HostWallId}: {fitReason} " +
+                                            $"Existing managed opening {current.Opening.Id.IntegerValue} was preserved.");
+                                        continue;
+                                    }
+
                                     int oldId = current.Opening.Id.IntegerValue;
                                     doc.Delete(current.Opening.Id);
 
@@ -200,6 +210,15 @@ namespace Hatco.PrecastManholeManager.Services
                                     }
                                     else
                                     {
+                                        string fitReason;
+                                        if (!OpeningFitValidationService.TryValidate(doc, record, out fitReason))
+                                        {
+                                            result.NeedsReview++;
+                                            log.Warn(
+                                                $"NEEDS REVIEW Source={record.LinkedElementId} Wall={record.HostWallId}: {fitReason}");
+                                            continue;
+                                        }
+
                                         using (var sub = new SubTransaction(doc))
                                         {
                                             sub.Start();
