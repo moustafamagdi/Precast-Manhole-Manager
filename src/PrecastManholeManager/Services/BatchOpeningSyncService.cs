@@ -91,6 +91,18 @@ namespace Hatco.PrecastManholeManager.Services
                     continue;
                 }
 
+                RevitLinkInstance sourceLink =
+                    doc.GetElement(new ElementId(entry.Data.LinkInstanceId)) as RevitLinkInstance;
+
+                if (sourceLink == null || sourceLink.GetLinkDocument() == null)
+                {
+                    result.Review++;
+                    log?.Warn(
+                        "Batch preserved managed opening " + entry.Opening.Id.IntegerValue +
+                        " because source link " + entry.Data.LinkInstanceId + " is unloaded/unavailable.");
+                    continue;
+                }
+
                 try
                 {
                     doc.Delete(entry.Opening.Id);
