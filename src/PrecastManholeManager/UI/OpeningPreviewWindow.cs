@@ -7,6 +7,8 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Interop;
+using WpfBinding = System.Windows.Data.Binding;
+using WpfTextBox = System.Windows.Controls.TextBox;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Hatco.PrecastManholeManager.Infrastructure;
@@ -22,7 +24,7 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly Document _document;
         private readonly List<int> _wallIds;
         private readonly List<PenetrationRecord> _records;
-        private readonly TextBox _clearanceBox;
+        private readonly WpfTextBox _clearanceBox;
         private readonly DataGrid _grid;
         private readonly TextBlock _status;
         private readonly OpeningSyncExternalEventHandler _syncHandler;
@@ -120,7 +122,7 @@ namespace Hatco.PrecastManholeManager.UI
                 Margin = new Thickness(0, 0, 6, 0)
             });
 
-            _clearanceBox = new TextBox
+            _clearanceBox = new WpfTextBox
             {
                 Width = 80,
                 Text = "50",
@@ -227,7 +229,7 @@ namespace Hatco.PrecastManholeManager.UI
             grid.Columns.Add(new DataGridCheckBoxColumn
             {
                 Header = "Use",
-                Binding = new Binding(nameof(PenetrationRecord.Accepted))
+                Binding = new WpfBinding(nameof(PenetrationRecord.Accepted))
                 {
                     Mode = BindingMode.TwoWay,
                     UpdateSourceTrigger = UpdateSourceTrigger.PropertyChanged
@@ -247,7 +249,7 @@ namespace Hatco.PrecastManholeManager.UI
             grid.Columns.Add(new DataGridTextColumn
             {
                 Header = "Clr/Side mm",
-                Binding = new Binding(nameof(PenetrationRecord.ClearanceMm))
+                Binding = new WpfBinding(nameof(PenetrationRecord.ClearanceMm))
                 {
                     Mode = BindingMode.TwoWay,
                     UpdateSourceTrigger = UpdateSourceTrigger.LostFocus,
@@ -269,7 +271,7 @@ namespace Hatco.PrecastManholeManager.UI
             return new DataGridTextColumn
             {
                 Header = header,
-                Binding = new Binding(path),
+                Binding = new WpfBinding(path),
                 Width = width,
                 IsReadOnly = true
             };
