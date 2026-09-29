@@ -39,8 +39,16 @@ Read-only. No model modifications.
    - Timestamped TXT diagnostic log on Desktop
    - Timestamped CSV penetration report on Desktop
 
-### Phase 2 — Opening preview
-Modeless WPF window. Review/accept/reject detected penetrations and define clearance rules.
+### Phase 2 — Opening preview (current)
+Modeless WPF window shown after the diagnostic scan.
+
+- Review all detected penetrations.
+- Accept/reject individual penetrations.
+- Default clearance: 50 mm per side.
+- Apply a different clearance to all detected penetrations.
+- Preview recommended round/rectangular opening size.
+- Export accepted penetrations to CSV.
+- No Revit model elements are modified in Phase 2.
 
 ### Phase 3 — Create/update openings
 Void families for round/rectangular penetrations. Persistent source IDs and statuses:
@@ -69,8 +77,10 @@ The post-build step copies the DLL and add-in manifest to:
 2. Ensure relevant MEP Revit links are loaded.
 3. Hatco > Precast Tools > **Scan Manhole**.
 4. Select the Structural Foundation/base of one manhole.
-5. Review the summary dialog.
-6. Review Desktop outputs:
+5. Review the modeless Opening Preview window.
+6. Adjust clearance and accept/reject penetrations as required.
+7. Export accepted penetrations if required.
+8. Review Desktop outputs:
    - `PrecastManholeManager_yyyyMMdd_HHmmss.txt`
    - `PrecastManholePenetrations_yyyyMMdd_HHmmss.csv`
 
