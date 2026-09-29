@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <Platforms>AnyCPU</Platforms>
+    <RootNamespace>Hatco.PrecastManholeManager</RootNamespace>
+    <AssemblyName>PrecastManholeManager</AssemblyName>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>C:\Program Files\Autodesk\Revit 2024\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="PrecastManholeManager.addin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="DeployToRevit" AfterTargets="Build">
+    <PropertyGroup>
+      <RevitAddinDir>$(APPDATA)\Autodesk\Revit\Addins\2024\PrecastManholeManager</RevitAddinDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(RevitAddinDir)" />
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(RevitAddinDir)" />
+    <Copy SourceFiles="$(ProjectDir)PrecastManholeManager.addin" DestinationFolder="$(RevitAddinDir)" />
+  </Target>
+</Project>
