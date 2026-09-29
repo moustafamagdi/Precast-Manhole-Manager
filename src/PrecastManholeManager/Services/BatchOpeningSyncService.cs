@@ -74,7 +74,7 @@ namespace Hatco.PrecastManholeManager.Services
                         }
 
                         doc.Delete(current.Opening.Id);
-                        Opening updated = CreateOpening(doc, record);
+                        Opening updated = CreateOpening(doc, record, log);
                         OpeningStorageService.Write(updated, record);
                         result.Updated++;
                     }
@@ -91,7 +91,7 @@ namespace Hatco.PrecastManholeManager.Services
                             continue;
                         }
 
-                        Opening created = CreateOpening(doc, record);
+                        Opening created = CreateOpening(doc, record, log);
                         OpeningStorageService.Write(created, record);
                         result.Created++;
                     }
@@ -175,7 +175,7 @@ namespace Hatco.PrecastManholeManager.Services
                    Math.Abs(data.CutHeightMm - record.CutHeightMm) <= sizeTol;
         }
 
-        private static Opening CreateOpening(Document doc, PenetrationRecord record)
+        private static Opening CreateOpening(Document doc, PenetrationRecord record, DiagnosticLogger log)
         {
             Wall wall = doc.GetElement(new ElementId(record.HostWallId)) as Wall;
             if (wall == null) throw new InvalidOperationException("Host wall not found.");
@@ -198,7 +198,7 @@ namespace Hatco.PrecastManholeManager.Services
             XYZ p1 = center - tangent * halfWidth - XYZ.BasisZ * halfHeight;
             XYZ p2 = center + tangent * halfWidth + XYZ.BasisZ * halfHeight;
 
-            OpeningJoinPreparationService.UnjoinConflictingGeometry(doc, wall, record, null);
+            OpeningJoinPreparationService.UnjoinConflictingGeometry(doc, wall, record, log);
             return doc.Create.NewOpening(wall, p1, p2);
         }
 
