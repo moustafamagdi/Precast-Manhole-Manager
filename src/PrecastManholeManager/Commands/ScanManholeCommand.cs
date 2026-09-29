@@ -86,8 +86,10 @@ namespace Hatco.PrecastManholeManager.Commands
                     log.Info("No Revit model elements were modified.");
 
                     OpeningPreviewWindow.ShowModeless(
+                        doc,
                         foundation.Id.IntegerValue,
                         wallSummary,
+                        manhole.Walls.Select(w => w.Wall.Id.IntegerValue).ToList(),
                         penetrations);
 
                     return Result.Succeeded;
