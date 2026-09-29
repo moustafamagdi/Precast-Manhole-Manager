@@ -8,6 +8,7 @@ namespace Hatco.PrecastManholeManager.Models
     {
         private bool _accepted = true;
         private double _clearanceMm = 50.0;
+        private string _existingOpeningStatus = "NONE";
 
         public string LinkName { get; set; }
         public int LinkInstanceId { get; set; }
@@ -32,6 +33,27 @@ namespace Hatco.PrecastManholeManager.Models
         public double WidthMm { get; set; }
         public double HeightMm { get; set; }
 
+        public int ExistingOpeningId { get; set; }
+        public double ExistingOpeningWidthMm { get; set; }
+        public double ExistingOpeningHeightMm { get; set; }
+        public string ExistingOpeningStatus
+        {
+            get => _existingOpeningStatus;
+            set
+            {
+                if (_existingOpeningStatus == value) return;
+                _existingOpeningStatus = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public bool HasManualSufficientOpening =>
+            ExistingOpeningId > 0 &&
+            ExistingOpeningStatus == "EXISTING SUFFICIENT";
+
+        public bool HasManualTooSmallOpening =>
+            ExistingOpeningId > 0 &&
+            ExistingOpeningStatus == "EXISTING TOO SMALL";
         public bool Accepted
         {
             get => _accepted;
@@ -52,6 +74,7 @@ namespace Hatco.PrecastManholeManager.Models
                 _clearanceMm = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(OpeningSize));
+                OnPropertyChanged(nameof(ExistingOpeningStatus));
             }
         }
 
