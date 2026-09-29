@@ -287,8 +287,6 @@ namespace Hatco.PrecastManholeManager.Services
                 8));
             sheet.Merges.Add("A7:H7");
 
-            int rowNumber = 8;
-
             for (int wall = 1; wall <= 4; wall++)
             {
                 List<ManufacturerOpeningRow> wallOpenings = openings
@@ -296,11 +294,11 @@ namespace Hatco.PrecastManholeManager.Services
                     .OrderBy(x => x.OpeningNumber ?? string.Empty)
                     .ToList();
 
+                int sectionRow = sheet.Rows.Count + 1;
                 sheet.AddRow(XlsxCell.Text(
                     "WALL W" + wall + " - " + wallOpenings.Count + " OPENING(S)",
                     3));
-                rowNumber++;
-                sheet.Merges.Add("A" + rowNumber + ":H" + rowNumber);
+                sheet.Merges.Add("A" + sectionRow + ":H" + sectionRow);
 
                 sheet.AddRow(
                     XlsxCell.Text("Opening Code", 2),
@@ -311,13 +309,12 @@ namespace Hatco.PrecastManholeManager.Services
                     XlsxCell.Text("Service", 2),
                     XlsxCell.Text("System", 2),
                     XlsxCell.Text("Source", 2));
-                rowNumber++;
 
                 if (wallOpenings.Count == 0)
                 {
+                    int noOpeningRow = sheet.Rows.Count + 1;
                     sheet.AddRow(XlsxCell.Text("No openings", 8));
-                    rowNumber++;
-                    sheet.Merges.Add("A" + rowNumber + ":H" + rowNumber);
+                    sheet.Merges.Add("A" + noOpeningRow + ":H" + noOpeningRow);
                 }
                 else
                 {
@@ -338,12 +335,10 @@ namespace Hatco.PrecastManholeManager.Services
                                 (r.SourceLink ?? string.Empty) +
                                 " | ID " +
                                 r.SourceElementId));
-                        rowNumber++;
                     }
                 }
 
                 sheet.AddRow(XlsxCell.Blank());
-                rowNumber++;
             }
 
             return sheet;
