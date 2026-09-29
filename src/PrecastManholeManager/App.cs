@@ -56,6 +56,17 @@ namespace Hatco.PrecastManholeManager
                         ToolTip = "Find likely manhole Structural Foundations by MH / MANHOLE naming and process them in one run."
                     });
 
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "PrecastManholeExportExcel",
+                        "Export\nExcel",
+                        assemblyPath,
+                        typeof(Commands.ExportManufacturerExcelCommand).FullName)
+                    {
+                        ToolTip = "Export all saved precast manholes and openings to one manufacturer Excel workbook."
+                    });
+
                 return Result.Succeeded;
             }
             catch
