@@ -50,9 +50,20 @@ Modeless WPF window shown after the diagnostic scan.
 - Export accepted penetrations to CSV.
 - No Revit model elements are modified in Phase 2.
 
-### Phase 3 — Create/update openings
-Void families for round/rectangular penetrations. Persistent source IDs and statuses:
-NEW / UNCHANGED / MOVED / RESIZED / REMOVED.
+### Phase 3 — Create/update openings (current test build)
+The modeless preview now includes **Create / Update Openings**.
+
+- Uses a Revit `ExternalEvent` so model modifications are executed in a valid Revit API context.
+- Creates native Revit wall `Opening` elements for accepted penetrations.
+- Stores persistent source metadata on every managed opening using Extensible Storage.
+- Re-running the same manhole classifies openings as:
+  - CREATED
+  - UPDATED
+  - UNCHANGED
+  - REMOVED
+- A separate timestamped TXT log is written for every Phase 3 sync run.
+- Unchecked/stale managed openings on the selected manhole walls are removed.
+- Current limitation: Revit native wall Opening only supports rectangular openings. Round pipe penetrations therefore use a square rectangular envelope equal to the recommended opening diameter. A true round void-family implementation will replace this after the sync engine is validated.
 
 ### Phase 4 — Manhole data carrier
 Create one lightweight Generic Model data carrier per manhole and persist manhole identity/dimensions.
@@ -79,8 +90,10 @@ The post-build step copies the DLL and add-in manifest to:
 4. Select the Structural Foundation/base of one manhole.
 5. Review the modeless Opening Preview window.
 6. Adjust clearance and accept/reject penetrations as required.
-7. Export accepted penetrations if required.
-8. Review Desktop outputs:
+7. Optionally export accepted penetrations.
+8. Click **Create / Update Openings** to sync accepted rows into the Revit walls.
+9. Review the Phase 3 result in the window footer and its timestamped TXT log.
+10. Review Desktop outputs:
    - `PrecastManholeManager_yyyyMMdd_HHmmss.txt`
    - `PrecastManholePenetrations_yyyyMMdd_HHmmss.csv`
 
