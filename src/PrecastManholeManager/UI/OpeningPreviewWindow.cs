@@ -184,10 +184,12 @@ namespace Hatco.PrecastManholeManager.UI
                 SelectionMode = DataGridSelectionMode.Extended,
                 SelectionUnit = DataGridSelectionUnit.FullRow,
                 HeadersVisibility = DataGridHeadersVisibility.Column,
-                GridLinesVisibility = DataGridGridLinesVisibility.Horizontal,
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+                GridLinesVisibility = DataGridGridLinesVisibility.Horizontal
             };
+
+            ScrollViewer.SetHorizontalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
+            ScrollViewer.SetVerticalScrollBarVisibility(grid, ScrollBarVisibility.Auto);
+            grid.CurrentCellChanged += (s, e) => UpdateStatus();
 
             grid.Columns.Add(new DataGridCheckBoxColumn
             {
