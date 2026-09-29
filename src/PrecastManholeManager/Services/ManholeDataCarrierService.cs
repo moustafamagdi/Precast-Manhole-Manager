@@ -53,6 +53,28 @@ namespace Hatco.PrecastManholeManager.Services
             return TryReadData(carrier, out ManholeDataRecord data) ? data : null;
         }
 
+        public static List<ManholeDataRecord> ReadAll(Document doc)
+        {
+            var result = new List<ManholeDataRecord>();
+
+            foreach (DirectShape ds in new FilteredElementCollector(doc)
+                         .OfClass(typeof(DirectShape))
+                         .Cast<DirectShape>())
+            {
+                if (ds.Category == null ||
+                    ds.Category.Id.IntegerValue != (int)BuiltInCategory.OST_GenericModel)
+                    continue;
+
+                if (TryReadData(ds, out ManholeDataRecord data))
+                    result.Add(data);
+            }
+
+            return result
+                .OrderBy(x => x.ManholeNumber ?? string.Empty)
+                .ThenBy(x => x.FoundationId)
+                .ToList();
+        }
+
         private static DirectShape FindByFoundation(Document doc, string foundationUniqueId, int foundationId)
         {
             foreach (DirectShape ds in new FilteredElementCollector(doc)
