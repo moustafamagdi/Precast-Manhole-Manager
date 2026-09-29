@@ -24,20 +24,27 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly Document _document;
         private readonly List<int> _wallIds;
         private readonly List<PenetrationRecord> _records;
+        private readonly ManholeDataRecord _manholeData;
+        private readonly WpfTextBox _manholeNumberBox;
         private readonly WpfTextBox _clearanceBox;
         private readonly DataGrid _grid;
         private readonly TextBlock _status;
         private readonly OpeningSyncExternalEventHandler _syncHandler;
         private readonly ExternalEvent _syncEvent;
         private readonly Button _syncButton;
+        private readonly Button _saveManholeButton;
+        private readonly ManholeDataSyncExternalEventHandler _manholeHandler;
+        private readonly ExternalEvent _manholeEvent;
         private bool _syncPending;
+        private bool _manholePending;
 
         public static void ShowModeless(
             Document document,
             int foundationId,
             string wallSummary,
             IList<int> wallIds,
-            IList<PenetrationRecord> records)
+            IList<PenetrationRecord> records,
+            ManholeDataRecord manholeData)
         {
             if (_activeWindow != null)
             {
@@ -52,7 +59,7 @@ namespace Hatco.PrecastManholeManager.UI
                 }
             }
 
-            _activeWindow = new OpeningPreviewWindow(document, foundationId, wallSummary, wallIds, records);
+            _activeWindow = new OpeningPreviewWindow(document, foundationId, wallSummary, wallIds, records, manholeData);
             _activeWindow.Closed += (s, e) => _activeWindow = null;
             _activeWindow.Show();
         }
@@ -62,14 +69,19 @@ namespace Hatco.PrecastManholeManager.UI
             int foundationId,
             string wallSummary,
             IList<int> wallIds,
-            IList<PenetrationRecord> records)
+            IList<PenetrationRecord> records,
+            ManholeDataRecord manholeData)
         {
             _document = document;
             _wallIds = wallIds?.ToList() ?? new List<int>();
             _records = records?.ToList() ?? new List<PenetrationRecord>();
+            _manholeData = manholeData ?? throw new ArgumentNullException(nameof(manholeData));
 
             _syncHandler = new OpeningSyncExternalEventHandler(OnSyncCompleted);
             _syncEvent = ExternalEvent.Create(_syncHandler);
+
+            _manholeHandler = new ManholeDataSyncExternalEventHandler(OnManholeSyncCompleted);
+            _manholeEvent = ExternalEvent.Create(_manholeHandler);
 
             Title = "Precast Manhole Manager - Opening Preview";
             Width = 1320;
@@ -109,8 +121,49 @@ namespace Hatco.PrecastManholeManager.UI
             header.Children.Add(new TextBlock
             {
                 Text = $"Foundation: {foundationId}    |    {wallSummary}    |    Detected: {_records.Count}",
-                Margin = new Thickness(0, 4, 0, 8)
+                Margin = new Thickness(0, 4, 0, 4)
             });
+
+            header.Children.Add(new TextBlock
+            {
+                Text =
+                    $"Clear W1-W4: {_manholeData.ClearW1W4Mm:0.#} mm    |    " +
+                    $"Clear W2-W3: {_manholeData.ClearW2W3Mm:0.#} mm    |    " +
+                    $"Wall Height: {_manholeData.WallHeightMm:0.#} mm    |    " +
+                    $"Base Thickness: {_manholeData.BaseThicknessMm:0.#} mm",
+                Margin = new Thickness(0, 0, 0, 8)
+            });
+
+            var manholeControls = new WrapPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            header.Children.Add(manholeControls);
+
+            manholeControls.Children.Add(new TextBlock
+            {
+                Text = "Manhole No.:",
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 6, 0)
+            });
+
+            _manholeNumberBox = new WpfTextBox
+            {
+                Width = 150,
+                Text = _manholeData.ManholeNumber ?? string.Empty,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            manholeControls.Children.Add(_manholeNumberBox);
+
+            _saveManholeButton = new Button
+            {
+                Content = "Save Manhole Data",
+                Padding = new Thickness(12, 4, 12, 4),
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            _saveManholeButton.Click += SaveManhole_Click;
+            manholeControls.Children.Add(_saveManholeButton);
 
             var controls = new WrapPanel { Orientation = Orientation.Horizontal };
             header.Children.Add(controls);
@@ -203,6 +256,7 @@ namespace Hatco.PrecastManholeManager.UI
             Closed += (s, e) =>
             {
                 try { _syncEvent?.Dispose(); } catch { }
+                try { _manholeEvent?.Dispose(); } catch { }
             };
 
             UpdateStatus();
@@ -308,6 +362,91 @@ namespace Hatco.PrecastManholeManager.UI
 
             _grid.Items.Refresh();
             UpdateStatus();
+        }
+
+        private void SaveManhole_Click(object sender, RoutedEventArgs e)
+        {
+            if (_manholePending)
+                return;
+
+            string number = (_manholeNumberBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(number))
+            {
+                MessageBox.Show(
+                    this,
+                    "Enter a manhole number before saving.",
+                    "Precast Manhole Manager",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
+            ManholeDataRecord data = CloneManholeData(_manholeData);
+            data.ManholeNumber = number;
+
+            _manholeHandler.SetRequest(new ManholeDataSyncRequest
+            {
+                Document = _document,
+                Data = data
+            });
+
+            _manholePending = true;
+            _saveManholeButton.IsEnabled = false;
+            _status.Text = "Saving manhole data carrier in Revit...";
+
+            ExternalEventRequest status = _manholeEvent.Raise();
+            if (status != ExternalEventRequest.Accepted)
+            {
+                _manholePending = false;
+                _saveManholeButton.IsEnabled = true;
+                _status.Text = "Could not queue manhole data sync. ExternalEvent status: " + status;
+            }
+        }
+
+        private void OnManholeSyncCompleted(ManholeDataSyncResult result)
+        {
+            _manholePending = false;
+            _saveManholeButton.IsEnabled = true;
+
+            if (result.Success)
+            {
+                _manholeData.ManholeNumber = result.ManholeNumber;
+                _status.Text =
+                    $"Manhole '{result.ManholeNumber}' saved. Carrier ElementId={result.CarrierElementId} | Log: {result.LogPath}";
+            }
+            else
+            {
+                _status.Text = "Manhole data save failed. Log: " + result.LogPath;
+                MessageBox.Show(
+                    this,
+                    result.Message + "\n\nLog:\n" + result.LogPath,
+                    "Manhole Data Save Failed",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        private static ManholeDataRecord CloneManholeData(ManholeDataRecord d)
+        {
+            return new ManholeDataRecord
+            {
+                ManholeNumber = d.ManholeNumber,
+                FoundationId = d.FoundationId,
+                FoundationUniqueId = d.FoundationUniqueId,
+                Wall1Id = d.Wall1Id,
+                Wall2Id = d.Wall2Id,
+                Wall3Id = d.Wall3Id,
+                Wall4Id = d.Wall4Id,
+                CenterXmm = d.CenterXmm,
+                CenterYmm = d.CenterYmm,
+                BaseTopZmm = d.BaseTopZmm,
+                BaseThicknessMm = d.BaseThicknessMm,
+                ClearW1W4Mm = d.ClearW1W4Mm,
+                ClearW2W3Mm = d.ClearW2W3Mm,
+                OuterW1W4Mm = d.OuterW1W4Mm,
+                OuterW2W3Mm = d.OuterW2W3Mm,
+                WallHeightMm = d.WallHeightMm
+            };
         }
 
         private void Sync_Click(object sender, RoutedEventArgs e)
