@@ -120,6 +120,12 @@ namespace Hatco.PrecastManholeManager.Services
 
                     using (var tx = new Transaction(doc, "HATCO - Sync Precast Manhole Openings"))
                     {
+                        var failurePreprocessor = new OpeningFailurePreprocessor(log);
+                        FailureHandlingOptions failureOptions = tx.GetFailureHandlingOptions();
+                        failureOptions.SetFailuresPreprocessor(failurePreprocessor);
+                        failureOptions.SetClearAfterRollback(true);
+                        tx.SetFailureHandlingOptions(failureOptions);
+
                         tx.Start();
 
                         foreach (PenetrationRecord record in request.AcceptedRecords)
@@ -265,7 +271,24 @@ namespace Hatco.PrecastManholeManager.Services
                             }
                         }
 
-                        tx.Commit();
+                        TransactionStatus commitStatus = tx.Commit();
+
+                        if (commitStatus != TransactionStatus.Committed)
+                        {
+                            result.Created = 0;
+                            result.Updated = 0;
+                            result.Unchanged = 0;
+                            result.Adopted = 0;
+                            result.Removed = 0;
+                            result.NeedsReview += Math.Max(1, failurePreprocessor.UnresolvedTargetCount);
+
+                            log.Warn(
+                                "Opening sync transaction rolled back due to an unresolved Revit opening/join failure.");
+                        }
+                        else
+                        {
+                            result.NeedsReview += failurePreprocessor.ResolvedCount;
+                        }
                     }
 
                     log.WriteHeader("PHASE 3 SUMMARY");
