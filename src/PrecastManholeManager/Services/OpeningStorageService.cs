@@ -27,15 +27,23 @@ namespace Hatco.PrecastManholeManager.Services
             builder.AddSimpleField("HostWallId", typeof(int));
             builder.AddSimpleField("WallNumber", typeof(int));
             builder.AddSimpleField("SourceShape", typeof(string));
-            builder.AddSimpleField("CutWidthMm", typeof(double));
-            builder.AddSimpleField("CutHeightMm", typeof(double));
-            builder.AddSimpleField("ClearanceMm", typeof(double));
-            builder.AddSimpleField("Xmm", typeof(double));
-            builder.AddSimpleField("Ymm", typeof(double));
-            builder.AddSimpleField("Zmm", typeof(double));
+
+            AddLengthField(builder, "CutWidthMm");
+            AddLengthField(builder, "CutHeightMm");
+            AddLengthField(builder, "ClearanceMm");
+            AddLengthField(builder, "Xmm");
+            AddLengthField(builder, "Ymm");
+            AddLengthField(builder, "Zmm");
+
             builder.AddSimpleField("UpdatedUtc", typeof(string));
 
             return builder.Finish();
+        }
+
+        private static void AddLengthField(SchemaBuilder builder, string name)
+        {
+            FieldBuilder field = builder.AddSimpleField(name, typeof(double));
+            field.SetSpec(SpecTypeId.Length);
         }
 
         public static void Write(Opening opening, PenetrationRecord record)
@@ -51,12 +59,14 @@ namespace Hatco.PrecastManholeManager.Services
             entity.Set(schema.GetField("HostWallId"), record.HostWallId);
             entity.Set(schema.GetField("WallNumber"), record.WallNumber);
             entity.Set(schema.GetField("SourceShape"), record.Shape ?? string.Empty);
-            entity.Set(schema.GetField("CutWidthMm"), record.CutWidthMm);
-            entity.Set(schema.GetField("CutHeightMm"), record.CutHeightMm);
-            entity.Set(schema.GetField("ClearanceMm"), record.ClearanceMm);
-            entity.Set(schema.GetField("Xmm"), record.Xmm);
-            entity.Set(schema.GetField("Ymm"), record.Ymm);
-            entity.Set(schema.GetField("Zmm"), record.Zmm);
+
+            SetMillimeters(entity, schema, "CutWidthMm", record.CutWidthMm);
+            SetMillimeters(entity, schema, "CutHeightMm", record.CutHeightMm);
+            SetMillimeters(entity, schema, "ClearanceMm", record.ClearanceMm);
+            SetMillimeters(entity, schema, "Xmm", record.Xmm);
+            SetMillimeters(entity, schema, "Ymm", record.Ymm);
+            SetMillimeters(entity, schema, "Zmm", record.Zmm);
+
             entity.Set(schema.GetField("UpdatedUtc"), DateTime.UtcNow.ToString("O"));
 
             opening.SetEntity(entity);
@@ -76,14 +86,24 @@ namespace Hatco.PrecastManholeManager.Services
                 OpeningId = opening.Id.IntegerValue,
                 SourceKey = entity.Get<string>(schema.GetField("SourceKey")),
                 HostWallId = entity.Get<int>(schema.GetField("HostWallId")),
-                CutWidthMm = entity.Get<double>(schema.GetField("CutWidthMm")),
-                CutHeightMm = entity.Get<double>(schema.GetField("CutHeightMm")),
-                Xmm = entity.Get<double>(schema.GetField("Xmm")),
-                Ymm = entity.Get<double>(schema.GetField("Ymm")),
-                Zmm = entity.Get<double>(schema.GetField("Zmm"))
+                CutWidthMm = GetMillimeters(entity, schema, "CutWidthMm"),
+                CutHeightMm = GetMillimeters(entity, schema, "CutHeightMm"),
+                Xmm = GetMillimeters(entity, schema, "Xmm"),
+                Ymm = GetMillimeters(entity, schema, "Ymm"),
+                Zmm = GetMillimeters(entity, schema, "Zmm")
             };
 
             return true;
+        }
+
+        private static void SetMillimeters(Entity entity, Schema schema, string fieldName, double valueMm)
+        {
+            entity.Set(schema.GetField(fieldName), valueMm, UnitTypeId.Millimeters);
+        }
+
+        private static double GetMillimeters(Entity entity, Schema schema, string fieldName)
+        {
+            return entity.Get<double>(schema.GetField(fieldName), UnitTypeId.Millimeters);
         }
     }
 
