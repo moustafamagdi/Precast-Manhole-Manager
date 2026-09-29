@@ -139,6 +139,12 @@ namespace Hatco.PrecastManholeManager.Services
 
                     using (var tx = new Transaction(doc, "HATCO - Batch Precast Manhole " + manholeNumber))
                     {
+                        var failurePreprocessor = new OpeningFailurePreprocessor(log);
+                        FailureHandlingOptions failureOptions = tx.GetFailureHandlingOptions();
+                        failureOptions.SetFailuresPreprocessor(failurePreprocessor);
+                        failureOptions.SetClearAfterRollback(true);
+                        tx.SetFailureHandlingOptions(failureOptions);
+
                         tx.Start();
 
                         BatchOpeningSyncResult sync = BatchOpeningSyncService.Sync(
@@ -155,9 +161,21 @@ namespace Hatco.PrecastManholeManager.Services
                             data.FoundationId,
                             new[] { data.Wall1Id, data.Wall2Id, data.Wall3Id, data.Wall4Id });
 
-                        tx.Commit();
+                        TransactionStatus commitStatus = tx.Commit();
+
+                        if (commitStatus != TransactionStatus.Committed)
+                        {
+                            result.NeedsReview++;
+                            result.OpeningReviews += Math.Max(1, failurePreprocessor.UnresolvedTargetCount);
+                            log?.Warn(
+                                "BATCH ROLLBACK " + manholeNumber +
+                                " Foundation=" + foundation.Id.IntegerValue +
+                                " due to unresolved Revit opening/join failure.");
+                            continue;
+                        }
 
                         result.Valid++;
+                        result.OpeningReviews += failurePreprocessor.ResolvedCount;
                         result.OpeningsCreated += sync.Created;
                         result.OpeningsUpdated += sync.Updated;
                         result.OpeningsUnchanged += sync.Unchanged;
