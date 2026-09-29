@@ -67,6 +67,13 @@ namespace Hatco.PrecastManholeManager.Commands
 
                     var scanner = new MepPenetrationScanner(doc, log);
                     var penetrations = scanner.Scan(manhole);
+
+                    ExistingOpeningDetectionService.Apply(
+                        doc,
+                        manhole.Walls.Select(w => w.Wall.Id.IntegerValue),
+                        penetrations,
+                        log);
+
                     string csvPath = CsvExporter.Export(penetrations);
 
                     log.WriteHeader("SUMMARY");
