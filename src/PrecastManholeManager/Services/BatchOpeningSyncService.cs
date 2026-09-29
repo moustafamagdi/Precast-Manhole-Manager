@@ -61,6 +61,18 @@ namespace Hatco.PrecastManholeManager.Services
                             continue;
                         }
 
+                        string fitReason;
+                        if (!OpeningFitValidationService.TryValidate(doc, record, out fitReason))
+                        {
+                            result.Review++;
+                            log?.Warn(
+                                "BATCH REVIEW source " + record.LinkedElementId +
+                                " on Wall " + record.HostWallId +
+                                ": " + fitReason +
+                                " Existing managed opening was preserved.");
+                            continue;
+                        }
+
                         doc.Delete(current.Opening.Id);
                         Opening updated = CreateOpening(doc, record);
                         OpeningStorageService.Write(updated, record);
@@ -68,6 +80,17 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                     else
                     {
+                        string fitReason;
+                        if (!OpeningFitValidationService.TryValidate(doc, record, out fitReason))
+                        {
+                            result.Review++;
+                            log?.Warn(
+                                "BATCH REVIEW source " + record.LinkedElementId +
+                                " on Wall " + record.HostWallId +
+                                ": " + fitReason);
+                            continue;
+                        }
+
                         Opening created = CreateOpening(doc, record);
                         OpeningStorageService.Write(created, record);
                         result.Created++;
