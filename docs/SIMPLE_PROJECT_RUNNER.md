@@ -155,3 +155,29 @@ Send sheet screenshot and TXT log. If its plan cut elevation or
 section facing direction is wrong, fix those orientation/view-range
 details before any annotation work. These are still unannotated
 draft model views and not issued manufacturing drawings.
+
+
+## Latest simplification: operator lays out sheet manually
+
+Automatic draft sheet creation and viewport placement have been REMOVED
+from the current branch after repeated failures in the full live project.
+The new button is **3 Create 2D Views**. It creates (or reuses) exactly
+one real Floor Plan and four native wall Sections (W1-W4) for one
+selected, non-isolated manhole. It does NOT create any sheet, titleblock,
+viewport, sheet annotation or apply sheet-fit scale trials. One
+transaction commits these five views, so a sheet-layout failure cannot
+cause the views to disappear. Existing named Plan/Section views are
+preserved; re-running does not reset their chosen scale or crop.
+
+Views are named `MH_<FoundationId>_DRAFT_2D_PLAN` and
+`MH_<FoundationId>_DRAFT_2D_W1` through `W4`. The Plan opens
+after creation. In Revit Project Browser, the operator places these
+five views on a preferred sheet, adjusts view scales, crops and
+annotations, then shares a screenshot and chosen arrangement.
+Future automated sheet creation can be based on that actual
+project-specific template, not guesses.
+
+The **Review 3D** action is unchanged and remains strictly for
+problematic manholes. The old diagnostics and failed automatic layout
+experiments remain in Git history but are no longer invoked by the
+one-time project runner.
