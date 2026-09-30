@@ -87,8 +87,22 @@ namespace Hatco.PrecastManholeManager.Services
                     issues.Add(row);
                 }
                 row.FoundationId = foundation.Id.IntegerValue;
-                row.Reason = reason ?? "Review required";
-                row.Severity = severity ?? "REVIEW";
+                string newReason = reason ?? "Review required";
+                // Preserve the earlier hard failure even when a later broad
+                // audit only sees "edited profile + in-place insert".
+                if (string.IsNullOrWhiteSpace(row.Reason))
+                    row.Reason = newReason;
+                else if (row.Reason.IndexOf(newReason,
+                    StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    string combined = row.Reason + " | " + newReason;
+                    row.Reason = combined.Length <= 1800
+                        ? combined : row.Reason;
+                }
+                if (row.Severity != "BLOCKED" ||
+                    string.Equals(severity, "BLOCKED",
+                        StringComparison.OrdinalIgnoreCase))
+                    row.Severity = severity ?? "REVIEW";
                 row.WallIds = string.Join(",",
                     (wallIds ?? Enumerable.Empty<int>()).Distinct());
                 row.UpdatedUtc = DateTime.UtcNow.ToString("O",
