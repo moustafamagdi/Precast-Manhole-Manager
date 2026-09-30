@@ -129,7 +129,11 @@ namespace Hatco.PrecastManholeManager.Services
                 try
                 {
                     HashSet<int> known = new HashSet<int>(
-                        plan.ManualOpeningIds.Concat(plan.ManagedOpeningIds.Values));
+                        plan.ManualOpeningIds
+                            .Concat(plan.ManagedOpeningIds.Values)
+                            .Concat(plan.VoidCutIds.ContainsKey(wallId)
+                                ? plan.VoidCutIds[wallId]
+                                : new List<int>()));
                     foreach (ElementId id in wall.FindInserts(true, true, true, true))
                     {
                         if (known.Contains(id.IntegerValue)) continue;
