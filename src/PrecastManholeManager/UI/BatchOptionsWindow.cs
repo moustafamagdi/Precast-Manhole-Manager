@@ -79,8 +79,9 @@ namespace Hatco.PrecastManholeManager.UI
 
             _preview = new CheckBox
             {
-                Content = "PREVIEW ONLY (no openings or carriers modified)",
+                Content = "PREVIEW ONLY (required in experimental build)",
                 IsChecked = true,
+                IsEnabled = false,
                 Margin = new Thickness(0, 0, 0, 8)
             };
             root.Children.Add(_preview);
@@ -97,7 +98,7 @@ namespace Hatco.PrecastManholeManager.UI
             {
                 Text = "Safety: profile edits and in-place void cuts are NEVER reset in this version. " +
                        "If the existing geometry is uncertain, the manhole needs manual review. " +
-                       "Run Preview Only first.",
+                       "Use this preview to verify geometry and proposed edge trims before write support is enabled.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 6, 0, 14)
             });
@@ -131,7 +132,7 @@ namespace Hatco.PrecastManholeManager.UI
                     ClearanceMm = clearance,
                     EdgePolicy = _edge.SelectedIndex == 1
                         ? BatchEdgePolicy.TrimClearanceOnly : BatchEdgePolicy.Review,
-                    PreviewOnly = _preview.IsChecked != false,
+                    PreviewOnly = true,
                     AuditExistingOpenings = _audit.IsChecked != false
                 };
                 DialogResult = true;
