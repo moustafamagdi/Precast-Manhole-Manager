@@ -5,135 +5,42 @@ using Autodesk.Revit.UI;
 
 namespace Hatco.PrecastManholeManager
 {
-    public class App : IExternalApplication
+    // One-time project utility: ONE ribbon button for normal users.
+    // Prior diagnostic commands remain compiled and callable through
+    // AddInManager while the main interface is being validated.
+    public sealed class App : IExternalApplication
     {
         private const string TabName = "Hatco";
         private const string PanelName = "Precast Tools";
 
-        public Result OnStartup(UIControlledApplication application)
+        public Result OnStartup(UIControlledApplication app)
         {
             try
             {
-                try { application.CreateRibbonTab(TabName); }
+                try { app.CreateRibbonTab(TabName); }
                 catch { }
 
-                RibbonPanel panel = application.GetRibbonPanels(TabName)
-                    .FirstOrDefault(p => p.Name.Equals(PanelName, StringComparison.OrdinalIgnoreCase))
-                    ?? application.CreateRibbonPanel(TabName, PanelName);
+                RibbonPanel panel = app.GetRibbonPanels(TabName)
+                    .FirstOrDefault(p => p.Name.Equals(PanelName,
+                        StringComparison.OrdinalIgnoreCase))
+                    ?? app.CreateRibbonPanel(TabName, PanelName);
 
-                string assemblyPath = Assembly.GetExecutingAssembly().Location;
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "PrecastManholeScan",
-                        "Scan\nManhole",
-                        assemblyPath,
-                        typeof(Commands.ScanManholeCommand).FullName)
+                string dll = Assembly.GetExecutingAssembly().Location;
+                if (panel.GetItems().All(x =>
+                    x.Name != "PrecastProjectRunner"))
+                {
+                    panel.AddItem(new PushButtonData(
+                        "PrecastProjectRunner",
+                        "Precast\nManholes",
+                        dll,
+                        typeof(Commands.ProjectRunnerCommand).FullName)
                     {
-                        ToolTip = "Scan one manhole, review penetrations, sync openings, save data, and export manufacturer data."
+                        ToolTip = "Single project workflow: scan once, review exceptions, create cropped 3D review views, and export previously saved manufacturer records."
                     });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "PrecastManholeBatchSelected",
-                        "Batch\nSelected",
-                        assemblyPath,
-                        typeof(Commands.BatchSelectedManholesCommand).FullName)
-                    {
-                        ToolTip = "Process multiple selected manhole Structural Foundations in one run."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "PrecastManholeBatchAll",
-                        "Batch\nAll",
-                        assemblyPath,
-                        typeof(Commands.BatchAllManholesCommand).FullName)
-                    {
-                        ToolTip = "Find likely manhole Structural Foundations by MH / MANHOLE naming and process them in one run."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "PrecastManholeExportExcel",
-                        "Export\nExcel",
-                        assemblyPath,
-                        typeof(Commands.ExportManufacturerExcelCommand).FullName)
-                    {
-                        ToolTip = "Export all saved precast manholes and openings to one manufacturer Excel workbook."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "TestVirtualFoundation",
-                        "Test Virtual\nFoundation",
-                        assemblyPath,
-                        typeof(Commands.TestVirtualFoundationCommand).FullName)
-                    {
-                        ToolTip = "Experimental read-only recovery of a complete manhole footprint from its four walls. Does not uncut or modify anything."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "TestVirtualMep",
-                        "Test Virtual\nMEP + Audit",
-                        assemblyPath,
-                        typeof(Commands.TestVirtualMepCommand).FullName)
-                    {
-                        ToolTip = "Read-only short pipe/duct endpoint extension and existing wall-opening inventory. Creates no openings."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "UnifiedOpeningReview",
-                        "Review\nOpenings",
-                        assemblyPath,
-                        typeof(Commands.UnifiedOpeningReviewCommand).FullName)
-                    {
-                        ToolTip = "Experimental read-only: combine actual and virtual penetrations with opening/profile/void audit, fit checks and unified CSV."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "TestCleanSync",
-                        "Test Clean\nSync",
-                        assemblyPath,
-                        typeof(Commands.TestCleanSyncCommand).FullName)
-                    {
-                        ToolTip = "EXPERIMENTAL: preview one manhole; explicitly approve reset of non-tool profile/native/void cuts and atomically synchronize tool-managed openings. Test COPY only."
-                    });
-
-                AddButton(
-                    panel,
-                    new PushButtonData(
-                        "ManholeReviewQueue",
-                        "Review\nQueue / 3D",
-                        assemblyPath,
-                        typeof(Commands.ManageManholeReviewsCommand).FullName)
-                    {
-                        ToolTip = "Scan all recognized manholes for existing cuts/geometry problems, save a per-RVT review register, and create individually cropped 3D views for selected problems."
-                    });
-
+                }
                 return Result.Succeeded;
             }
-            catch
-            {
-                return Result.Failed;
-            }
-        }
-
-        private static void AddButton(RibbonPanel panel, PushButtonData data)
-        {
-            if (panel.GetItems().All(i => i.Name != data.Name))
-                panel.AddItem(data);
+            catch { return Result.Failed; }
         }
 
         public Result OnShutdown(UIControlledApplication application)
