@@ -114,6 +114,9 @@ namespace Hatco.PrecastManholeManager.Services
                     label = port.GetLabelOutline();
                     if (label.MinimumPoint.Y < rowBottom +
                         UnitUtil.MmToFt(5) ||
+                        label.MaximumPoint.Y >
+                            viewBounds.MinimumPoint.Y -
+                                UnitUtil.MmToFt(2) ||
                         label.MinimumPoint.X < left + i * cellW ||
                         label.MaximumPoint.X > left + (i + 1) * cellW)
                         throw new InvalidOperationException(
@@ -163,10 +166,20 @@ namespace Hatco.PrecastManholeManager.Services
             string schedule = string.Join(Environment.NewLine, lines);
             double noteWidth = content - UnitUtil.MmToFt(12);
             var textOptions = new TextNoteOptions(noteType.Id);
-            TextNote.Create(doc, sheet.Id,
+            TextNote note = TextNote.Create(doc, sheet.Id,
                 new XYZ(left + UnitUtil.MmToFt(5),
                     rowBottom - UnitUtil.MmToFt(28), 0),
                 noteWidth, schedule, textOptions);
+            doc.Regenerate();
+            BoundingBoxXYZ noteBounds = note.get_BoundingBox(sheet);
+            if (noteBounds == null ||
+                noteBounds.Min.X < left ||
+                noteBounds.Max.X > right ||
+                noteBounds.Max.Y > rowBottom - UnitUtil.MmToFt(5) ||
+                noteBounds.Min.Y < b + UnitUtil.MmToFt(16))
+                throw new InvalidOperationException(
+                    "Opening setout text overflows this sheet. " +
+                    "Change the text type/titleblock before issuing.");
             log.Info("PRODUCTION SHEET " + sheet.Id.IntegerValue +
                 " Openings=" + actual.Count + " Layout=1 PLAN + 4 EXT SECTIONS");
             return sheet;
