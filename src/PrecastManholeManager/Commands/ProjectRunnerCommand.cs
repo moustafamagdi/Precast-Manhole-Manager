@@ -309,7 +309,11 @@ namespace Hatco.PrecastManholeManager.Commands
                          v.Name == prefix + "_W1" ||
                          v.Name == prefix + "_W2" ||
                          v.Name == prefix + "_W3" ||
-                         v.Name == prefix + "_W4") &&
+                         v.Name == prefix + "_W4" ||
+                         v.Name == prefix + "_OUT_W1" ||
+                         v.Name == prefix + "_OUT_W2" ||
+                         v.Name == prefix + "_OUT_W3" ||
+                         v.Name == prefix + "_OUT_W4") &&
                         placed.Contains(v.Id.IntegerValue));
                 if (used)
                 {
