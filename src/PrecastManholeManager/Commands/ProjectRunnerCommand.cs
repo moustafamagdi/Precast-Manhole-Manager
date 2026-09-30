@@ -63,8 +63,8 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.DraftSheet)
                                 GenerateDraftSheet(uiDoc,
                                     window.SelectedManhole, log);
-                            else if (window.Action == ProjectAction.SixRowSheet)
-                                GenerateSixRowSheet(uiDoc,
+                            else if (window.Action == ProjectAction.SevenRowSheet)
+                                GenerateSevenRowSheet(uiDoc,
                                     window.SheetCandidates, referenceSheet, log);
                             else if (window.Action == ProjectAction.ExportExcel)
                                 Export(doc, log);
@@ -285,7 +285,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "\nSave the RVT to keep the five views.");
         }
 
-        private static void GenerateSixRowSheet(UIDocument uidoc,
+        private static void GenerateSevenRowSheet(UIDocument uidoc,
             IList<SimpleManholeItem> candidates, ViewSheet sample,
             DiagnosticLogger log)
         {
@@ -298,7 +298,7 @@ namespace Hatco.PrecastManholeManager.Commands
             var list = new List<Element>();
             foreach (SimpleManholeItem item in candidates)
             {
-                if (list.Count == 6) break;
+                if (list.Count == 12) break;
                 Element foundation = Resolve(doc, item);
                 string prefix = "MH_" +
                     item.FoundationId + "_DRAFT_2D";
@@ -321,17 +321,17 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             if (list.Count == 0)
             {
-                TaskDialog.Show("Six-Row Test Sheet",
+                TaskDialog.Show("Seven-Row Test Sheet",
                     "No unplaced eligible manholes found. " +
                     "Your manually arranged views were preserved.");
                 return;
             }
-            SixRowSheetResult result =
-                SixRowManholeSheetService.Generate(
+            SevenRowSheetResult result =
+                SevenRowManholeSheetService.Generate(
                     doc, list, sample, log);
             if (result.Sheet != null)
                 uidoc.RequestViewChange(result.Sheet);
-            TaskDialog.Show("Six-Row Test Sheet",
+            TaskDialog.Show("Seven-Row Test Sheet",
                 "New sheet: " + (result.Sheet != null ?
                     result.Sheet.SheetNumber + " / " +
                     result.Sheet.Name : "NONE") +
