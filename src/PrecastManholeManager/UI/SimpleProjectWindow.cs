@@ -157,11 +157,11 @@ namespace Hatco.PrecastManholeManager.UI
                     return;
                 }
                 if (MessageBox.Show(this,
-                    "Generate a DRAFT Plan + W1-W4 as orthographic views " +
-                    "and attempt to place them on one sheet? This does " +
-                    "NOT clean old cuts, create openings or issue " +
-                    "shop drawings. Use a test RVT copy with an A1/A0 " +
-                    "title block.",
+                    "Generate a real Revit FLOOR PLAN plus " +
+                    "four native SECTIONS (W1-W4), and arrange them " +
+                    "on one draft sheet? This does NOT clean old " +
+                    "cuts, create openings or issue shop drawings. " +
+                    "Use a test RVT copy with an A1/A0 titleblock.",
                     "First Manhole Prototype",
                     MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                     return;
