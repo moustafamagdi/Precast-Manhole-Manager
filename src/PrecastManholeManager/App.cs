@@ -78,6 +78,17 @@ namespace Hatco.PrecastManholeManager
                         ToolTip = "Experimental read-only recovery of a complete manhole footprint from its four walls. Does not uncut or modify anything."
                     });
 
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "TestVirtualMep",
+                        "Test Virtual\\nMEP + Audit",
+                        assemblyPath,
+                        typeof(Commands.TestVirtualMepCommand).FullName)
+                    {
+                        ToolTip = "Read-only short pipe/duct endpoint extension and existing wall-opening inventory. Creates no openings."
+                    });
+
                 return Result.Succeeded;
             }
             catch
