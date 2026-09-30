@@ -57,6 +57,18 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException(
                     "The project needs Floor Plan and Section view types.");
 
+            View planTemplate = new FilteredElementCollector(doc)
+                .OfClass(typeof(View)).Cast<View>()
+                .FirstOrDefault(v => v.IsTemplate &&
+                    v.Name.Equals("MH_PLAN", StringComparison.OrdinalIgnoreCase));
+            View sectionTemplate = new FilteredElementCollector(doc)
+                .OfClass(typeof(View)).Cast<View>()
+                .FirstOrDefault(v => v.IsTemplate &&
+                    v.Name.Equals("MH_SEC", StringComparison.OrdinalIgnoreCase));
+            if (planTemplate == null || sectionTemplate == null)
+                throw new InvalidOperationException(
+                    "Missing required view templates MH_PLAN / MH_SEC. " +
+                    "Load them in this RVT before creating the views.");
             Level level = new FilteredElementCollector(doc)
                 .OfClass(typeof(Level)).Cast<Level>()
                 .OrderBy(x => Math.Abs(x.Elevation - baseBox.Max.Z))
@@ -72,8 +84,14 @@ namespace Hatco.PrecastManholeManager.Services
             // Never overwrite the user's scale/crop once views have been
             // generated: subsequent clicks must be idempotent.
             if (!existingPlan)
+            {
+                // Set geometry before applying the office template; template
+                // crop/view-range locks, if any, are preserved thereafter.
                 ConfigurePlan(plan, minX - pad, minY - pad, maxX + pad,
                     maxY + pad, minZ - pad, maxZ + pad, centerZ);
+                plan.Scale = 25;
+                plan.ViewTemplateId = planTemplate.Id;
+            }
             result.Views.Add(plan);
             log.Info("2D DRAFT PLAN ViewId=" + plan.Id.IntegerValue +
                 " Level=" + level.Name + " CropWmm=" +
@@ -109,9 +127,17 @@ namespace Hatco.PrecastManholeManager.Services
                 outward = outward.Normalize();
 
                 string name = prefix + "_W" + wallNumber;
+                bool alreadyExists = new FilteredElementCollector(doc)
+                    .OfClass(typeof(ViewSection)).Cast<ViewSection>()
+                    .Any(v => !v.IsTemplate && v.Name == name);
                 ViewSection elevation = GetOrCreateSection(doc, name,
                     sectionType, w.Axis, w.Mid, outward,
                     minZ - pad, maxZ + pad, pad);
+                if (!alreadyExists)
+                {
+                    elevation.Scale = 25;
+                    elevation.ViewTemplateId = sectionTemplate.Id;
+                }
                 elevations[wallNumber] = elevation;
                 log.Info("2D DRAFT SECTION W" + wallNumber +
                     " WallId=" + w.Wall.Id.IntegerValue +
@@ -124,7 +150,8 @@ namespace Hatco.PrecastManholeManager.Services
             // Do not create a sheet, viewport or apply automatic layout.
             // Revit will retain the five real, tightly cropped 2D views
             // when the caller commits its single transaction.
-            result.Message = "Created/found PLAN and four Sections W1-W4 for " +
+            result.Message = "Created/found PLAN (MH_PLAN) and four " +
+                "Sections (MH_SEC), default 1:25, for " +
                 "Foundation " + foundation.Id.IntegerValue +
                 ". No sheet or viewport was created. " +
                 "Create your preferred sheet, place the views from the " +
