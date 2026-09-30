@@ -132,9 +132,9 @@ namespace Hatco.PrecastManholeManager.Services
         public static List<SimpleManholeItem> LoadFast(Document doc)
         {
             var issues = ManholeReviewRegistry.Load(doc)
-                .Where(x => x.Status == "OPEN")
-                .ToDictionary(x => x.FoundationUniqueId, x => x,
-                    StringComparer.Ordinal);
+                .GroupBy(x => x.FoundationUniqueId, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(x =>
+                    x.UpdatedUtc).First(), StringComparer.Ordinal);
             var items = new List<SimpleManholeItem>();
             foreach (Element el in new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_StructuralFoundation)
@@ -146,7 +146,8 @@ namespace Hatco.PrecastManholeManager.Services
                 }).OrderBy(e => e.Id.IntegerValue))
             {
                 ManholeReviewIssue issue;
-                bool flagged = issues.TryGetValue(el.UniqueId, out issue);
+                bool found = issues.TryGetValue(el.UniqueId, out issue);
+                bool flagged = found && issue.Status == "OPEN";
                 items.Add(new SimpleManholeItem
                 {
                     FoundationId = el.Id.IntegerValue,
@@ -154,7 +155,7 @@ namespace Hatco.PrecastManholeManager.Services
                     TypeName = doc.GetElement(el.GetTypeId()).Name,
                     State = flagged ? "REVIEW" : "NOT SCANNED / NO ISSUE",
                     Problem = flagged ? issue.Reason : "",
-                    ViewName = flagged ? issue.ViewName : ""
+                    ViewName = found ? issue.ViewName : ""
                 });
             }
             return items;
