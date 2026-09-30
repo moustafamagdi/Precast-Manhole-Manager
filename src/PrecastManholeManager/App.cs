@@ -67,6 +67,17 @@ namespace Hatco.PrecastManholeManager
                         ToolTip = "Export all saved precast manholes and openings to one manufacturer Excel workbook."
                     });
 
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "TestVirtualFoundation",
+                        "Test Virtual\nFoundation",
+                        assemblyPath,
+                        typeof(Commands.TestVirtualFoundationCommand).FullName)
+                    {
+                        ToolTip = "Experimental read-only recovery of a complete manhole footprint from its four walls. Does not uncut or modify anything."
+                    });
+
                 return Result.Succeeded;
             }
             catch
