@@ -10,11 +10,12 @@ namespace Hatco.PrecastManholeManager.Services
     {
         internal static ViewSheet Build(Document doc, Element foundation,
             DraftSheetResult draft, IList<UnifiedOpeningReviewRow> actual,
-            DiagnosticLogger log)
+            DiagnosticLogger log, bool partialLinkCoverage = false)
         {
             if (draft.Views.Count != 5)
                 throw new InvalidOperationException("Five views required for production.");
-            string name = "MH_" + foundation.Id.IntegerValue + "_OPENINGS_R01";
+            string name = "MH_" + foundation.Id.IntegerValue +
+                (partialLinkCoverage ? "_OPENINGS_PARTIAL_R01" : "_OPENINGS_R01");
             if (new FilteredElementCollector(doc).OfClass(typeof(ViewSheet))
                 .Cast<ViewSheet>().Any(x => x.Name == name))
                 throw new InvalidOperationException(
@@ -138,7 +139,9 @@ namespace Hatco.PrecastManholeManager.Services
                 doc, foundation, log);
             var lines = new List<string>
             {
-                manholeName + "  |  OPENING SETOUT - PRELIMINARY / VERIFY",
+                manholeName + (partialLinkCoverage
+                    ? " | PARTIAL LINK COVERAGE - NOT FOR ISSUE"
+                    : " | OPENING SETOUT - PRELIMINARY / VERIFY"),
                 "WALL     MEP SOURCE       CLEAR OPENING (mm)    " +
                 "OFFSET FROM WALL START (mm)     BOTTOM ABOVE BASE (mm)"
             };
@@ -181,6 +184,7 @@ namespace Hatco.PrecastManholeManager.Services
                     "Opening setout text overflows this sheet. " +
                     "Change the text type/titleblock before issuing.");
             log.Info("PRODUCTION SHEET " + sheet.Id.IntegerValue +
+                " Coverage=" + (partialLinkCoverage ? "PARTIAL NOT FOR ISSUE" : "ALL LINKS AVAILABLE") +
                 " Openings=" + actual.Count + " Layout=1 PLAN + 4 EXT SECTIONS");
             return sheet;
         }
