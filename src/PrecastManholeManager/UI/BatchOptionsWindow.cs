@@ -30,7 +30,7 @@ namespace Hatco.PrecastManholeManager.UI
 
         public BatchOptionsWindow(int count)
         {
-            Title = "Batch All Manholes - Experimental Settings";
+            Title = "Experimental Batch Manholes - Settings";
             Width = 520;
             Height = 420;
             MinWidth = 440;
@@ -41,7 +41,7 @@ namespace Hatco.PrecastManholeManager.UI
             Content = root;
             root.Children.Add(new TextBlock
             {
-                Text = "Batch All - " + count + " candidate foundation(s)",
+                Text = "Batch - " + count + " candidate foundation(s)",
                 FontSize = 18,
                 FontWeight = FontWeights.Bold,
                 Margin = new Thickness(0, 0, 0, 16)
