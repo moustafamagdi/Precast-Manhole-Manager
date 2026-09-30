@@ -73,9 +73,7 @@ namespace Hatco.PrecastManholeManager.Services
                             continue;
                         }
 
-                        doc.Delete(current.Opening.Id);
-                        Opening updated = CreateOpening(doc, record, log);
-                        OpeningStorageService.Write(updated, record);
+                        SaveOrReplace(doc, record, current.Opening, log);
                         result.Updated++;
                     }
                     else
@@ -91,8 +89,7 @@ namespace Hatco.PrecastManholeManager.Services
                             continue;
                         }
 
-                        Opening created = CreateOpening(doc, record, log);
-                        OpeningStorageService.Write(created, record);
+                        SaveOrReplace(doc, record, null, log);
                         result.Created++;
                     }
                 }
@@ -173,6 +170,32 @@ namespace Hatco.PrecastManholeManager.Services
 
             return Math.Abs(data.CutWidthMm - record.CutWidthMm) <= sizeTol &&
                    Math.Abs(data.CutHeightMm - record.CutHeightMm) <= sizeTol;
+        }
+
+        private static void SaveOrReplace(
+            Document doc,
+            PenetrationRecord record,
+            Opening oldOpening,
+            DiagnosticLogger log)
+        {
+            using (var sub = new SubTransaction(doc))
+            {
+                sub.Start();
+                try
+                {
+                    if (oldOpening != null)
+                        doc.Delete(oldOpening.Id);
+                    Opening next = CreateOpening(doc, record, log);
+                    OpeningStorageService.Write(next, record);
+                    sub.Commit();
+                }
+                catch
+                {
+                    if (sub.GetStatus() == TransactionStatus.Started)
+                        sub.RollBack();
+                    throw;
+                }
+            }
         }
 
         private static Opening CreateOpening(Document doc, PenetrationRecord record, DiagnosticLogger log)
