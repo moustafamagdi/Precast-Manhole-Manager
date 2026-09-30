@@ -17,6 +17,10 @@ namespace Hatco.PrecastManholeManager.Services
             new Dictionary<int, List<int>>();
         public List<int> ManualOpeningIds { get; } = new List<int>();
         public List<int> AdoptedManualOpeningIds { get; } = new List<int>();
+        // In-place cutters returned as wall inserts, distinct from API
+        // unattached void cut relationships.
+        public Dictionary<int, List<int>> InPlaceCutterWallIds { get; } =
+            new Dictionary<int, List<int>>();
         public Dictionary<string, int> ManagedOpeningIds { get; } =
             new Dictionary<string, int>(StringComparer.Ordinal);
         public List<int> UnsupportedSolidCutWallIds { get; } = new List<int>();
@@ -26,6 +30,7 @@ namespace Hatco.PrecastManholeManager.Services
         public int ProfileResetCount =>
             Profiles.Count(x => x.Value == "EDITED PROFILE");
         public int VoidCutCount => VoidCutIds.Sum(x => x.Value.Count);
+        public int InPlaceCutterCount => InPlaceCutterWallIds.Count;
         public int VirtualCount => ProposedRows.Count(x => x.IsVirtual);
         public int SlopedVirtualCount => ProposedRows.Count(x =>
             x.IsVirtual && (Math.Abs(x.SlopePercent) > 0.1 ||
@@ -142,17 +147,74 @@ namespace Hatco.PrecastManholeManager.Services
                     foreach (ElementId id in wall.FindInserts(true, true, true, true))
                     {
                         if (known.Contains(id.IntegerValue)) continue;
+                        Element inserted = doc.GetElement(id);
+                        FamilyInstance familyInstance = inserted as FamilyInstance;
+                        if (familyInstance?.Symbol?.Family != null &&
+                            familyInstance.Symbol.Family.IsInPlace)
+                        {
+                            List<int> hosts;
+                            if (!plan.InPlaceCutterWallIds.TryGetValue(
+                                id.IntegerValue, out hosts))
+                            {
+                                hosts = new List<int>();
+                                plan.InPlaceCutterWallIds[id.IntegerValue] = hosts;
+                            }
+                            if (!hosts.Contains(wallId)) hosts.Add(wallId);
+                            log.Warn("CLEAN INPLACE CUTTER CANDIDATE Wall=" +
+                                wallId + " Instance=" + id.IntegerValue +
+                                " Pinned=" + inserted.Pinned +
+                                " Family=" + familyInstance.Symbol.Family.Name);
+                            continue;
+                        }
                         plan.BlockReason =
                             "Unclassified hosted wall insert/cut " +
                             id.IntegerValue + " on wall " + wallId;
                         log.Warn("CLEAN UNSUPPORTED HOST INSERT Wall=" + wallId +
-                            " Insert=" + id.IntegerValue);
+                            " Insert=" + id.IntegerValue +
+                            " Class=" + (inserted?.GetType().Name ?? "NULL"));
                     }
                 }
                 catch (Exception ex)
                 {
                     plan.BlockReason = "Unable to inventory wall inserts on " +
                         wallId + ": " + ex.Message;
+                }
+            }
+
+            // FindInserts can expose in-place void-cutting family instances
+            // that do not appear in GetCuttingVoidInstances. Reject instances
+            // cutting walls outside this manhole. Do not confuse detection of
+            // an insert with proof that deleting its family is universally safe.
+            if (plan.InPlaceCutterWallIds.Count > 0)
+            {
+                var targetWalls = new HashSet<int>(plan.WallIds);
+                var elsewhere = new Dictionary<int, List<int>>();
+                foreach (Wall other in new FilteredElementCollector(doc)
+                    .OfClass(typeof(Wall)).Cast<Wall>())
+                {
+                    if (targetWalls.Contains(other.Id.IntegerValue)) continue;
+                    foreach (ElementId insert in other.FindInserts(
+                        true, true, true, true))
+                    {
+                        if (!plan.InPlaceCutterWallIds.ContainsKey(
+                            insert.IntegerValue)) continue;
+                        List<int> otherHosts;
+                        if (!elsewhere.TryGetValue(insert.IntegerValue,
+                            out otherHosts))
+                        {
+                            otherHosts = new List<int>();
+                            elsewhere[insert.IntegerValue] = otherHosts;
+                        }
+                        otherHosts.Add(other.Id.IntegerValue);
+                    }
+                }
+                foreach (var pair in elsewhere)
+                {
+                    plan.BlockReason = "In-place cutter " + pair.Key +
+                        " also affects external wall(s): " +
+                        string.Join(",", pair.Value);
+                    log.Warn("CLEAN INPLACE EXTERNAL WALL CUTTER=" + pair.Key +
+                        " OtherWalls=" + string.Join(",", pair.Value));
                 }
             }
 
@@ -169,6 +231,7 @@ namespace Hatco.PrecastManholeManager.Services
                 " AdoptedManualAmongThem=" + plan.AdoptedManualOpeningIds.Count +
                 " ExistingManaged=" + plan.ManagedOpeningIds.Count +
                 " VoidRelations=" + plan.VoidCutCount +
+                " InPlaceCandidates=" + plan.InPlaceCutterCount +
                 " ProposedActual=" + review.Rows.Count(x => !x.IsVirtual) +
                 " ProposedVirtual=" + plan.VirtualCount +
                 " UnavailableLinks=" + plan.UnavailableLinks +
@@ -178,6 +241,10 @@ namespace Hatco.PrecastManholeManager.Services
                     " VoidCutters=" + string.Join(",",
                         plan.VoidCutIds.ContainsKey(wall.Key)
                             ? plan.VoidCutIds[wall.Key] : new List<int>()));
+            foreach (var cutter in plan.InPlaceCutterWallIds)
+                log.Warn("CLEAN INPLACE REVIEW Instance=" + cutter.Key +
+                    " SelectedWalls=" + string.Join(",", cutter.Value) +
+                    " (verify no additional non-wall cuts before optional test deletion)");
             if (!string.IsNullOrWhiteSpace(plan.BlockReason))
                 log.Warn("PLAN BLOCKED: " + plan.BlockReason);
             return plan;
