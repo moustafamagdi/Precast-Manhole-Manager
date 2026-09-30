@@ -66,21 +66,21 @@ namespace Hatco.PrecastManholeManager.Services
                 FreezeRows = 11
             };
 
-            double[] widths = { 13, 18, 18, 18, 18, 24, 18, 4, 4, 16 };
+            double[] widths = { 13, 18, 18, 18, 18, 24, 18, 3, 18, 18, 18, 18, 18, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 16 };
             for (int i = 0; i < widths.Length; i++)
                 sheet.ColumnWidths[i + 1] = widths[i];
 
-            sheet.HiddenColumns.Add(10);
+            sheet.HiddenColumns.Add(26);
 
             sheet.AddRow(
                 XlsxCell.Text("PRECAST MANHOLE - FABRICATION VIEW", 1));
-            sheet.Merges.Add("A1:G1");
+            sheet.Merges.Add("A1:H1");
 
             sheet.AddRow(
                 XlsxCell.Text(
                     "Select a manhole below. Only fabrication data is shown. All dimensions are in mm.",
                     8));
-            sheet.Merges.Add("A2:G2");
+            sheet.Merges.Add("A2:H2");
 
             string firstManhole = data.Manholes.FirstOrDefault()?.ManholeNumber ?? string.Empty;
 
@@ -94,12 +94,12 @@ namespace Hatco.PrecastManholeManager.Services
                 sheet.DataValidations.Add(new XlsxDataValidation
                 {
                     SqRef = "B3",
-                    Formula1 = "$J$2:$J$" + (data.Manholes.Count + 1)
+                    Formula1 = "$Z$2:$Z$" + (data.Manholes.Count + 1)
                 });
             }
 
             sheet.AddRow(XlsxCell.Text("MANHOLE DATA", 3));
-            sheet.Merges.Add("A4:G4");
+            sheet.Merges.Add("A4:H4");
 
             sheet.AddRow(
                 XlsxCell.Text("Internal Clear Size", 6),
@@ -138,29 +138,68 @@ namespace Hatco.PrecastManholeManager.Services
                 XlsxCell.Blank(7),
                 XlsxCell.Blank(7));
             sheet.Merges.Add("B7:C7");
-            sheet.Merges.Add("E7:G7");
+            sheet.Merges.Add("E7:H7");
 
             sheet.AddRow(XlsxCell.Text(
                 "For fabrication use the opening schedule below. Revit IDs and internal model references are intentionally excluded.",
                 8));
-            sheet.Merges.Add("A8:G8");
+            sheet.Merges.Add("A8:H8");
 
             sheet.AddRow(XlsxCell.Text(
                 "PDF report: open PRINT REPORT then use File > Export > Create PDF/XPS. Each manhole is separated by a page break.",
                 8));
-            sheet.Merges.Add("A9:G9");
+            sheet.Merges.Add("A9:H9");
 
             sheet.AddRow(XlsxCell.Blank());
 
+            // Visual fabrication reference on the right side of MANHOLE VIEW.
+            SetCell(sheet, 1, 9, XlsxCell.Text("VERTICAL OPENING REFERENCE", 3));
+            sheet.Merges.Add("I1:M1");
+
+            SetCell(sheet, 2, 9, XlsxCell.Text("TOP OF WALL", 6));
+            sheet.Merges.Add("I2:M2");
+
+            SetCell(sheet, 3, 9, XlsxCell.Text("────────────────────────", 8));
+            sheet.Merges.Add("I3:M3");
+
+            SetCell(sheet, 4, 10, XlsxCell.Text("┌──────────────┐", 7));
+            sheet.Merges.Add("J4:L4");
+
+            SetCell(sheet, 5, 10, XlsxCell.Text("│   OPENING    │", 7));
+            sheet.Merges.Add("J5:L5");
+
+            SetCell(sheet, 6, 9, XlsxCell.Text("Service Invert →", 6));
+            SetCell(sheet, 6, 10, XlsxCell.Text("│  ──────────  │", 7));
+            sheet.Merges.Add("J6:L6");
+
+            SetCell(sheet, 7, 10, XlsxCell.Text("│   SERVICE    │", 7));
+            sheet.Merges.Add("J7:L7");
+
+            SetCell(sheet, 8, 9, XlsxCell.Text("Opening Bottom →", 6));
+            SetCell(sheet, 8, 10, XlsxCell.Text("└──────────────┘", 7));
+            sheet.Merges.Add("J8:L8");
+
+            SetCell(sheet, 9, 9, XlsxCell.Text("↑", 6));
+            SetCell(sheet, 9, 10, XlsxCell.Text("Opening Bottom from Base", 6));
+            sheet.Merges.Add("J9:M9");
+
+            SetCell(sheet, 10, 9, XlsxCell.Text("│", 6));
+            SetCell(sheet, 11, 9, XlsxCell.Text("TOP OF BASE = 0", 6));
+            sheet.Merges.Add("I11:M11");
+
+            SetCell(sheet, 12, 9, XlsxCell.Text("████████  BASE SLAB  ████████", 8));
+            sheet.Merges.Add("I12:M12");
+
             sheet.AddRow(XlsxCell.Text("OPENING SCHEDULE", 3));
-            sheet.Merges.Add("A11:G11");
+            sheet.Merges.Add("A11:H11");
 
             sheet.AddRow(
                 XlsxCell.Text("Wall", 2),
                 XlsxCell.Text("Opening", 2),
                 XlsxCell.Text("Opening Size W x H", 2),
                 XlsxCell.Text("Offset from Ref. Edge", 2),
-                XlsxCell.Text("Invert from Base", 2),
+                XlsxCell.Text("Opening Bottom from Base", 2),
+                XlsxCell.Text("Service Invert", 2),
                 XlsxCell.Text("Service / System", 2),
                 XlsxCell.Text("Type", 2));
 
@@ -180,27 +219,30 @@ namespace Hatco.PrecastManholeManager.Services
 
                 sheet.AddRow(
                     XlsxCell.Formula(
-                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,3,FALSE),\"\")"),
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,3,FALSE),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,4,FALSE),\"\")"),
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,4,FALSE),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(TEXT(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,5,FALSE),\"0\")&\" x \"&TEXT(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,6,FALSE),\"0\"),\"\")"),
+                        "IFERROR(TEXT(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,5,FALSE),\"0\")&\" x \"&TEXT(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,6,FALSE),\"0\"),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,7,FALSE),\"\")",
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,7,FALSE),\"\")",
                         5),
                     XlsxCell.Formula(
-                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,8,FALSE),\"\")",
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,8,FALSE),\"\")",
                         5),
                     XlsxCell.Formula(
-                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,9,FALSE)&IF(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,10,FALSE)<>\"\",\" / \"&VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,10,FALSE),\"\"),\"\")"),
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,9,FALSE),\"\")",
+                        5),
                     XlsxCell.Formula(
-                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,11,FALSE),\"\")"));
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,10,FALSE)&IF(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,11,FALSE)<>\"\",\" / \"&VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,11,FALSE),\"\"),\"\")"),
+                    XlsxCell.Formula(
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$M,12,FALSE),\"\")"));
             }
 
             for (int i = 0; i < data.Manholes.Count; i++)
             {
                 int row = i + 2;
-                SetCell(sheet, row, 10, XlsxCell.Text(data.Manholes[i].ManholeNumber));
+                SetCell(sheet, row, 26, XlsxCell.Text(data.Manholes[i].ManholeNumber));
             }
 
             return sheet;
@@ -215,7 +257,7 @@ namespace Hatco.PrecastManholeManager.Services
                 FitToOnePageWide = true
             };
 
-            double[] widths = { 11, 14, 19, 18, 17, 27, 18 };
+            double[] widths = { 10, 12, 18, 17, 20, 16, 26, 16 };
             for (int i = 0; i < widths.Length; i++)
                 sheet.ColumnWidths[i + 1] = widths[i];
 
@@ -232,7 +274,7 @@ namespace Hatco.PrecastManholeManager.Services
                 sheet.AddRow(XlsxCell.Text(
                     "PRECAST MANHOLE FABRICATION REPORT - " + (m.ManholeNumber ?? string.Empty),
                     1));
-                sheet.Merges.Add("A" + pageStartRow + ":G" + pageStartRow);
+                sheet.Merges.Add("A" + pageStartRow + ":H" + pageStartRow);
 
                 sheet.AddRow(
                     XlsxCell.Text("Internal Clear Size", 6),
@@ -257,9 +299,9 @@ namespace Hatco.PrecastManholeManager.Services
                     XlsxCell.Blank(7));
 
                 sheet.AddRow(XlsxCell.Text(
-                    "Opening positions: horizontal offset is opening C/L from the wall reference edge; invert is measured from base top.",
+                    "Opening positions: horizontal offset is opening C/L from wall reference edge; vertical fabrication dimension is opening bottom from base top. Service invert is reference only.",
                     8));
-                sheet.Merges.Add("A" + (pageStartRow + 3) + ":G" + (pageStartRow + 3));
+                sheet.Merges.Add("A" + (pageStartRow + 3) + ":H" + (pageStartRow + 3));
 
                 sheet.AddRow(XlsxCell.Blank());
 
@@ -268,7 +310,8 @@ namespace Hatco.PrecastManholeManager.Services
                     XlsxCell.Text("Opening", 2),
                     XlsxCell.Text("Opening Size W x H", 2),
                     XlsxCell.Text("Offset Ref. Edge", 2),
-                    XlsxCell.Text("Invert Base", 2),
+                    XlsxCell.Text("Opening Bottom Base", 2),
+                    XlsxCell.Text("Service Invert", 2),
                     XlsxCell.Text("Service / System", 2),
                     XlsxCell.Text("Type", 2));
 
@@ -276,7 +319,7 @@ namespace Hatco.PrecastManholeManager.Services
                 {
                     int noOpenRow = sheet.Rows.Count + 1;
                     sheet.AddRow(XlsxCell.Text("No managed fabrication openings", 8));
-                    sheet.Merges.Add("A" + noOpenRow + ":G" + noOpenRow);
+                    sheet.Merges.Add("A" + noOpenRow + ":H" + noOpenRow);
                 }
                 else
                 {
@@ -292,6 +335,7 @@ namespace Hatco.PrecastManholeManager.Services
                             XlsxCell.Text(
                                 F0(o.OpeningWidthMm) + " x " + F0(o.OpeningHeightMm)),
                             XlsxCell.Number(o.OffsetMm),
+                            XlsxCell.Number(o.OpeningBottomFromBaseMm),
                             XlsxCell.Number(o.InvertFromBaseMm),
                             XlsxCell.Text(service),
                             XlsxCell.Text(o.OpeningType));
@@ -303,7 +347,7 @@ namespace Hatco.PrecastManholeManager.Services
                 sheet.AddRow(XlsxCell.Text(
                     "Fabrication note: verify wall orientation and reference edge against the approved coordination drawing before production.",
                     8));
-                sheet.Merges.Add("A" + noteRow + ":G" + noteRow);
+                sheet.Merges.Add("A" + noteRow + ":H" + noteRow);
 
                 sheet.AddRow(XlsxCell.Blank());
 
@@ -367,7 +411,8 @@ namespace Hatco.PrecastManholeManager.Services
                 XlsxCell.Text("Width"),
                 XlsxCell.Text("Height"),
                 XlsxCell.Text("Offset"),
-                XlsxCell.Text("InvertFromBase"),
+                XlsxCell.Text("OpeningBottomFromBase"),
+                XlsxCell.Text("ServiceInvertFromBase"),
                 XlsxCell.Text("Service"),
                 XlsxCell.Text("System"),
                 XlsxCell.Text("Type"),
@@ -397,6 +442,7 @@ namespace Hatco.PrecastManholeManager.Services
                         XlsxCell.Number(r.OpeningWidthMm),
                         XlsxCell.Number(r.OpeningHeightMm),
                         XlsxCell.Number(r.OffsetMm),
+                        XlsxCell.Number(r.OpeningBottomFromBaseMm),
                         XlsxCell.Number(r.InvertFromBaseMm),
                         XlsxCell.Text(r.ServiceCategory),
                         XlsxCell.Text(r.SystemName),
