@@ -152,6 +152,11 @@ namespace Hatco.PrecastManholeManager.Services
                     "Load it before creating manhole 3D review views.");
             if (view.ViewTemplateId != template.Id)
                 view.ViewTemplateId = template.Id;
+            if (!view.IsSectionBoxActive)
+                throw new InvalidOperationException(
+                    "MH_3D template turned off the 3D Section Box. " +
+                    "In MH_3D view-template settings, exclude Section Box " +
+                    "from template control so each manhole can stay cropped.");
             log?.Info("REVIEW 3D TEMPLATE MH_3D ViewId=" +
                 view.Id.IntegerValue + " TemplateId=" +
                 template.Id.IntegerValue);
