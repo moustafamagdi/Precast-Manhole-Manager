@@ -42,8 +42,12 @@ namespace Hatco.PrecastManholeManager.Services
             string key;
             using (SHA256 sha = SHA256.Create())
             {
+                // ACC/BIM360 cloud paths are identifiers, not local
+                // filesystem paths. Hash the full logical location as-is.
+                string identity = full.Contains("://") ? full
+                    : Path.GetFullPath(full);
                 byte[] hash = sha.ComputeHash(Encoding.UTF8.GetBytes(
-                    Path.GetFullPath(full).ToUpperInvariant()));
+                    identity.ToUpperInvariant()));
                 key = BitConverter.ToString(hash, 0, 10).Replace("-", "");
             }
             string folder = Path.Combine(
