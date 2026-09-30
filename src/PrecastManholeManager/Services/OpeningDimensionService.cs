@@ -28,7 +28,6 @@ namespace Hatco.PrecastManholeManager.Services
             public Opening Element;
             public ManagedOpeningData Data;
             public double Left, Right, Bottom, Top;
-            public string Code;
             public List<FaceReference> Faces;
         }
 
@@ -64,7 +63,6 @@ namespace Hatco.PrecastManholeManager.Services
             var wallIds = new HashSet<int>(footprint.Walls.Select(w => w.Id.IntegerValue));
             all = all.Where(x => wallIds.Contains(x.Data.HostWallId)).OrderBy(x => x.Data.WallNumber)
                 .ThenBy(x => OpeningOffset(doc, x)).ToList();
-            for (int i = 0; i < all.Count; i++) all[i].Code = "O" + (i + 1).ToString("00");
             if (sections.Count != 4 || all.Count == 0)
                 return "Dimensions: generate the manhole's production views and openings first.";
             var type = new FilteredElementCollector(doc).OfClass(typeof(DimensionType))
@@ -150,7 +148,7 @@ namespace Hatco.PrecastManholeManager.Services
             // A single horizontal chain avoids stacking overlapping wall-origin dimensions.
             double wallBottom = faces.Min(f => f.MinY);
             double gap = UnitUtil.MmToFt(3 * view.Scale);
-            CreateString(doc, foundation, view, type, chain, true, wallBottom - gap, null, log);
+            CreateString(doc, foundation, view, type, chain, true, wallBottom - gap, log);
             int count = 1;
             foreach (var row in rows.OrderBy(r => r.Left))
             {
@@ -164,7 +162,7 @@ namespace Hatco.PrecastManholeManager.Services
                 };
                 // The reference line is beside each opening, inside the existing crop padding.
                 CreateString(doc, foundation, view, type, vertical, false,
-                    row.Right + gap, row.Code, log);
+                    row.Right + gap, log);
                 count++;
             }
             return count;
@@ -204,7 +202,7 @@ namespace Hatco.PrecastManholeManager.Services
 
         private static void CreateString(Document doc, Element foundation, ViewSection view,
             DimensionType type, List<Boundary> boundaries, bool horizontal, double offset,
-            string label, DiagnosticLogger log)
+            DiagnosticLogger log)
         {
             var sorted = boundaries.OrderBy(b => b.Position).ToList();
             var distinct = new List<Boundary>();
@@ -230,12 +228,6 @@ namespace Hatco.PrecastManholeManager.Services
                 dimension.Segments.Cast<DimensionSegment>().Select(segment => segment.Value).ToList();
             if (!SegmentsMatch(distinct.Select(b => b.Position).ToArray(), measured.ToArray()))
                 throw new InvalidOperationException("Dimension values do not match the measured model faces.");
-            // Label the source without replacing the measured dimension value.
-            if (!string.IsNullOrEmpty(label))
-            {
-                if (dimension.NumberOfSegments == 0) dimension.Above = label;
-                else dimension.Segments.Cast<DimensionSegment>().Last().Above = label;
-            }
             doc.Regenerate();
             if (view.CropBoxActive)
             {
