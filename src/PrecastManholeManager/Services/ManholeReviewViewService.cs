@@ -95,7 +95,8 @@ namespace Hatco.PrecastManholeManager.Services
                 // duplicate view names, so append this view's own ID if needed.
                 bool collision = new FilteredElementCollector(doc)
                     .OfClass(typeof(View3D)).Cast<View3D>()
-                    .Any(x => !x.IsTemplate && x.Id != view.Id &&
+                    .Any(x => !x.IsTemplate &&
+                        x.Id.IntegerValue != view.Id.IntegerValue &&
                         x.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
                 view.Name = collision
                     ? name + "_" + view.Id.IntegerValue : name;
