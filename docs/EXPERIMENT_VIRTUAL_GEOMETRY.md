@@ -114,3 +114,9 @@ projection, source identity and wall assignment are correct.
 A proposed clearance-trimmed opening is not equivalent to a fully
 dimensioned construction detail; verify wall edge setbacks and structural
 approval before any APPLY run.
+
+### Guarded Batch Selected and updated projection report
+
+On this branch, Batch Selected now uses the same settings as Batch All: Preview Only is checked by default and APPLY requires explicit confirmation. Audited edited or unknown wall profiles and void cuts are marked for review even in preview, without counting cut proposals for those walls. The legacy behavior on main is unchanged.
+
+Virtual endpoint reports also include source size, system and slope (%). GapToFace is measured against the wall solid mid-plane where Revit geometry is available; ReachToAxis includes the remaining reach to the wall axis.
