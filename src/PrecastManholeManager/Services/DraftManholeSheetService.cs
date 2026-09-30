@@ -245,7 +245,17 @@ namespace Hatco.PrecastManholeManager.Services
                     " RequiredMm=" +
                     UnitUtil.FtToMm(requiredWidth).ToString("0.#") + "x" +
                     UnitUtil.FtToMm(requiredHeight).ToString("0.#");
-                log.Info("DRAFT SHEET FIT " + measurements);
+                log.Info("DRAFT SHEET FIT " + measurements +
+                    " Plan=" + UnitUtil.FtToMm(w[0]).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(h[0]).ToString("0.#") +
+                    " W1=" + UnitUtil.FtToMm(w[1]).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(h[1]).ToString("0.#") +
+                    " W2=" + UnitUtil.FtToMm(w[2]).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(h[2]).ToString("0.#") +
+                    " W3=" + UnitUtil.FtToMm(w[3]).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(h[3]).ToString("0.#") +
+                    " W4=" + UnitUtil.FtToMm(w[4]).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(h[4]).ToString("0.#"));
 
                 if (requiredWidth > usableWidth ||
                     requiredHeight > usableHeight)
