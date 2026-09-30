@@ -82,12 +82,11 @@ namespace Hatco.PrecastManholeManager.Services
             double newZ = (bottom + top) / 2;
             XYZ moved = p + tangent * UnitUtil.MmToFt(newAlong - alongMm);
 
-            record.Xmm = UnitUtil.FtToMm(moved.X);
-            record.Ymm = UnitUtil.FtToMm(moved.Y);
-            record.Zmm = newZ;
+            record.FittedCenterXmm = UnitUtil.FtToMm(moved.X);
+            record.FittedCenterYmm = UnitUtil.FtToMm(moved.Y);
+            record.FittedCenterZmm = newZ;
             record.CutWidthOverrideMm = right - left;
             record.CutHeightOverrideMm = top - bottom;
-            record.OffsetFromWallStartMm += newAlong - alongMm;
 
             bool valid = OpeningFitValidationService.TryValidate(doc, record, out reason);
             log?.Info("EDGE TRIM source=" + record.LinkedElementId +
