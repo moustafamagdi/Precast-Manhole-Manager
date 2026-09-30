@@ -58,7 +58,9 @@ namespace Hatco.PrecastManholeManager.Commands
                         "READ-ONLY RESULTS\n" +
                         "Wall group: " +
                         string.Join(", ", footprint.Walls.Select(x => x.Id.IntegerValue)) +
+                        "\nNearby MEP elements: " + scan.NearbyMep +
                         "\nVirtual endpoint candidates: " + scan.Candidates.Count +
+                        "\nNot accepted as virtual: " + scan.DiagnosedNonCandidates +
                         "\nAmbiguous: " + scan.Candidates.Count(x => x.Status == "AMBIGUOUS REVIEW") +
                         "\nMEP links loaded/unavailable: " +
                         scan.LoadedLinks + "/" + scan.UnavailableLinks +
@@ -71,6 +73,8 @@ namespace Hatco.PrecastManholeManager.Commands
                         "\nUnknown void status: " + audit.VoidUnknownWalls +
                         "\n\nALL VIRTUAL RESULTS REQUIRE REVIEW. NO OPENINGS DELETED OR CREATED." +
                         "\n\nCandidates CSV:\n" + scan.CsvPath +
+                        "\n\nAll nearby MEP / rejection reasons CSV:\n" +
+                        scan.DiagnosticCsvPath +
                         "\n\nDiagnostic log:\n" + log.LogPath);
                     return Result.Succeeded;
                 }
