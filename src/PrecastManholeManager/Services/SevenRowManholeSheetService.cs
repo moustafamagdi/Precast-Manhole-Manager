@@ -238,29 +238,9 @@ namespace Hatco.PrecastManholeManager.Services
                                 if (views.Views.Count != 5)
                                     throw new InvalidOperationException(
                                         "Expected exactly five 2D views.");
-                                // Short, consistent title-on-sheet text
-                                // prevents long internal view names from
-                                // invading neighboring cells. Never override
-                                // a manually entered title.
-                                for (int col = 0; col < 5; col++)
-                                {
-                                    View v = views.Views[col];
-                                    Parameter description = v.get_Parameter(
-                                        BuiltInParameter.VIEW_DESCRIPTION);
-                                    if (!previouslyExisting.Contains(
-                                        v.Id.IntegerValue) &&
-                                        description != null &&
-                                        !description.IsReadOnly &&
-                                        string.IsNullOrWhiteSpace(
-                                            description.AsString()))
-                                    {
-                                        string suffix = col == 0
-                                            ? "PLAN" : "W" + col;
-                                        description.Set("MH " +
-                                            foundation.Id.IntegerValue +
-                                            " - " + suffix);
-                                    }
-                                }
+                                // DraftManholeSheetService now writes the
+                                // readable manhole name + W1-W4 title.
+                                // Never overwrite it with Element IDs.
                                 // Respect the user's previously placed
                                 // views and scales. Never steal views
                                 // from another sheet.
