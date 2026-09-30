@@ -331,6 +331,12 @@ namespace Hatco.PrecastManholeManager.Services
             double heightMm;
             GetOpeningGeometry(element, out shape, out diameterMm, out widthMm, out heightMm);
 
+            _log.Info("MEP SECTION SIZE Link=" + link.Id.IntegerValue +
+                " Source=" + element.Id.IntegerValue + " Shape=" + shape +
+                " DiameterMm=" + diameterMm.ToString("0.###") +
+                " WidthMm=" + widthMm.ToString("0.###") +
+                " HeightMm=" + heightMm.ToString("0.###"));
+
             double invertFt = point.Z - verticalHalfSizeFt;
             double offsetFt = OffsetFromWallStart(wall, point);
 
@@ -357,8 +363,7 @@ namespace Hatco.PrecastManholeManager.Services
                 InvertMm = UnitUtil.FtToMm(invertFt),
                 InvertAboveBaseMm = UnitUtil.FtToMm(invertFt - baseTopZ),
                 OffsetFromWallStartMm = UnitUtil.FtToMm(offsetFt),
-                Notes = category.IndexOf("Cable", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                        category.IndexOf("Conduit", StringComparison.OrdinalIgnoreCase) >= 0
+                Notes = verticalHalfSizeFt <= 0
                     ? "Invert uses centerline because vertical size could not be resolved."
                     : string.Empty
             };
@@ -398,38 +403,15 @@ namespace Hatco.PrecastManholeManager.Services
         private static void GetSizeAndHalfHeight(Element e, out string size, out double halfHeightFt)
         {
             size = GetParameterText(e, "Size");
-            halfHeightFt = 0;
-
-            double diameter = GetDouble(e, BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
-            if (diameter <= 0)
-                diameter = GetDouble(e, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-
-            if (diameter > 0)
-            {
-                halfHeightFt = diameter / 2.0;
-                if (string.IsNullOrWhiteSpace(size))
-                    size = $"Ø{UnitUtil.FtToMm(diameter):0.#} mm";
-                return;
-            }
-
-            double h = GetDouble(e, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
-            double w = GetDouble(e, BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
-
-            if (h > 0)
-            {
-                halfHeightFt = h / 2.0;
-                if (string.IsNullOrWhiteSpace(size))
-                    size = $"{UnitUtil.FtToMm(w):0.#}x{UnitUtil.FtToMm(h):0.#} mm";
-                return;
-            }
-
-            // Cable tray / conduit fallback via common parameters.
-            var hp = e.LookupParameter("Height");
-            if (hp != null && hp.StorageType == StorageType.Double)
-                halfHeightFt = hp.AsDouble() / 2.0;
-
+            string shape;
+            double diameterMm, widthMm, heightMm;
+            GetOpeningGeometry(e, out shape, out diameterMm, out widthMm, out heightMm);
+            halfHeightFt = UnitUtil.MmToFt(shape == "Round" ? diameterMm : heightMm) / 2.0;
             if (string.IsNullOrWhiteSpace(size))
-                size = GetParameterText(e, "Diameter", "Width", "Height");
+            {
+                if (shape == "Round") size = $"Ø{diameterMm:0.#} mm";
+                else if (shape == "Rectangular") size = $"{widthMm:0.#}x{heightMm:0.#} mm";
+            }
         }
 
         private static void GetOpeningGeometry(
@@ -446,7 +428,11 @@ namespace Hatco.PrecastManholeManager.Services
 
             double diameterFt = GetDouble(e, BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
             if (diameterFt <= 0)
+                diameterFt = GetDouble(e, BuiltInParameter.RBS_CONDUIT_OUTER_DIAM_PARAM);
+            if (diameterFt <= 0)
                 diameterFt = GetDouble(e, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
+            if (diameterFt <= 0)
+                diameterFt = GetDouble(e, BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
 
             if (diameterFt <= 0)
                 diameterFt = GetNamedDouble(e, "Diameter");
@@ -460,6 +446,11 @@ namespace Hatco.PrecastManholeManager.Services
 
             double widthFt = GetDouble(e, BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
             double heightFt = GetDouble(e, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
+
+            if (widthFt <= 0)
+                widthFt = GetDouble(e, BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
+            if (heightFt <= 0)
+                heightFt = GetDouble(e, BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
 
             if (widthFt <= 0)
                 widthFt = GetNamedDouble(e, "Width");
@@ -477,13 +468,15 @@ namespace Hatco.PrecastManholeManager.Services
         private static double GetNamedDouble(Element e, string parameterName)
         {
             Parameter p = e.LookupParameter(parameterName);
-            return p != null && p.StorageType == StorageType.Double ? p.AsDouble() : 0;
+            double value = p != null && p.StorageType == StorageType.Double ? p.AsDouble() : 0;
+            return value > 0 && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0;
         }
 
         private static double GetDouble(Element e, BuiltInParameter bip)
         {
             var p = e.get_Parameter(bip);
-            return p != null && p.StorageType == StorageType.Double ? p.AsDouble() : 0;
+            double value = p != null && p.StorageType == StorageType.Double ? p.AsDouble() : 0;
+            return value > 0 && !double.IsNaN(value) && !double.IsInfinity(value) ? value : 0;
         }
 
         private static string Fmt(XYZ p) => p == null ? "<null>" : $"({p.X:F6},{p.Y:F6},{p.Z:F6})";
