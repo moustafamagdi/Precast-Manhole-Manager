@@ -37,9 +37,9 @@ namespace Hatco.PrecastManholeManager.Services
             DiagnosticLogger log)
         {
             if (foundations == null || foundations.Count == 0 ||
-                foundations.Count > 7)
+                foundations.Count > 12)
                 throw new InvalidOperationException(
-                    "Select between 1 and 7 manholes for the first trial.");
+                    "Select between 1 and 12 candidate manholes; up to 7 fitting rows will be placed.");
             if (foundations.GroupBy(x => x.Id.IntegerValue).Any(g =>
                 g.Count() > 1))
                 throw new InvalidOperationException("Repeated foundation selection.");
@@ -91,6 +91,7 @@ namespace Hatco.PrecastManholeManager.Services
             var ready = new List<Tuple<Element, VirtualFoundationResult>>();
             foreach (Element foundation in foundations)
             {
+                if (ready.Count >= 12) break;
                 if (known.Contains(foundation.UniqueId))
                 {
                     output.SkippedManholes++;
@@ -199,7 +200,8 @@ namespace Hatco.PrecastManholeManager.Services
                     // Anchor each accepted manhole in its own row,
                     // preserving the user-provided left-to-right order:
                     // PLAN, W1, W2, W3, W4 at 1:25.
-                    for (int slot = 0; slot < ready.Count; slot++)
+                    for (int slot = 0; slot < ready.Count &&
+                        output.PlacedManholes < 7; slot++)
                     {
                         Element foundation = ready[slot].Item1;
                         VirtualFoundationResult footprint = ready[slot].Item2;
@@ -217,6 +219,27 @@ namespace Hatco.PrecastManholeManager.Services
                                 if (views.Views.Count != 5)
                                     throw new InvalidOperationException(
                                         "Expected exactly five 2D views.");
+                                // Short, consistent title-on-sheet text
+                                // prevents long internal view names from
+                                // invading neighboring cells. Never override
+                                // a manually entered title.
+                                for (int col = 0; col < 5; col++)
+                                {
+                                    View v = views.Views[col];
+                                    Parameter description = v.get_Parameter(
+                                        BuiltInParameter.VIEW_DESCRIPTION);
+                                    if (description != null &&
+                                        !description.IsReadOnly &&
+                                        string.IsNullOrWhiteSpace(
+                                            description.AsString()))
+                                    {
+                                        string suffix = col == 0
+                                            ? "PLAN" : "W" + col;
+                                        description.Set("MH " +
+                                            foundation.Id.IntegerValue +
+                                            " - " + suffix);
+                                    }
+                                }
                                 // Respect the user's previously placed
                                 // views and scales. Never steal views
                                 // from another sheet.
