@@ -583,6 +583,7 @@ namespace Hatco.PrecastManholeManager.Commands
 
             CleanSyncApplyResult applied;
             ViewSheet newSheet;
+            View3D production3D;
             using (var group = new TransactionGroup(doc,
                 "HATCO - One Manhole Openings and Drawing"))
             {
@@ -615,6 +616,9 @@ namespace Hatco.PrecastManholeManager.Commands
                                     forProduction: true);
                             newSheet = FirstProductionSheetService.Build(
                                 doc, foundation, views, actual, log);
+                            production3D = ManholeReviewViewService
+                                .CreateProduction(doc, foundation,
+                                    footprint, log);
                             if (tx.Commit() != TransactionStatus.Committed)
                                 throw new InvalidOperationException(
                                     "Could not commit first production sheet.");
@@ -646,6 +650,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "\nManaged unchanged: " + applied.ManagedUnchanged +
                 "\nManaged updated: " + applied.ManagedUpdated +
                 "\nVirtual deferred: " + review.VirtualCount +
+                "\n3D: " + production3D.Name + " (MH_3D)" +
                 "\nSheet: " + newSheet.SheetNumber +
                 " / " + newSheet.Name +
                 "\nPreliminary opening setout is shown on the sheet. " +
