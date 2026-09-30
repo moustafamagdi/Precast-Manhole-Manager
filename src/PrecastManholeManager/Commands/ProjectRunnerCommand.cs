@@ -57,6 +57,9 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.Make3D)
                                 MakeReview3D(uiDoc, window.SelectedManhole,
                                     log);
+                            else if (window.Action == ProjectAction.DraftSheet)
+                                GenerateDraftSheet(uiDoc,
+                                    window.SelectedManhole, log);
                             else if (window.Action == ProjectAction.ExportExcel)
                                 Export(doc, log);
 
@@ -198,6 +201,79 @@ namespace Hatco.PrecastManholeManager.Commands
             TaskDialog.Show("Precast Manhole Manager",
                 "Created / opened 3D view: " + view.Name +
                 "\nSave the RVT to retain it.");
+        }
+
+        private static void GenerateDraftSheet(UIDocument uiDoc,
+            SimpleManholeItem selected, DiagnosticLogger log)
+        {
+            Document doc = uiDoc.Document;
+            Element foundation = Resolve(doc, selected);
+            // Never turn unresolved issues into a fabrication document.
+            ManholeReviewIssue existing = ManholeReviewRegistry.Load(doc)
+                .FirstOrDefault(x => x.FoundationUniqueId ==
+                    foundation.UniqueId && x.Status == "OPEN");
+            if (existing != null)
+                throw new InvalidOperationException(
+                    "Manhole is isolated: " + existing.Reason +
+                    ". Select a clean prototype first.");
+
+            VirtualFoundationResult footprint =
+                new VirtualFoundationRecoveryService(doc, log)
+                    .Analyze(foundation);
+            if (!footprint.Accepted)
+            {
+                ManholeReviewRegistry.Upsert(doc, foundation,
+                    "Draft cannot validate footprint: " + footprint.Reason,
+                    null, "GEOMETRY", log);
+                throw new InvalidOperationException(
+                    "Four-wall footprint needs review: " + footprint.Reason);
+            }
+
+            OpeningResetAuditResult audit =
+                OpeningResetAuditService.Audit(doc, footprint.Walls, log);
+            if (audit.RequiresManualReview)
+            {
+                ManholeReviewRegistry.Upsert(doc, foundation,
+                    "Draft blocked by existing wall cuts: " +
+                    audit.ProfileEditedWalls + " edited profiles; " +
+                    audit.NativeUnmanaged + " manual openings; " +
+                    audit.VoidCutRelations + " void cut relations.",
+                    footprint.Walls.Select(w => w.Id.IntegerValue),
+                    "REQUIRES CLEANUP", log);
+                throw new InvalidOperationException(
+                    "Selected manhole has old/manual cuts. Choose " +
+                    "a cleaner prototype from the project list.");
+            }
+
+            // Draft geometry only. Never modify foundations, wall sketches,
+            // cutting voids, linked MEP, or managed openings here.
+            DraftSheetResult result;
+            using (Transaction tx = new Transaction(doc,
+                "HATCO - Draft Manhole Plan + Four Elevations"))
+            {
+                tx.Start();
+                try
+                {
+                    result = DraftManholeSheetService.Generate(
+                        doc, foundation, footprint, log);
+                    if (tx.Commit() != TransactionStatus.Committed)
+                        throw new InvalidOperationException(
+                            "Revit did not commit draft views/sheet.");
+                }
+                catch
+                {
+                    if (tx.GetStatus() == TransactionStatus.Started)
+                        tx.RollBack();
+                    throw;
+                }
+            }
+            uiDoc.RequestViewChange(result.Sheet);
+            TaskDialog.Show("First Manhole Prototype",
+                result.Message +
+                "\\n\\nThese are preliminary model views, not " +
+                "dimensioned fabrication shop drawings." +
+                "\\nNo wall geometry or openings were changed." +
+                "\\nSave the RVT to keep the sheet.");
         }
 
         private static void Export(Document doc,
