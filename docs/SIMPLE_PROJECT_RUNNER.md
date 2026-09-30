@@ -309,3 +309,55 @@ Test by opening the preferred manual reference sheet, restarting
 Revit after updating the DLL, and selecting **Test 6-Row Sheet**.
 The code has not been compiled or tested in the user's Revit host
 by the assistant. Report any TXT errors and resulting sheet image.
+
+
+## First physical production milestone — Generate Selected Manhole
+
+The `Generate Selected Manhole` button is now wired into the
+single-window project runner. It intentionally processes **one
+explicitly selected, clean and numbered manhole** rather than an
+unattended project-wide batch.
+
+1. Read-only checks validate its four-wall footprint, review register
+   and all legacy cut states; scan linked MEP for crossings and
+   separately report virtual endpoint candidates in the timestamped
+   unified CSV.
+2. Production proceeds only when there is at least one confirmed
+   **ACTUAL** crossing, all proposed actual openings pass the existing
+   size/wall fit validator, source keys are unique, there are at
+   most eight openings, and no pair overlaps the same wall.
+   No missing/unloaded required links are permitted.
+3. The dialog gives the user **actual wall numbers, source IDs and
+   opening sizes** and asks for explicit confirmation before editing.
+4. The existing `CleanSyncAtomicService` creates/updates native Revit
+   rectangular openings with original linked source identity and
+   safely preserves unmatched existing managed openings. All
+   destructive cleanup toggles are disabled: no reset of wall
+   sketches, no deleting manual native openings, no unattached
+   void unlinking, no in-place cutter deletion. Virtual extensions
+   are **deferred**, not physically cut in this milestone.
+5. A dedicated one-manhole A0/A1 sheet named
+   `MH_<FoundationId>_OPENINGS_R01` is generated with the existing
+   1:25 `MH_PLAN` view and four 1:25 exterior-looking-in
+   `MH_SEC` Sections. Physical cuts are visible in their Revit
+   views. A sheet-level **PRELIMINARY OPENING SETOUT / VERIFY**
+   note lists actual source ID, W1–W4, cut width x height,
+   horizontal offset measured from the original wall-axis start,
+   and opening bottom elevation relative to the foundation top.
+   This note is not a substitute for dimension references or
+   approved manufacturer fabrication detailing.
+6. A single `TransactionGroup` contains the existing atomic native
+   cut transaction and the subsequent view/sheet transaction. If
+   creation or layout fails, the group rolls back BOTH, leaving
+   neither physical cuts nor a misleading partial sheet. Existing
+   manual sheets are never overwritten or moved.
+
+For acceptance testing, use a **saved disposable RVT copy** with
+the two provided view templates, a loaded titleblock and a real
+manhole Mark / saved number. Select one clean foundation with known
+actual linked pipes/ducts. Review the CSV, approve its cuts, inspect
+all physical wall openings in 3D and W1–W4 and cross-check the
+preliminary setout note against the source model before relying on
+the dimensions. Send the TXT log and new sheet screenshot if the
+production run aborts. **No Revit-host compilation/runtime verification
+has been performed in this development environment.**
