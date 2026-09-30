@@ -68,9 +68,9 @@ namespace Hatco.PrecastManholeManager.Services
             tangent = tangent.Normalize();
 
             XYZ center = new XYZ(
-                UnitUtil.MmToFt(record.Xmm),
-                UnitUtil.MmToFt(record.Ymm),
-                UnitUtil.MmToFt(record.Zmm));
+                UnitUtil.MmToFt(record.EffectiveOpeningXmm),
+                UnitUtil.MmToFt(record.EffectiveOpeningYmm),
+                UnitUtil.MmToFt(record.EffectiveOpeningZmm));
 
             double halfWidthFt = UnitUtil.MmToFt(record.CutWidthMm) / 2.0;
             double halfHeightFt = UnitUtil.MmToFt(record.CutHeightMm) / 2.0;
