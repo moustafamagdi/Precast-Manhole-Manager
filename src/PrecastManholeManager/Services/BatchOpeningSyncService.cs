@@ -100,39 +100,17 @@ namespace Hatco.PrecastManholeManager.Services
                 }
             }
 
+            // Experimental policy: never auto-delete stale managed openings.
+            // An absent source may be caused by unloaded/changed links, profile
+            // edits, or missing coordination information. Flag for manual review.
             foreach (ManagedEntry entry in existing)
             {
                 if (desiredKeys.Contains(entry.Data.SourceKey))
                     continue;
-
-                if (entry.Data.AdoptedManual)
-                {
-                    result.Review++;
-                    continue;
-                }
-
-                RevitLinkInstance sourceLink =
-                    doc.GetElement(new ElementId(entry.Data.LinkInstanceId)) as RevitLinkInstance;
-
-                if (sourceLink == null || sourceLink.GetLinkDocument() == null)
-                {
-                    result.Review++;
-                    log?.Warn(
-                        "Batch preserved managed opening " + entry.Opening.Id.IntegerValue +
-                        " because source link " + entry.Data.LinkInstanceId + " is unloaded/unavailable.");
-                    continue;
-                }
-
-                try
-                {
-                    doc.Delete(entry.Opening.Id);
-                    result.Removed++;
-                }
-                catch (Exception ex)
-                {
-                    result.Failed++;
-                    log?.Error("Batch failed removing stale opening " + entry.Opening.Id.IntegerValue, ex);
-                }
+                result.Review++;
+                log?.Warn("BATCH STALE OPENING PRESERVED Opening=" +
+                    entry.Opening.Id.IntegerValue + " SourceKey=" +
+                    entry.Data.SourceKey + " (no automatic deletion).");
             }
 
             return result;
