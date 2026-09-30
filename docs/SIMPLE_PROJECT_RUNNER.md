@@ -1,5 +1,21 @@
 # Simple one-time project runner (first integration pass)
 
+## Current behavior: configurable clearance and loaded-link scope (2026-09-30)
+
+This section supersedes the historical fixed-50-mm and partial-link trial notes below.
+
+- Set **Clearance per side (mm)** in the main window, then use **Review Selected** or **Generate Selected Manhole**. Default: 50 mm; zero and non-negative decimal values are accepted. The last submitted value is remembered during the current Revit process.
+- Loaded links are the operator-selected source scope. Unloaded links are skipped in diagnostics and do not add a production confirmation or PARTIAL sheet label.
+- Generate matches existing tool-managed openings by their source key and wall. A changed clearance expands or shrinks the opening; unchanged openings are retained. Existing manual openings still require review.
+- Resizing uses the existing atomic sync implementation: it replaces the native opening and writes its source metadata. Revit ElementId can change; this is not an in-place edit preserving external tags or dimensions attached to the old opening.
+- Rerunning a tool-generated manhole updates its existing opening table and reuses its views, 3D view and sheet layout. It recognizes both the previous PARTIAL sheet name and the standard sheet name. Ambiguous/missing tables stop the operation with rollback.
+- No deletion of unmatched managed openings is enabled. Fit/overlap validation and atomic rollback remain active.
+
+Validation: Release build against Revit 2024 / .NET 4.8 passes. Run `powershell -NoProfile -ExecutionPolicy Bypass -File tests/ClearanceRegression.ps1` after building Release for calculation/update-decision checks. Revit integration testing remains required: generate at 50, rerun at 75 and 25, verify actual geometry and the existing sheet table, then repeat unchanged and confirm no duplicate openings/views/sheets. Verify a rejected oversized clearance leaves both model and table unchanged.
+
+## Historical implementation notes
+
+
 Branch: `feature/simple-project-runner`, based on
 `experiment/virtual-manhole-geometry`. **Do not merge with main yet.**
 
