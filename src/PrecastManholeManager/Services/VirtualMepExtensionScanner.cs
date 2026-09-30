@@ -278,7 +278,8 @@ namespace Hatco.PrecastManholeManager.Services
             string folder = OutputPathService.GetLogsFolder();
             string path = Path.Combine(folder,
                 "VirtualMepCandidates_" + DateTime.Now.ToString(
-                    "yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".csv");
+                    "yyyyMMdd_HHmmss_fffffff", CultureInfo.InvariantCulture) + "_" +
+                Guid.NewGuid().ToString("N").Substring(0, 6) + ".csv");
             var csv = new StringBuilder();
             csv.AppendLine("Status,Link,LinkId,ElementId,UniqueId,Category,SourceSize,System,Wall,WallId,Endpoint,GapToFace_mm,ReachToAxis_mm,Deviation_deg,Slope_percent,HitX_mm,HitY_mm,HitZ_mm,Reason");
             foreach (VirtualMepCandidate r in records)
