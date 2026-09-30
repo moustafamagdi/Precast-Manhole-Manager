@@ -33,20 +33,30 @@ namespace Hatco.PrecastManholeManager.Commands
             {
                 TaskDialog.Show(
                     "Batch All Manholes",
-                    "No Structural Foundations matching MH / MANHOLE naming were found.");
+                    "No foundations with the two configured manhole base type names were found.");
                 return Result.Succeeded;
             }
 
-            TaskDialog confirm = new TaskDialog("Batch All Manholes");
-            confirm.MainInstruction = "Process " + foundations.Count + " likely manhole foundations?";
-            confirm.MainContent =
-                "The command will detect walls and penetrations, create/update managed openings, " +
-                "save manhole data carriers, and auto-number new manholes as MH-001, MH-002, etc.\n\n" +
-                "Foundations with geometry warnings will be skipped as NEEDS REVIEW.";
-            confirm.CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No;
-
-            if (confirm.Show() != TaskDialogResult.Yes)
+            var settingsWindow = new BatchOptionsWindow(foundations.Count);
+            if (settingsWindow.ShowDialog() != true)
                 return Result.Cancelled;
+
+            BatchRunOptions options = settingsWindow.SelectedOptions;
+            if (!options.PreviewOnly)
+            {
+                TaskDialog confirm = new TaskDialog("Batch All - APPLY CHANGES");
+                confirm.MainInstruction =
+                    "Apply managed opening changes to " + foundations.Count + " foundations?";
+                confirm.MainContent =
+                    "The virtual geometry check and opening audit run first. " +
+                    "Walls with edited/unknown profiles or void cuts will be skipped. " +
+                    "NO existing profiles or in-place voids will be reset. " +
+                    "Use a disposable project copy for the first write test.";
+                confirm.CommonButtons = TaskDialogCommonButtons.Yes |
+                    TaskDialogCommonButtons.No;
+                if (confirm.Show() != TaskDialogResult.Yes)
+                    return Result.Cancelled;
+            }
 
             using (var log = new DiagnosticLogger())
             {
