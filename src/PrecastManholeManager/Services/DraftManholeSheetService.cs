@@ -19,7 +19,8 @@ namespace Hatco.PrecastManholeManager.Services
     internal static class DraftManholeSheetService
     {
         public static DraftSheetResult Generate(Document doc, Element foundation,
-            VirtualFoundationResult footprint, DiagnosticLogger log)
+            VirtualFoundationResult footprint, DiagnosticLogger log,
+            bool forProduction = false)
         {
             if (doc == null || foundation == null || footprint == null ||
                 !footprint.Accepted || footprint.Walls.Count != 4)
@@ -31,7 +32,8 @@ namespace Hatco.PrecastManholeManager.Services
             var result = new DraftSheetResult();
             string manholeName = ManholeViewTitleService.Name(
                 doc, foundation, log);
-            string prefix = "MH_" + foundation.Id.IntegerValue + "_DRAFT_2D";
+            string prefix = "MH_" + foundation.Id.IntegerValue +
+                (forProduction ? "_PROD_2D" : "_DRAFT_2D");
             BoundingBoxXYZ baseBox = foundation.get_BoundingBox(null);
             List<BoundingBoxXYZ> wallBoxes = footprint.Walls
                 .Select(w => w.get_BoundingBox(null)).ToList();
