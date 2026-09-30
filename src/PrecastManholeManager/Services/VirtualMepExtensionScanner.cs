@@ -24,6 +24,7 @@ namespace Hatco.PrecastManholeManager.Services
         public int Endpoint { get; set; }
         public XYZ ProjectedHit { get; set; }
         public double GapToFaceMm { get; set; }
+        public double DepthInsideWallMm { get; set; }
         public double ReachToAxisMm { get; set; }
         public double DeviationDeg { get; set; }
         public string Status { get; set; }
@@ -228,13 +229,12 @@ namespace Hatco.PrecastManholeManager.Services
                             }
 
                             double faceGapFt = Math.Abs(signed) - wall.Width * 0.5;
-                            // Tip is already within wall thickness: actual-wall/void
-                            // geometry needs separate inspection, not virtual extension.
-                            if (faceGapFt < -UnitUtil.MmToFt(5))
-                            {
-                                diagnostic.Add("W" + item.Number + ":ENDPOINT_INSIDE_WALL");
-                                continue;
-                            }
+                            // An endpoint inside the wall but not through its
+                            // mid-plane is a valid *review-only* projection
+                            // scenario. It does NOT count as an actual crossing.
+                            bool insideWall = faceGapFt < -UnitUtil.MmToFt(5);
+                            double insideDepthMm =
+                                UnitUtil.FtToMm(Math.Max(0, -faceGapFt));
                             double gapMm = UnitUtil.FtToMm(Math.Max(0, faceGapFt));
                             if (gapMm > maxGapMm)
                             {
@@ -283,16 +283,21 @@ namespace Hatco.PrecastManholeManager.Services
                                 Endpoint = endpoint,
                                 ProjectedHit = hit,
                                 GapToFaceMm = gapMm,
+                                DepthInsideWallMm = insideWall ? insideDepthMm : 0,
                                 ReachToAxisMm = UnitUtil.FtToMm(reachFt),
                                 DeviationDeg = deviation,
-                                Status = "REVIEW",
-                                Reason = "Virtual endpoint extension: approval required before any cut."
+                                Status = insideWall ? "INSIDE_WALL_REVIEW" : "REVIEW",
+                                Reason = insideWall
+                                    ? "Endpoint lies inside wall thickness but before its mid-plane. Verify in Revit before cutting."
+                                    : "Virtual endpoint extension: approval required before any cut."
                             });
-                            diagnostic.Add("W" + item.Number + ":VIRTUAL_CANDIDATE");
+                            diagnostic.Add("W" + item.Number +
+                                (insideWall ? ":INSIDE_WALL_REVIEW" : ":VIRTUAL_CANDIDATE"));
                         }
                     }
 
-                    string state = diagnostic.Any(x => x.Contains("VIRTUAL_CANDIDATE"))
+                    string state = diagnostic.Any(x =>
+                        x.Contains("VIRTUAL_CANDIDATE") || x.Contains("INSIDE_WALL_REVIEW"))
                         ? "HAS_VIRTUAL_CANDIDATE"
                         : (hasActualCrossing ? "ACTUAL_CROSSING_REVIEW" : "NOT_ELIGIBLE_REVIEW");
                     string reasons = diagnostic.Count == 0 ? "NO_MATCHING_WALL_OR_DIRECTION"
@@ -341,6 +346,7 @@ namespace Hatco.PrecastManholeManager.Services
                           " Source=" + c.SourceElementId +
                           " Wall=W" + c.WallNumber + "(" + c.WallId + ")" +
                           " GapFaceMm=" + F(c.GapToFaceMm) +
+                          " DepthInsideWallMm=" + F(c.DepthInsideWallMm) +
                           " ReachAxisMm=" + F(c.ReachToAxisMm) +
                           " DirectionDeg=" + F(c.DeviationDeg) +
                           " SlopePercent=" + F(c.SlopePercent) +
@@ -377,7 +383,7 @@ namespace Hatco.PrecastManholeManager.Services
                     "yyyyMMdd_HHmmss_fffffff", CultureInfo.InvariantCulture) + "_" +
                 Guid.NewGuid().ToString("N").Substring(0, 6) + ".csv");
             var csv = new StringBuilder();
-            csv.AppendLine("Status,Link,LinkId,ElementId,UniqueId,Category,SourceSize,System,Wall,WallId,Endpoint,GapToFace_mm,ReachToAxis_mm,Deviation_deg,Slope_percent,HitX_mm,HitY_mm,HitZ_mm,Reason");
+            csv.AppendLine("Status,Link,LinkId,ElementId,UniqueId,Category,SourceSize,System,Wall,WallId,Endpoint,GapToFace_mm,DepthInsideWall_mm,ReachToAxis_mm,Deviation_deg,Slope_percent,HitX_mm,HitY_mm,HitZ_mm,Reason");
             foreach (VirtualMepCandidate r in records)
             {
                 csv.AppendLine(string.Join(",", new[]
@@ -387,7 +393,7 @@ namespace Hatco.PrecastManholeManager.Services
                     Escape(r.SourceUniqueId), Escape(r.Category),
                     Escape(r.SourceSize), Escape(r.SystemName),
                     "W" + r.WallNumber, r.WallId.ToString(),
-                    r.Endpoint.ToString(), F(r.GapToFaceMm), F(r.ReachToAxisMm),
+                    r.Endpoint.ToString(), F(r.GapToFaceMm), F(r.DepthInsideWallMm), F(r.ReachToAxisMm),
                     F(r.DeviationDeg), F(r.SlopePercent),
                     F(UnitUtil.FtToMm(r.ProjectedHit.X)),
                     F(UnitUtil.FtToMm(r.ProjectedHit.Y)),
