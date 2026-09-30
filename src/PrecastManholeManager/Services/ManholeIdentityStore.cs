@@ -4,7 +4,7 @@ using Autodesk.Revit.DB.ExtensibleStorage;
 
 namespace Hatco.PrecastManholeManager.Services
 {
-    // This user-entered ID belongs to the foundation instance, not
+    // Tool-only ID stored on the host foundation instance, not
     // the internal Revit ElementId. It is committed atomically together
     // with the first physical production openings and their sheet.
     internal static class ManholeIdentityStore
