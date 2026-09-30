@@ -255,3 +255,30 @@ Run on a detached/saved test RVT with the reference sheet active
 to reuse its titleblock type. Send a screenshot of the new sheet and
 its timestamped TXT log. This is still a *layout* acceptance test,
 not a fully dimensioned manufacturing submission.
+
+
+## Exterior-facing wall Sections
+
+New wall Sections now look **FROM OUTSIDE THE MANHOLE TOWARD
+THE EXTERNAL WALL FACE**. Autodesk `ViewSection.CreateSection`
+uses `sectionBox.Transform.BasisZ` as the actual view direction.
+For each W1–W4, the detector calculates the outward wall normal
+from the validated manhole center. The new section looks along
+`-outward`, with the section origin 40 mm outside the modeled
+outer wall face. Its near/far depth includes just the wall thickness
+plus 60 mm behind the inner face, preventing the opposite wall from
+obscuring an elevation.
+
+To preserve manually placed legacy views and the already approved
+sample sheets, newly created exterior Sections have unique names
+`MH_<FoundationId>_DRAFT_2D_OUT_W1` through `OUT_W4`.
+The original `..._W1` sections are left untouched. The 7-row
+generator also detects any already placed legacy or exterior
+Sections and skips that foundation rather than stealing views from
+the user's formatted sheet.
+
+**Next verification:** Create 2D Views for one clean manhole, open
+`OUT_W1`, verify you see the outside face, and then test the
+seven-row sheet with other unplaced, clean foundations. If the
+MH_SEC template hides the exterior wall surface, inspect its
+discipline/detail/category visibility before changing geometry.
