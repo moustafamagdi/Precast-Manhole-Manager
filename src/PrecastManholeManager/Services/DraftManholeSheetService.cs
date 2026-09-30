@@ -9,12 +9,14 @@ namespace Hatco.PrecastManholeManager.Services
     internal sealed class DraftSheetResult
     {
         public ViewSheet Sheet { get; set; }
-        public List<View3D> Views { get; } = new List<View3D>();
+        public List<View> Views { get; } = new List<View>();
         public string Message { get; set; }
     }
 
-    // Prototype only: orthographic 3D plan + four wall-facing 3D views.
-    // NOT final dimensioned shop drawings. Creates/reuses a small named set.
+    // One-time prototype: actual Revit Floor Plan and 4 ViewSections,
+    // not five orthographic 3D views. Does not modify model geometry.
+    // Caller owns ONE Transaction, so any layout error rolls back the
+    // entire sheet and its dependent views.
     internal static class DraftManholeSheetService
     {
         public static DraftSheetResult Generate(Document doc, Element foundation,
@@ -23,198 +25,172 @@ namespace Hatco.PrecastManholeManager.Services
             if (doc == null || foundation == null || footprint == null ||
                 !footprint.Accepted || footprint.Walls.Count != 4)
                 throw new InvalidOperationException(
-                    "Draft needs a validated four-wall manhole.");
+                    "Draft requires a validated four-wall manhole.");
+
+            const double paddingMm = 180;
+            double pad = UnitUtil.MmToFt(paddingMm);
             var result = new DraftSheetResult();
-            string prefix = "MH_" + foundation.Id.IntegerValue + "_DRAFT";
-            BoundingBoxXYZ foundationBox = foundation.get_BoundingBox(null);
-            var wallBounds = footprint.Walls.Select(w => w.get_BoundingBox(null)).ToList();
-            if (foundationBox == null || wallBounds.Any(x => x == null))
-                throw new InvalidOperationException("Incomplete wall/base bounds.");
+            string prefix = "MH_" + foundation.Id.IntegerValue + "_DRAFT_2D";
+            BoundingBoxXYZ baseBox = foundation.get_BoundingBox(null);
+            List<BoundingBoxXYZ> wallBoxes = footprint.Walls
+                .Select(w => w.get_BoundingBox(null)).ToList();
+            if (baseBox == null || wallBoxes.Any(b => b == null))
+                throw new InvalidOperationException(
+                    "Missing foundation or wall bounding boxes.");
 
-            // Section box is based on the four recovered walls, NOT the
-            // bounding-box center of a cropped foundation.
-            double minX = wallBounds.Min(x => x.Min.X);
-            double minY = wallBounds.Min(x => x.Min.Y);
-            double minZ = Math.Min(foundationBox.Min.Z,
-                wallBounds.Min(x => x.Min.Z));
-            double maxX = wallBounds.Max(x => x.Max.X);
-            double maxY = wallBounds.Max(x => x.Max.Y);
-            double maxZ = Math.Max(foundationBox.Max.Z,
-                wallBounds.Max(x => x.Max.Z));
-            double pad = UnitUtil.MmToFt(125);
-            XYZ center = new XYZ(footprint.VirtualCenter.X,
-                footprint.VirtualCenter.Y, (minZ + maxZ) * 0.5);
-            ViewFamilyType viewType = new FilteredElementCollector(doc)
+            // Cropped foundations may have an inaccurate box center. Use
+            // wall bounds and the previously validated virtual footprint.
+            double minX = wallBoxes.Min(b => b.Min.X);
+            double minY = wallBoxes.Min(b => b.Min.Y);
+            double maxX = wallBoxes.Max(b => b.Max.X);
+            double maxY = wallBoxes.Max(b => b.Max.Y);
+            double minZ = Math.Min(baseBox.Min.Z, wallBoxes.Min(b => b.Min.Z));
+            double maxZ = Math.Max(baseBox.Max.Z, wallBoxes.Max(b => b.Max.Z));
+            double centerZ = (minZ + maxZ) * 0.5;
+
+            ViewFamilyType planType = new FilteredElementCollector(doc)
                 .OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
-                .FirstOrDefault(t => t.ViewFamily ==
-                    ViewFamily.ThreeDimensional);
-            if (viewType == null)
-                throw new InvalidOperationException("No orthographic 3D view type.");
-            var mainBox = Box(minX - pad, minY - pad, minZ - pad,
-                maxX + pad, maxY + pad, maxZ + pad);
+                .FirstOrDefault(t => t.ViewFamily == ViewFamily.FloorPlan);
+            ViewFamilyType sectionType = new FilteredElementCollector(doc)
+                .OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
+                .FirstOrDefault(t => t.ViewFamily == ViewFamily.Section);
+            if (planType == null || sectionType == null)
+                throw new InvalidOperationException(
+                    "The project needs Floor Plan and Section view types.");
 
-            View3D plan = GetOrCreate(doc, prefix + "_PLAN", viewType);
-            Orient(plan, center + XYZ.BasisZ * UnitUtil.MmToFt(2500),
-                XYZ.BasisY, XYZ.BasisZ.Negate(), mainBox);
+            Level level = new FilteredElementCollector(doc)
+                .OfClass(typeof(Level)).Cast<Level>()
+                .OrderBy(x => Math.Abs(x.Elevation - baseBox.Max.Z))
+                .FirstOrDefault();
+            if (level == null)
+                throw new InvalidOperationException("No Level found for draft Floor Plan.");
+
+            ViewPlan plan = GetOrCreatePlan(doc, prefix + "_PLAN", planType, level);
+            ConfigurePlan(plan, minX - pad, minY - pad, maxX + pad,
+                maxY + pad, minZ - pad, maxZ + pad, centerZ);
             result.Views.Add(plan);
+            log.Info("2D DRAFT PLAN ViewId=" + plan.Id.IntegerValue +
+                " Level=" + level.Name + " CropWmm=" +
+                UnitUtil.FtToMm(maxX - minX + 2 * pad).ToString("0.#"));
 
-            // Stable numbering: azimuth clockwise from north; W1-W4
-            // follows the same legacy numbering convention (1,2,4,3).
             var ordered = footprint.Walls.Select(w =>
             {
-                Line line = (w.Location as LocationCurve)?.Curve as Line;
-                if (line == null)
-                    throw new InvalidOperationException("Wall is not straight.");
-                XYZ midpoint = (line.GetEndPoint(0) + line.GetEndPoint(1)) * 0.5;
-                XYZ vector = midpoint - footprint.VirtualCenter;
-                double azimuth = Math.Atan2(vector.X, vector.Y);
-                if (azimuth < 0) azimuth += 2 * Math.PI;
-                return new { Wall = w, Mid = midpoint, Angle = azimuth };
+                Line axis = (w.Location as LocationCurve)?.Curve as Line;
+                if (axis == null)
+                    throw new InvalidOperationException(
+                        "One wall has no straight axis.");
+                XYZ mid = (axis.GetEndPoint(0) + axis.GetEndPoint(1)) * 0.5;
+                XYZ delta = mid - footprint.VirtualCenter;
+                double angle = Math.Atan2(delta.X, delta.Y);
+                return new { Wall = w, Axis = axis, Mid = mid,
+                    Angle = angle < 0 ? angle + Math.PI * 2 : angle };
             }).OrderBy(x => x.Angle).ToList();
-            int[] nums = { 1, 2, 4, 3 };
-            for (int i = 0; i < 4; i++)
+
+            // Keep existing W1/W2/W4/W3 convention used by the MEP
+            // penetration scanner and the manufacturer Excel report.
+            int[] numbering = { 1, 2, 4, 3 };
+            var elevations = new Dictionary<int, ViewSection>();
+            for (int i = 0; i < ordered.Count; i++)
             {
-                var current = ordered[i];
-                Wall wall = current.Wall;
-                BoundingBoxXYZ bounds = wallBounds[
-                    footprint.Walls.FindIndex(w =>
-                        w.Id.IntegerValue == wall.Id.IntegerValue)];
+                int wallNumber = numbering[i];
+                var w = ordered[i];
                 XYZ outward = new XYZ(
-                    current.Mid.X - footprint.VirtualCenter.X,
-                    current.Mid.Y - footprint.VirtualCenter.Y, 0);
+                    w.Mid.X - footprint.VirtualCenter.X,
+                    w.Mid.Y - footprint.VirtualCenter.Y, 0);
                 if (outward.GetLength() < 1e-8)
-                    throw new InvalidOperationException("Invalid wall orientation.");
+                    throw new InvalidOperationException(
+                        "Cannot determine outside wall direction.");
                 outward = outward.Normalize();
-                XYZ mid = new XYZ(current.Mid.X, current.Mid.Y,
-                    (minZ + maxZ) * 0.5);
-                View3D elevation = GetOrCreate(doc,
-                    prefix + "_W" + nums[i], viewType);
-                // The wall and its physical openings are visible, not the
-                // opposite walls that would obscure this elevation.
-                BoundingBoxXYZ wallBox = Box(
-                    bounds.Min.X - pad, bounds.Min.Y - pad,
-                    minZ - pad, bounds.Max.X + pad, bounds.Max.Y + pad,
-                    maxZ + pad);
-                Orient(elevation,
-                    mid + outward * UnitUtil.MmToFt(2500),
-                    XYZ.BasisZ, outward.Negate(), wallBox);
-                result.Views.Add(elevation);
-                log.Info("DRAFT ELEVATION W" + nums[i] +
-                    " WallId=" + wall.Id.IntegerValue +
+
+                string name = prefix + "_W" + wallNumber;
+                ViewSection elevation = GetOrCreateSection(doc, name,
+                    sectionType, w.Axis, w.Mid, outward,
+                    minZ - pad, maxZ + pad, pad);
+                elevations[wallNumber] = elevation;
+                log.Info("2D DRAFT SECTION W" + wallNumber +
+                    " WallId=" + w.Wall.Id.IntegerValue +
                     " ViewId=" + elevation.Id.IntegerValue);
             }
+            for (int n = 1; n <= 4; n++)
+                result.Views.Add(elevations[n]);
 
-            // Keep the layout order explicit: plan, W1, W2, W3, W4.
-            result.Views.Sort((a, b) =>
-            {
-                int Rank(View3D v)
-                {
-                    if (v.Name.EndsWith("_PLAN",
-                        StringComparison.Ordinal)) return 0;
-                    for (int w = 1; w <= 4; w++)
-                        if (v.Name.EndsWith("_W" + w,
-                            StringComparison.Ordinal)) return w;
-                    return 99;
-                }
-                return Rank(a).CompareTo(Rank(b));
-            });
-
-            // A sheet with 5 views should be produced as one atomic result.
-            // No suitable title block -> empty sheet with bounded diagnostic.
             ViewSheet sheet = new FilteredElementCollector(doc)
                 .OfClass(typeof(ViewSheet)).Cast<ViewSheet>()
                 .FirstOrDefault(s => s.Name == prefix);
-            if (sheet != null && sheet.GetAllViewports().Count != 5)
-                throw new InvalidOperationException(
-                    "Draft sheet exists but its viewports were edited; " +
-                    "leave it unchanged and review manually: " + sheet.Name);
 
-            if (sheet == null)
+            if (sheet != null)
             {
-                // First installed title block family type. The user can
-                // replace the title block after checking prototype layout.
-                FamilySymbol titleBlock = new FilteredElementCollector(doc)
-                    .OfCategory(BuiltInCategory.OST_TitleBlocks)
-                    .OfClass(typeof(FamilySymbol))
-                    .Cast<FamilySymbol>()
-                    .OrderByDescending(x =>
-                        (x.Name ?? "").IndexOf("A0",
-                            StringComparison.OrdinalIgnoreCase) >= 0 ? 3 :
-                        (x.Name ?? "").IndexOf("A1",
-                            StringComparison.OrdinalIgnoreCase) >= 0 ? 2 :
-                        (x.Name ?? "").IndexOf("A2",
-                            StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0)
-                    .FirstOrDefault();
-                if (titleBlock == null)
+                // Reusing five-view sheets is safe. Never reset positions
+                // on a sheet a person has already laid out manually.
+                HashSet<int> expected = new HashSet<int>(result.Views
+                    .Select(v => v.Id.IntegerValue));
+                HashSet<int> existing = new HashSet<int>(
+                    sheet.GetAllViewports().Select(id =>
+                        (doc.GetElement(id) as Viewport)?.ViewId.IntegerValue ?? -1));
+                if (!expected.SetEquals(existing))
                     throw new InvalidOperationException(
-                        "No titleblock family type is loaded. " +
-                        "Load an A1/A0 titleblock before creating the draft.");
-                sheet = ViewSheet.Create(doc, titleBlock.Id);
-                sheet.Name = prefix;
-            }
-            result.Sheet = sheet;
-            doc.Regenerate();
-
-            // Prototype layout is based on actual sheet outline dimensions.
-            // Revit uses feet for sheet-space coordinates.
-            double left = sheet.Outline.Min.U;
-            double right = sheet.Outline.Max.U;
-            double bottom = sheet.Outline.Min.V;
-            double top = sheet.Outline.Max.V;
-            double width = right - left, height = top - bottom;
-            if (width < UnitUtil.MmToFt(300) ||
-                height < UnitUtil.MmToFt(200))
-                throw new InvalidOperationException(
-                    "Sheet/titleblock too small or invalid. " +
-                    "Choose an A1/A0 titleblock before generating the draft.");
-
-            // Create viewports once; measure their ACTUAL Revit box size
-            // after regeneration, then choose a sheet-fitting view scale.
-            // We deliberately exclude titleblock geometry and viewport labels
-            // (GetBoxOutline reports the real view box, not the label).
-            bool wasExisting = sheet.GetAllViewports().Count == 5;
-            if (wasExisting)
-            {
-                result.Message = "Existing five-view draft sheet retained: " +
-                    sheet.SheetNumber + " / " + sheet.Name +
-                    ". Existing manual viewport positions were not changed.";
-                log.Info("DRAFT EXISTING SHEET PRESERVED " + sheet.Id.IntegerValue);
+                        "The existing 2D draft sheet was changed manually. " +
+                        "Preserve it and review its viewports: " + prefix);
+                result.Sheet = sheet;
+                result.Message = "Existing 2D Draft sheet preserved: " +
+                    sheet.SheetNumber + " / " + sheet.Name;
                 return result;
             }
 
-            double edge = UnitUtil.MmToFt(12);
-            double gap = UnitUtil.MmToFt(8);
-            double usableWidth = width - 2 * edge;
-            double usableHeight = height - 2 * edge;
-            if (usableWidth <= 0 || usableHeight <= 0)
-                throw new InvalidOperationException("Sheet printable area is invalid.");
+            FamilySymbol titleBlock = new FilteredElementCollector(doc)
+                .OfCategory(BuiltInCategory.OST_TitleBlocks)
+                .OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>()
+                .OrderByDescending(x =>
+                    (x.Name ?? "").IndexOf("A0",
+                        StringComparison.OrdinalIgnoreCase) >= 0 ? 3 :
+                    (x.Name ?? "").IndexOf("A1",
+                        StringComparison.OrdinalIgnoreCase) >= 0 ? 2 : 0)
+                .FirstOrDefault();
+            if (titleBlock == null)
+                throw new InvalidOperationException(
+                    "Load an A0 or A1 titleblock before generating a draft.");
 
-            // All five placeable viewports are created near the middle
-            // initially. Revit box outlines determine final placement.
-            XYZ provisional = new XYZ(
-                left + width * 0.5, bottom + height * 0.5, 0);
+            sheet = ViewSheet.Create(doc, titleBlock.Id);
+            sheet.Name = prefix;
+            result.Sheet = sheet;
+            doc.Regenerate();
+
+            double left = sheet.Outline.Min.U;
+            double bottom = sheet.Outline.Min.V;
+            double width = sheet.Outline.Max.U - left;
+            double height = sheet.Outline.Max.V - bottom;
+            if (width < UnitUtil.MmToFt(500) ||
+                height < UnitUtil.MmToFt(350))
+                throw new InvalidOperationException(
+                    "Selected sheet is too small for the five-view draft.");
+
             var ports = new List<Viewport>();
-            foreach (View3D view in result.Views)
+            XYZ initial = new XYZ(left + width * 0.5,
+                bottom + height * 0.5, 0);
+            foreach (View view in result.Views)
             {
                 if (!Viewport.CanAddViewToSheet(doc, sheet.Id, view.Id))
                     throw new InvalidOperationException(
-                        "Cannot place " + view.Name +
-                        " on the draft sheet. It may already be placed elsewhere.");
-                ports.Add(Viewport.Create(doc, sheet.Id, view.Id, provisional));
+                        "Cannot place view " + view.Name +
+                        " (it may already be on another sheet).");
+                ports.Add(Viewport.Create(doc, sheet.Id, view.Id, initial));
             }
 
-            // 1:50 remains the preferred scale; if too large, reduce
-            // automatically in familiar architectural increments.
-            int[] scales = { 50, 75, 100, 125, 150, 200, 250, 300, 400 };
-            bool fitted = false;
-            string measurements = "";
+            // Use real 2D crop extents measured by Revit. This avoids
+            // the whole-project camera crop that broke the old 3D draft.
+            int[] scales = { 25, 50, 75, 100, 125, 150, 200 };
+            double edge = UnitUtil.MmToFt(22);
+            double gap = UnitUtil.MmToFt(12);
+            double usableW = width - 2 * edge;
+            double usableH = height - 2 * edge;
             int fittedScale = 0;
-            foreach (int candidateScale in scales)
-            {
-                foreach (View3D view in result.Views)
-                    view.Scale = candidateScale;
-                doc.Regenerate();
+            string lastMeasurement = "";
 
+            foreach (int scale in scales)
+            {
+                foreach (View view in result.Views)
+                    view.Scale = scale;
+                doc.Regenerate();
                 double[] w = ports.Select(p =>
                 {
                     Outline o = p.GetBoxOutline();
@@ -226,232 +202,198 @@ namespace Hatco.PrecastManholeManager.Services
                     return o.MaximumPoint.Y - o.MinimumPoint.Y;
                 }).ToArray();
 
-                // Guard against Revit retaining a project-wide crop
-                // despite our explicit section/crop alignment. An absurd
-                // viewport is a geometry/crop bug, not a small titleblock:
-                // bail out at the FIRST scale instead of spending minutes
-                // trying 1:400 and misleading the operator.
-                if (candidateScale == 50)
-                {
-                    double maxModelExtent = Math.Max(maxX - minX,
-                        Math.Max(maxY - minY, maxZ - minZ));
-                    double expectedPaperFt = maxModelExtent / candidateScale;
-                    double largestPaperFt = Math.Max(
-                        w.Max(), h.Max());
-                    log.Info("DRAFT CROP DIAGNOSTIC ModelMaxMm=" +
-                        UnitUtil.FtToMm(maxModelExtent).ToString("0.#") +
-                        " ExpectedPaperMaxMm=" +
-                        UnitUtil.FtToMm(expectedPaperFt).ToString("0.#") +
-                        " MeasuredPaperMaxMm=" +
-                        UnitUtil.FtToMm(largestPaperFt).ToString("0.#"));
-                    if (largestPaperFt > expectedPaperFt * 8.0)
-                        throw new InvalidOperationException(
-                            "3D viewport crop is still project-sized. " +
-                            "Largest paper view is " +
-                            UnitUtil.FtToMm(largestPaperFt).ToString("0.#") +
-                            " mm while the manhole geometry suggests about " +
-                            UnitUtil.FtToMm(expectedPaperFt).ToString("0.#") +
-                            " mm at 1:50. This is a 3D crop/orientation " +
-                            "issue, NOT a titleblock size problem; " +
-                            "all draft changes will be rolled back.");
-                }
+                double row2 = Math.Max(h[1], h[2]);
+                double row3 = Math.Max(h[3], h[4]);
+                double needW = Math.Max(w[0], Math.Max(
+                    w[1] + w[2] + gap, w[3] + w[4] + gap));
+                double needH = h[0] + row2 + row3 + 2 * gap;
+                lastMeasurement = "1:" + scale +
+                    " Required=" + UnitUtil.FtToMm(needW).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(needH).ToString("0.#") +
+                    " mm Available=" + UnitUtil.FtToMm(usableW).ToString("0.#") +
+                    "x" + UnitUtil.FtToMm(usableH).ToString("0.#") + " mm";
+                log.Info("2D DRAFT FIT " + lastMeasurement);
+                if (needW > usableW || needH > usableH) continue;
 
-                // 3 rows: plan; W1 and W2; W3 and W4. Each row uses
-                // the tallest view in that row, with a fixed clear gap.
-                double planWidth = w[0];
-                double topWidth = w[1] + w[2] + gap;
-                double bottomWidth = w[3] + w[4] + gap;
-                double topRowHeight = Math.Max(h[1], h[2]);
-                double bottomRowHeight = Math.Max(h[3], h[4]);
-                double requiredWidth = Math.Max(planWidth,
-                    Math.Max(topWidth, bottomWidth));
-                double requiredHeight = h[0] + topRowHeight +
-                    bottomRowHeight + 2 * gap;
-
-                measurements = "Scale=1:" + candidateScale +
-                    " AvailableSheetMm=" +
-                    UnitUtil.FtToMm(usableWidth).ToString("0.#") + "x" +
-                    UnitUtil.FtToMm(usableHeight).ToString("0.#") +
-                    " RequiredMm=" +
-                    UnitUtil.FtToMm(requiredWidth).ToString("0.#") + "x" +
-                    UnitUtil.FtToMm(requiredHeight).ToString("0.#");
-                log.Info("DRAFT SHEET FIT " + measurements +
-                    " Plan=" + UnitUtil.FtToMm(w[0]).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(h[0]).ToString("0.#") +
-                    " W1=" + UnitUtil.FtToMm(w[1]).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(h[1]).ToString("0.#") +
-                    " W2=" + UnitUtil.FtToMm(w[2]).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(h[2]).ToString("0.#") +
-                    " W3=" + UnitUtil.FtToMm(w[3]).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(h[3]).ToString("0.#") +
-                    " W4=" + UnitUtil.FtToMm(w[4]).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(h[4]).ToString("0.#"));
-
-                if (requiredWidth > usableWidth ||
-                    requiredHeight > usableHeight)
-                    continue;
-
-                // Center the entire 3-row group on the sheet. Each
-                // viewport is centered vertically within its row.
-                double yStart = bottom + edge +
-                    (usableHeight - requiredHeight) * 0.5;
-                double[] centersY = {
-                    yStart + bottomRowHeight + gap + topRowHeight +
-                        gap + h[0] / 2,
-                    yStart + bottomRowHeight + gap + topRowHeight / 2,
-                    yStart + bottomRowHeight + gap + topRowHeight / 2,
-                    yStart + bottomRowHeight / 2,
-                    yStart + bottomRowHeight / 2
+                double y = bottom + edge + (usableH - needH) * 0.5;
+                double cx = left + width * 0.5;
+                double[] cy = {
+                    y + row3 + gap + row2 + gap + h[0] * 0.5,
+                    y + row3 + gap + row2 * 0.5,
+                    y + row3 + gap + row2 * 0.5,
+                    y + row3 * 0.5,
+                    y + row3 * 0.5
                 };
-                double centerX = left + width * 0.5;
-                double[] centersX = {
-                    centerX,
-                    centerX - (w[2] + gap) * 0.5,
-                    centerX + (w[1] + gap) * 0.5,
-                    centerX - (w[4] + gap) * 0.5,
-                    centerX + (w[3] + gap) * 0.5
+                double[] xx = {
+                    cx,
+                    cx - (w[2] + gap) * 0.5,
+                    cx + (w[1] + gap) * 0.5,
+                    cx - (w[4] + gap) * 0.5,
+                    cx + (w[3] + gap) * 0.5
                 };
                 for (int i = 0; i < ports.Count; i++)
-                    ports[i].SetBoxCenter(new XYZ(
-                        centersX[i], centersY[i], 0));
+                    ports[i].SetBoxCenter(new XYZ(xx[i], cy[i], 0));
                 doc.Regenerate();
 
-                // Verify ACTUAL outlines after setting position (3D
-                // camera crop can regenerate viewport extents).
                 var boxes = ports.Select(p => p.GetBoxOutline()).ToList();
-                bool inside = boxes.All(o =>
+                bool within = boxes.All(o =>
                     o.MinimumPoint.X >= left + edge - 1e-5 &&
-                    o.MaximumPoint.X <= right - edge + 1e-5 &&
+                    o.MaximumPoint.X <= left + width - edge + 1e-5 &&
                     o.MinimumPoint.Y >= bottom + edge - 1e-5 &&
-                    o.MaximumPoint.Y <= top - edge + 1e-5);
+                    o.MaximumPoint.Y <= bottom + height - edge + 1e-5);
                 bool overlap = false;
                 for (int i = 0; i < boxes.Count; i++)
-                    for (int j = i + 1; j < boxes.Count; j++)
-                    {
-                        Outline x = boxes[i], y = boxes[j];
-                        bool touches =
-                            x.MinimumPoint.X < y.MaximumPoint.X + gap &&
-                            x.MaximumPoint.X + gap > y.MinimumPoint.X &&
-                            x.MinimumPoint.Y < y.MaximumPoint.Y + gap &&
-                            x.MaximumPoint.Y + gap > y.MinimumPoint.Y;
-                        if (touches) overlap = true;
-                    }
-
-                if (!inside || overlap)
+                for (int j = i + 1; j < boxes.Count; j++)
                 {
-                    log.Warn("DRAFT SHEET FIT after positioning: " +
-                        "inside=" + inside + " overlap=" + overlap +
-                        " at 1:" + candidateScale);
-                    continue;
+                    Outline a = boxes[i], b = boxes[j];
+                    if (a.MinimumPoint.X < b.MaximumPoint.X + gap &&
+                        a.MaximumPoint.X + gap > b.MinimumPoint.X &&
+                        a.MinimumPoint.Y < b.MaximumPoint.Y + gap &&
+                        a.MaximumPoint.Y + gap > b.MinimumPoint.Y)
+                        overlap = true;
                 }
 
-                fitted = true;
-                fittedScale = candidateScale;
-                break;
+                if (within && !overlap)
+                {
+                    fittedScale = scale;
+                    break;
+                }
+                log.Warn("2D DRAFT layout rejected at 1:" + scale +
+                    " Within=" + within + " Overlap=" + overlap);
             }
 
-            if (!fitted)
+            if (fittedScale == 0)
                 throw new InvalidOperationException(
-                    "Could not fit five viewports on selected titleblock " +
-                    "at scales 1:50 to 1:400. Last measurement: " +
-                    measurements + ". Nothing was changed.");
+                    "Five 2D views could not fit this sheet. " +
+                    lastMeasurement + ". The draft transaction was rolled back.");
 
-            log.Info("DRAFT SHEET AUTO-LAYOUT OK at scale 1:" +
-                fittedScale + " Sheet=" + sheet.SheetNumber);
-            result.Message = "Draft Plan + W1-W4 created and laid out at 1:" +
-                fittedScale + " on " + sheet.SheetNumber + " / " +
-                sheet.Name;
-            log.Info("DRAFT SHEET COMPLETE Sheet=" +
-                sheet.Id.IntegerValue + " Number=" + sheet.SheetNumber +
-                " Views=" + string.Join(",", result.Views.Select(v =>
-                    v.Id.IntegerValue)));
+            result.Message = "2D Plan + 4 true Sections placed at 1:" +
+                fittedScale + " on " + sheet.SheetNumber +
+                " / " + sheet.Name;
+            log.Info("2D DRAFT SUCCESS SheetId=" +
+                sheet.Id.IntegerValue + " Views=" +
+                string.Join(",", result.Views.Select(x => x.Id.IntegerValue)) +
+                " Scale=1:" + fittedScale);
             return result;
         }
 
-        private static BoundingBoxXYZ Box(double x0, double y0, double z0,
-            double x1, double y1, double z1)
+        private static ViewPlan GetOrCreatePlan(Document doc,
+            string name, ViewFamilyType type, Level level)
         {
-            return new BoundingBoxXYZ
+            View existing = new FilteredElementCollector(doc)
+                .OfClass(typeof(View)).Cast<View>()
+                .FirstOrDefault(v => !v.IsTemplate && v.Name == name);
+            if (existing != null)
             {
-                Transform = Transform.Identity,
-                Min = new XYZ(x0, y0, z0),
-                Max = new XYZ(x1, y1, z1)
+                ViewPlan reuse = existing as ViewPlan;
+                if (reuse == null)
+                    throw new InvalidOperationException(
+                        name + " exists but is not a Floor Plan.");
+                return reuse;
+            }
+            ViewPlan plan = ViewPlan.Create(doc, type.Id, level.Id);
+            plan.Name = name;
+            return plan;
+        }
+
+        private static void ConfigurePlan(ViewPlan plan,
+            double minX, double minY, double maxX, double maxY,
+            double minZ, double maxZ, double centerZ)
+        {
+            // PlanViewRange offsets are relative to the associated level,
+            // not absolute project coordinates.
+            double elevation = plan.GenLevel.Elevation;
+            double cut = centerZ;
+            if (cut <= minZ + UnitUtil.MmToFt(100) ||
+                cut >= maxZ - UnitUtil.MmToFt(100))
+                cut = minZ + (maxZ - minZ) * 0.55;
+            var range = plan.GetViewRange();
+            range.SetLevelId(PlanViewPlane.TopClipPlane,
+                plan.GenLevel.Id);
+            range.SetLevelId(PlanViewPlane.CutPlane,
+                plan.GenLevel.Id);
+            range.SetLevelId(PlanViewPlane.BottomClipPlane,
+                plan.GenLevel.Id);
+            range.SetLevelId(PlanViewPlane.ViewDepthPlane,
+                plan.GenLevel.Id);
+            range.SetOffset(PlanViewPlane.TopClipPlane,
+                maxZ - elevation);
+            range.SetOffset(PlanViewPlane.CutPlane,
+                cut - elevation);
+            range.SetOffset(PlanViewPlane.BottomClipPlane,
+                minZ - elevation);
+            range.SetOffset(PlanViewPlane.ViewDepthPlane,
+                minZ - elevation - UnitUtil.MmToFt(50));
+            plan.SetViewRange(range);
+            plan.CropBoxActive = true;
+            plan.CropBoxVisible = false;
+
+            // XY crop in view-local coordinates; Revit supplies the
+            // level-aligned plan transform, typically identity orientation.
+            BoundingBoxXYZ crop = plan.CropBox;
+            Transform inverse = crop.Transform.Inverse;
+            XYZ p0 = inverse.OfPoint(new XYZ(minX, minY, cut));
+            XYZ p1 = inverse.OfPoint(new XYZ(maxX, maxY, cut));
+            crop.Min = new XYZ(Math.Min(p0.X, p1.X),
+                Math.Min(p0.Y, p1.Y), crop.Min.Z);
+            crop.Max = new XYZ(Math.Max(p0.X, p1.X),
+                Math.Max(p0.Y, p1.Y), crop.Max.Z);
+            plan.CropBox = crop;
+            plan.Scale = 50;
+        }
+
+        private static ViewSection GetOrCreateSection(Document doc,
+            string name, ViewFamilyType sectionType,
+            Line axis, XYZ midpoint, XYZ outward,
+            double bottomZ, double topZ, double pad)
+        {
+            View existing = new FilteredElementCollector(doc)
+                .OfClass(typeof(View)).Cast<View>()
+                .FirstOrDefault(v => !v.IsTemplate && v.Name == name);
+            if (existing != null)
+            {
+                ViewSection reuse = existing as ViewSection;
+                if (reuse == null)
+                    throw new InvalidOperationException(
+                        name + " exists but is not a Section.");
+                return reuse;
+            }
+
+            // Transform of a section: BasisX points RIGHT on paper;
+            // BasisY points UP; BasisZ points OUT toward the viewer.
+            XYZ up = XYZ.BasisZ;
+            XYZ viewOut = outward.Normalize();
+            XYZ right = up.CrossProduct(viewOut).Normalize();
+            if (right.GetLength() < 1e-9)
+                throw new InvalidOperationException("Invalid section axes.");
+            Transform frame = Transform.Identity;
+            frame.Origin = new XYZ(midpoint.X, midpoint.Y,
+                (bottomZ + topZ) * 0.5);
+            frame.BasisX = right;
+            frame.BasisY = up;
+            frame.BasisZ = viewOut;
+
+            // Tight section with small depth toward the manhole.
+            // Depth behind the front wall is intentionally limited to
+            // avoid capturing the opposite wall through an opening.
+            double halfW = axis.Length * 0.5 + pad;
+            double halfH = (topZ - bottomZ) * 0.5;
+            var sectionBox = new BoundingBoxXYZ
+            {
+                Transform = frame,
+                Min = new XYZ(-halfW, -halfH,
+                    -UnitUtil.MmToFt(350)),
+                Max = new XYZ(halfW, halfH,
+                    UnitUtil.MmToFt(200))
             };
-        }
-
-        private static View3D GetOrCreate(Document doc, string name,
-            ViewFamilyType viewType)
-        {
-            View3D v = new FilteredElementCollector(doc)
-                .OfClass(typeof(View3D)).Cast<View3D>()
-                .FirstOrDefault(x => !x.IsTemplate && x.Name == name);
-            if (v == null)
-            {
-                v = View3D.CreateIsometric(doc, viewType.Id);
-                v.Name = name;
-            }
-            if (v.IsPerspective)
-                throw new InvalidOperationException(
-                    "Draft view must be orthographic: " + name);
-            v.Scale = 50; // first physical prototype, change manually if needed
-            v.DisplayStyle = DisplayStyle.HLR;
-            return v;
-        }
-
-        private static void Orient(View3D v, XYZ eye, XYZ up,
-            XYZ forward, BoundingBoxXYZ section)
-        {
-            v.SetOrientation(new ViewOrientation3D(eye, up, forward));
-            v.IsSectionBoxActive = true;
-            v.SetSectionBox(section);
-            // Revit maintains a separate view-aligned CropBox whose
-            // initial size can reflect the ENTIRE project. A small
-            // SectionBox does NOT automatically shrink the sheet viewport.
-            // Convert all EIGHT world-space section-box corners into the
-            // current crop-box (view-local) coordinate system.
-            v.CropBoxActive = true;
-            v.CropBoxVisible = false;
-            // Refresh Revit's local crop coordinate system after changing
-            // camera orientation and section box.
-            v.Document.Regenerate();
-            BoundingBoxXYZ current = v.CropBox;
-            if (current == null)
-                throw new InvalidOperationException(
-                    "Revit did not expose a CropBox for " + v.Name);
-
-            Transform inverse = current.Transform.Inverse;
-            Transform source = section.Transform;
-            double loX = double.MaxValue, loY = double.MaxValue;
-            double loZ = double.MaxValue;
-            double hiX = double.MinValue, hiY = double.MinValue;
-            double hiZ = double.MinValue;
-            double[] xs = { section.Min.X, section.Max.X };
-            double[] ys = { section.Min.Y, section.Max.Y };
-            double[] zs = { section.Min.Z, section.Max.Z };
-            foreach (double x in xs)
-            foreach (double y in ys)
-            foreach (double z in zs)
-            {
-                XYZ projected = inverse.OfPoint(
-                    source.OfPoint(new XYZ(x, y, z)));
-                loX = Math.Min(loX, projected.X);
-                loY = Math.Min(loY, projected.Y);
-                loZ = Math.Min(loZ, projected.Z);
-                hiX = Math.Max(hiX, projected.X);
-                hiY = Math.Max(hiY, projected.Y);
-                hiZ = Math.Max(hiZ, projected.Z);
-            }
-
-            // 30 mm paper-independent MODEL padding is already present
-            // in the section envelope. This extra 20 mm prevents touching.
-            double extra = UnitUtil.MmToFt(20);
-            current.Min = new XYZ(loX - extra, loY - extra,
-                loZ - extra);
-            current.Max = new XYZ(hiX + extra, hiY + extra,
-                hiZ + extra);
-            // The CropBox setter ignores the supplied Transform and
-            // keeps Revit's view orientation. Preserve current.Transform.
-            v.CropBox = current;
+            ViewSection section = ViewSection.CreateSection(doc,
+                sectionType.Id, sectionBox);
+            section.Name = name;
+            section.CropBoxActive = true;
+            section.CropBoxVisible = false;
+            section.Scale = 50;
+            section.DisplayStyle = DisplayStyle.HLR;
+            return section;
         }
     }
 }
