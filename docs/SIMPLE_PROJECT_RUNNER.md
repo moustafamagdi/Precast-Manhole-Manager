@@ -83,3 +83,45 @@ The issue register lives on the current workstation, not cloud
 storage. It is tied to the saved model path and is never silently
 deleted. The generated 3D views live inside the RVT. The exporter
 reads saved carriers, not raw preview rows.
+
+
+## Milestone 2: first draft sheet for ONE clean manhole
+
+The same simple window now includes **3 Draft Sheet** alongside
+Scan / Review / 3D / Export existing Excel. Select ONE foundation that
+is not currently isolated and whose wall audit finds no unmanaged cuts.
+Use a detached/saved test RVT copy.
+
+Click Draft Sheet and explicitly confirm that this is a **DRAFT**
+model-view prototype. In a single transaction the service creates or
+reuses an orthographic top **PLAN** view and four wall-facing
+orthographic **W1–W4** views at initial **1:50** scale, with narrow
+section boxes around each wall and a plan box around the recovered
+four-wall footprint. It creates one named `MH_<FoundationId>_DRAFT`
+Revit sheet, preferring an available A0/A1 title block type. Viewports
+are placed in five predefined slots and all are checked for sheet
+boundary overflow and overlap. A failure causes a transaction rollback;
+the text log explains whether the model geometry, title block or
+viewport fit needs adjustment. Existing draft view names are reused and
+a manually edited existing five-viewport sheet is never deleted.
+
+**This is intentionally NOT the final fabrication sheet**: views are
+orthographic 3D (not ViewPlan/ViewSection) with no automatic dimensions
+or opening annotations. It does not modify walls, void cuts, ducts,
+openings, stored carriers or numbering. It provides the first visible
+layout to validate view orientations and scale before switching to
+true annotated Plan and four Elevations.
+
+For first acceptance testing:
+1. Update branch and restart Revit.
+2. Select a **clean** foundation in the single window, preferably a
+   small uncomplicated manhole with clearly visible 4 walls.
+3. Click **3 Draft Sheet**. If the project lacks a sufficiently large
+   titleblock, the operation will roll back and say why.
+4. Verify PLAN looks down, W1–W4 look square onto the expected walls,
+   the section boxes don't contain neighboring manholes, and viewports
+   do not overlap. Save the RVT to keep the draft sheet.
+5. Share one screenshot of the sheet and its TXT log. The subsequent
+   milestone will use that geometry to generate true dimensioned
+   fabrication elevations and an opening schedule, after one
+   controlled clean-manhole opening-sync test.
