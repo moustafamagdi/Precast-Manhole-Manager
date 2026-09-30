@@ -10,7 +10,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, ReviewOne, Make3D, DraftSheet, SixRowSheet, ExportExcel
+        Close, Scan, ReviewOne, Make3D, DraftSheet, SevenRowSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -72,7 +72,7 @@ namespace Hatco.PrecastManholeManager.UI
             Button review = Button("2   Review Selected", 170, controls);
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
-            Button six = Button("3   Test 6-Row Sheet", 175, controls);
+            Button six = Button("3   Test 7-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
             top.Children.Add(new TextBlock
@@ -81,8 +81,8 @@ namespace Hatco.PrecastManholeManager.UI
                     "Review Selected performs the detailed MEP/opening inspection " +
                     "without modifying the model. 3D creates a cropped Revit " +
                     "view. Create 2D Views makes a real Floor Plan and " +
-                    "four Sections for one selected manhole. The test six-row " +
-                    "sheet attempts up to six clean, unplaced manholes at " +
+                    "four Sections for one selected manhole. The test seven-row " +
+                    "sheet attempts up to seven clean, unplaced manholes at " +
                     "1:25 without touching your existing manual sheet. Excel reads " +
                     "only previously SAVED fabrication data.",
                 TextWrapping = TextWrapping.Wrap,
@@ -185,15 +185,15 @@ namespace Hatco.PrecastManholeManager.UI
                     return;
                 }
                 if (MessageBox.Show(this,
-                    "Create ONE TEST SHEET with up to six eligible manholes " +
+                    "Create ONE TEST SHEET with up to seven eligible manholes " +
                     "at 1:25? Each row: PLAN, W1, W2, W3, W4. " +
                     "A new sheet will be created; your manually arranged " +
                     "sheet will NOT be edited. For the same titleblock, " +
                     "open your sample sheet BEFORE launching this tool. " +
                     "Large/placed/problematic rows will be skipped.",
-                    "Test six-row sheet", MessageBoxButton.YesNo) !=
+                    "Test seven-row sheet", MessageBoxButton.YesNo) !=
                     MessageBoxResult.Yes) return;
-                Choose(ProjectAction.SixRowSheet, false);
+                Choose(ProjectAction.SevenRowSheet, false);
             };
             export.Click += (s, e) => Choose(ProjectAction.ExportExcel, false);
             _grid.MouseDoubleClick += (s, e) =>
