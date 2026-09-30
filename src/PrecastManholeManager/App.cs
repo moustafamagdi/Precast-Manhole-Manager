@@ -82,7 +82,7 @@ namespace Hatco.PrecastManholeManager
                     panel,
                     new PushButtonData(
                         "TestVirtualMep",
-                        "Test Virtual\\nMEP + Audit",
+                        "Test Virtual\nMEP + Audit",
                         assemblyPath,
                         typeof(Commands.TestVirtualMepCommand).FullName)
                     {
