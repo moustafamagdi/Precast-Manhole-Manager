@@ -81,3 +81,38 @@ possible external cut.
    `UNCHANGED`. If it fails, inspect the rollback reason before altering code.
 5. Send both the log and unified review CSV. Do not try Batch All writes
    until the single-manhole test is stable.
+
+
+## Known pinned Model-In-Place Void case — 5046777
+
+The real-model read-only plan for foundation **5144998** detected
+`Wall.FindInserts` member **5046777** on wall **5044417**.
+The user confirmed it is a **pinned Model-In-Place Void**.
+
+The updated plan classifies family instances whose owning
+`Family.IsInPlace` is true separately from Revit native `Opening`
+objects and from `InstanceVoidCutUtils` relations. It checks all OTHER
+walls in the current host document; if the instance is returned as an
+insert on an outside wall, the cleanup plan remains **BLOCKED**.
+
+The single-manhole experimental confirmation window now includes an
+additional explicit **UNPIN & DELETE in-place cutter instances** choice.
+When approved, the atomic transaction validates the cutter/target wall
+relationship again; it first tests deleting the instance in a
+rolled-back `SubTransaction`, rejecting unexpected cascading element
+deletions. It then unpins the instance (if pinned) and deletes the
+**instance**, not its family type, followed by regeneration. Failure
+rolls back the entire manhole transaction including the pin state.
+
+**Important limitation:** `Wall.FindInserts` and cascading element ID
+checks do not exhaustively prove that a void has no side effects on
+foundations or other non-wall elements. The user must visually verify
+that before explicitly opting into this destructive test on a
+**disposable detached RVT copy**. Do not enable unattended Batch All
+cleanup of in-place cutters based on this experiment alone.
+
+After pull/rebuild, test **Test Clean Sync** on foundation **5144998**;
+send the new TXT log if 5046777 is classified as in-place or if the
+program still blocks it. If it is not recognized as `FamilyInstance`
+with an in-place owning family, leave it blocked and inspect the new
+reported runtime class instead of forcing deletion.
