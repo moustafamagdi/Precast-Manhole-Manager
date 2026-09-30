@@ -282,3 +282,30 @@ the user's formatted sheet.
 seven-row sheet with other unplaced, clean foundations. If the
 MH_SEC template hides the exterior wall surface, inspect its
 discipline/detail/category visibility before changing geometry.
+
+
+## 2026-09-30: six-row layout v2
+
+The seven-row live-project test (13:20–13:29) tried 12 candidates,
+but its 114.7 mm row left only 99.7 mm for drawings after the title
+band. Plans measuring 106.8–110.8 mm therefore failed, and the empty
+sheet was rolled back.
+
+Active action is now **Test 6-Row Sheet** using
+`SixRowLayoutSheetService`. It has six 1:25 rows, each containing
+PLAN and four exterior-facing wall Sections (W1–W4). It reserves a
+12 mm title band and leaves approximately 118.8 mm drawing height
+on the previously logged titleblock (1181.1 x 831 mm). The runner
+tries at most 8 unplaced eligible foundations to fill 6 successful
+rows, so it does not waste minutes trying 12 known-tight cases.
+It still checks exact viewport and title outlines and skips only
+non-fitting rows; it does not silently scale below 1:25. The older
+six-row test and manually arranged reference sheets are preserved.
+The new sheet name is `HATCO_PRECAST_6MH_LAYOUT_V2_01`, preventing
+accidental overwrites. The obsolete seven-row implementation was
+deleted from this branch (remains in Git history).
+
+Test by opening the preferred manual reference sheet, restarting
+Revit after updating the DLL, and selecting **Test 6-Row Sheet**.
+The code has not been compiled or tested in the user's Revit host
+by the assistant. Report any TXT errors and resulting sheet image.
