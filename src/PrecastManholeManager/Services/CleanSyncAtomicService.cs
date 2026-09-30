@@ -219,15 +219,46 @@ namespace Hatco.PrecastManholeManager.Services
                             // must not disappear.
                             foreach (ElementId id in nested)
                                 permitted.Add(id.IntegerValue);
-                            if (removed.Any(id => !permitted.Contains(
-                                id.IntegerValue)))
-                            {
-                                trial.RollBack();
-                                throw new InvalidOperationException(
-                                    "In-place cutter would cascade-delete additional " +
-                                    "elements. Cutter=" + pair.Key);
-                            }
+                            List<int> extraIds = removed
+                                .Select(x => x.IntegerValue)
+                                .Where(id => !permitted.Contains(id))
+                                .Distinct().OrderBy(id => id).ToList();
+                            // IMPORTANT: Inspect only AFTER rolling back the
+                            // trial deletion, since deleted elements cannot be
+                            // reliably retrieved while the trial is open.
                             trial.RollBack();
+                            if (extraIds.Count > 0)
+                            {
+                                log.Warn("INPLACE DELETE DRY-RUN Cutter=" +
+                                    pair.Key + " WouldDeleteIds=" +
+                                    string.Join(",", removed.Select(x => x.IntegerValue)) +
+                                    " NestedIds=" + string.Join(",", permitted) +
+                                    " UnexpectedIds=" + string.Join(",", extraIds));
+                                foreach (int extraId in extraIds)
+                                {
+                                    Element affected = doc.GetElement(
+                                        new ElementId(extraId));
+                                    FamilyInstance affectedInstance =
+                                        affected as FamilyInstance;
+                                    log.Warn("INPLACE CASCADE DETAIL Cutter=" +
+                                        pair.Key + " Affected=" + extraId +
+                                        " Class=" + (affected?.GetType().FullName ?? "NOT_FOUND_AFTER_ROLLBACK") +
+                                        " Category=" + (affected?.Category?.Name ?? "<none>") +
+                                        " Name=" + (affected?.Name ?? "<none>") +
+                                        " Pinned=" +
+                                            (affected == null ? "<unknown>" :
+                                                affected.Pinned.ToString()) +
+                                        " Family=" +
+                                            (affectedInstance?.Symbol?.Family?.Name ?? "<none>"));
+                                }
+                                throw new InvalidOperationException(
+                                    "In-place cutter deletion would remove " +
+                                    extraIds.Count + " additional elements. " +
+                                    "Cutter=" + pair.Key +
+                                    " ExtraIds=" + string.Join(",", extraIds) +
+                                    ". No model changes were committed. " +
+                                    "Inspect INPLACE CASCADE DETAIL in log.");
+                            }
                         }
 
                         // Re-fetch after trial rollback: old managed wrappers
