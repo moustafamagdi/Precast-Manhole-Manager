@@ -85,7 +85,9 @@ namespace Hatco.PrecastManholeManager.UI
             var audit = result.Audit;
             top.Children.Add(new TextBlock
             {
-                Text = "Wall audit: Edited profiles " + audit.ProfileEditedWalls +
+                Text = "MEP Links: " + result.VirtualScan.LoadedLinks +
+                    " loaded / " + result.VirtualScan.UnavailableLinks +
+                    " unavailable   |   Wall audit: Edited profiles " + audit.ProfileEditedWalls +
                     ", unknown profiles " + audit.ProfileUnknownWalls +
                     ", native manual openings " + audit.NativeUnmanaged +
                     ", recorded void cuts " + audit.VoidCutRelations +
@@ -157,6 +159,7 @@ namespace Hatco.PrecastManholeManager.UI
             Add(grid, "Source ID", "SourceId", 95);
             Add(grid, "MEP Size", "SourceSize", 105);
             Add(grid, "Gap (mm)", "GapMm", 90);
+            Add(grid, "Approach °", "ApproachAngleDeg", 90);
             Add(grid, "Slope %", "SlopePercent", 78);
             Add(grid, "Opening W×H", "OpeningSize", 130);
             Add(grid, "Opening bottom from base", "VerticalReference", 165);
