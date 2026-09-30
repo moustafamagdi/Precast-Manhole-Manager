@@ -58,3 +58,15 @@ Assert-That (!(Test-JoinScope $true @(100) $scope $walls)) 'An incomplete failur
 Assert-That (!(Test-JoinScope $true @() $scope $walls)) 'An empty failure element list is rejected'
 Assert-That (!(Test-JoinScope $false @(100,101) $scope $walls)) 'Unknown failure kinds are not resolved as joins'
 Assert-That (!(Test-JoinScope $true @(100,101) @() @())) 'Legacy callers without an explicit scope cannot detach joins'
+
+$tableMatcher = $assembly.GetType('Hatco.PrecastManholeManager.Services.FirstProductionSheetService').GetMethod('IsLegacyTableText', [Reflection.BindingFlags]'NonPublic,Static')
+function Test-TableText([string]$text) {
+    return [bool]$tableMatcher.Invoke($null, [object[]]@($text))
+}
+$header = 'MH-001 | OPENING SETOUT - PRELIMINARY / VERIFY WALL MEP SOURCE CLEAR OPENING (mm) BOTTOM ABOVE BASE (mm)'
+Assert-That (Test-TableText $header) 'Original generated opening table is recognized'
+Assert-That (Test-TableText ($header.Replace(' ', "`r`n`t"))) 'Paragraph breaks and tabs do not prevent legacy table recognition'
+Assert-That (Test-TableText ($header.Replace(' ', [string][char]0x00A0).ToLowerInvariant())) 'Non-breaking spaces and case changes are supported'
+Assert-That (Test-TableText ($header.Replace('OPENING SETOUT - PRELIMINARY / VERIFY', 'PARTIAL LINK COVERAGE - NOT FOR ISSUE'))) 'Old partial-link tables can be migrated'
+Assert-That (!(Test-TableText 'General note: check MEP SOURCE and BOTTOM ABOVE BASE (mm)')) 'Unrelated manual notes are not treated as opening tables'
+Assert-That (!(Test-TableText '')) 'Empty notes are not treated as opening tables'

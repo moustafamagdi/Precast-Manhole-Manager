@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Autodesk.Revit.DB;
+using Autodesk.Revit.DB.ExtensibleStorage;
 using Hatco.PrecastManholeManager.Infrastructure;
 
 namespace Hatco.PrecastManholeManager.Services
@@ -142,6 +143,7 @@ namespace Hatco.PrecastManholeManager.Services
                 new XYZ(left + UnitUtil.MmToFt(5),
                     rowBottom - UnitUtil.MmToFt(28), 0),
                 noteWidth, schedule, textOptions);
+            MarkTable(note, foundation);
             doc.Regenerate();
             BoundingBoxXYZ noteBounds = note.get_BoundingBox(sheet);
             if (noteBounds == null ||
@@ -172,26 +174,121 @@ namespace Hatco.PrecastManholeManager.Services
         internal static void Refresh(Document doc, Element foundation, ViewSheet sheet,
             IList<UnifiedOpeningReviewRow> actual, DiagnosticLogger log)
         {
-            // Reuse the existing annotation and viewports, including manual positions.
-            var notes = new FilteredElementCollector(doc, sheet.Id).OfClass(typeof(TextNote))
-                .Cast<TextNote>().Where(n => n.Text.Contains("MEP SOURCE") &&
-                    n.Text.Contains("BOTTOM ABOVE BASE (mm)") &&
-                    (n.Text.Contains("OPENING SETOUT") || n.Text.Contains("PARTIAL LINK COVERAGE")))
-                .ToList();
-            if (notes.Count != 1)
-                throw new InvalidOperationException("Cannot uniquely identify the existing opening table. " +
-                    "Restore the tool's table before updating; no changes will be committed.");
-            TextNote note = notes[0];
-            note.Text = ScheduleText(doc, foundation, actual, log);
-            doc.Regenerate();
-            BoundingBoxXYZ bounds = note.get_BoundingBox(sheet);
-            if (bounds == null || bounds.Min.X < sheet.Outline.Min.U ||
-                bounds.Max.X > sheet.Outline.Max.U || bounds.Min.Y < sheet.Outline.Min.V ||
-                bounds.Max.Y > sheet.Outline.Max.V)
-                throw new InvalidOperationException("Updated opening table exceeds sheet bounds.");
+            // OwnerViewId includes hidden notes, unlike a visible-in-view collector.
+            var allNotes = new FilteredElementCollector(doc).OfClass(typeof(TextNote))
+                .Cast<TextNote>().Where(n => n.OwnerViewId == sheet.Id).ToList();
+            var notes = allNotes.Where(n => IsOwnedTable(n, foundation)).ToList();
+            if (notes.Count == 0)
+                notes = allNotes.Where(n => !HasTableMarker(n) && IsLegacyTableText(n.Text)).ToList();
+            log.Info("OPENING TABLE LOOKUP Sheet=" + sheet.Id.IntegerValue +
+                " TextNotes=" + allNotes.Count + " MatchingTables=" + notes.Count);
+            foreach (TextNote candidate in allNotes)
+                log.Info("SHEET TEXT NOTE Id=" + candidate.Id.IntegerValue +
+                    " Text=" + (candidate.Text ?? "").Replace("\r", " ").Replace("\n", " "));
+
+            if (notes.Count == 0)
+            {
+                TextNoteType type = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType))
+                    .Cast<TextNoteType>().FirstOrDefault();
+                if (type == null)
+                    throw new InvalidOperationException("Load a text type for the opening table.");
+                double left = sheet.Outline.Min.U + UnitUtil.MmToFt(27);
+                double right = sheet.Outline.Max.U - UnitUtil.MmToFt(172);
+                double top = sheet.Outline.Min.V +
+                    (sheet.Outline.Max.V - sheet.Outline.Min.V) * 0.43 - UnitUtil.MmToFt(28);
+                if (right - left < UnitUtil.MmToFt(100))
+                    throw new InvalidOperationException("Sheet has insufficient width for an opening table.");
+                TextNote created = TextNote.Create(doc, sheet.Id,
+                    new XYZ(left, top, 0), right - left,
+                    ScheduleText(doc, foundation, actual, log), new TextNoteOptions(type.Id));
+                doc.Regenerate();
+                // Do not cover existing manual annotations or viewports when recovering a missing table.
+                BoundingBoxXYZ box = created.get_BoundingBox(sheet);
+                bool overlaps = allNotes.Any(n => Overlaps(box, n.get_BoundingBox(sheet)));
+                foreach (Viewport port in new FilteredElementCollector(doc).OfClass(typeof(Viewport))
+                    .Cast<Viewport>().Where(v => v.SheetId == sheet.Id))
+                {
+                    overlaps |= Overlaps(box, port.GetBoxOutline());
+                    overlaps |= Overlaps(box, port.GetLabelOutline());
+                }
+                if (overlaps)
+                    throw new InvalidOperationException("Missing opening table: its recovery area contains " +
+                        "other sheet content. Free the lower table area and run Generate again.");
+                notes.Add(created);
+                log.Info("OPENING TABLE RECREATED Id=" + created.Id.IntegerValue);
+            }
+            // Copied tool tables on this sheet are refreshed consistently; no note is deleted.
+            foreach (TextNote note in notes)
+            {
+                note.Text = ScheduleText(doc, foundation, actual, log);
+                MarkTable(note, foundation);
+                doc.Regenerate();
+                BoundingBoxXYZ bounds = note.get_BoundingBox(sheet);
+                if (bounds == null || bounds.Min.X < sheet.Outline.Min.U ||
+                    bounds.Max.X > sheet.Outline.Max.U || bounds.Min.Y < sheet.Outline.Min.V ||
+                    bounds.Max.Y > sheet.Outline.Max.V)
+                    throw new InvalidOperationException("Updated opening table exceeds sheet bounds.");
+                log.Info("OPENING TABLE UPDATED Id=" + note.Id.IntegerValue);
+            }
             sheet.Name = "MH_" + foundation.Id.IntegerValue + "_OPENINGS_R01";
             log.Info("PRODUCTION SHEET UPDATED " + sheet.Id.IntegerValue +
                 " Openings=" + actual.Count + " Existing layout preserved.");
+        }
+
+        private static readonly Guid TableSchemaId = new Guid("628949B5-F6E6-49E6-92C0-2C7B169DC592");
+
+        private static void MarkTable(TextNote note, Element foundation)
+        {
+            Schema schema = Schema.Lookup(TableSchemaId);
+            if (schema == null)
+            {
+                var builder = new SchemaBuilder(TableSchemaId);
+                builder.SetSchemaName("HatcoManholeOpeningTable");
+                builder.SetReadAccessLevel(AccessLevel.Public);
+                builder.SetWriteAccessLevel(AccessLevel.Public);
+                builder.AddSimpleField("FoundationUniqueId", typeof(string));
+                schema = builder.Finish();
+            }
+            var entity = new Entity(schema);
+            entity.Set<string>(schema.GetField("FoundationUniqueId"), foundation.UniqueId);
+            note.SetEntity(entity);
+        }
+
+        private static bool HasTableMarker(TextNote note)
+        {
+            Schema schema = Schema.Lookup(TableSchemaId);
+            return schema != null && note.GetEntity(schema).IsValid();
+        }
+
+        private static bool IsOwnedTable(TextNote note, Element foundation)
+        {
+            Schema schema = Schema.Lookup(TableSchemaId);
+            if (schema == null) return false;
+            Entity entity = note.GetEntity(schema);
+            return entity.IsValid() && entity.Get<string>(schema.GetField("FoundationUniqueId")) ==
+                foundation.UniqueId;
+        }
+
+        internal static bool IsLegacyTableText(string text)
+        {
+            // Revit text may contain paragraph breaks, tabs and non-breaking spaces.
+            string normalized = new string((text ?? "").Where(c => !char.IsWhiteSpace(c))
+                .Select(char.ToUpperInvariant).ToArray());
+            return normalized.Contains("MEPSOURCE") && normalized.Contains("CLEAROPENING(MM)") &&
+                normalized.Contains("BOTTOMABOVEBASE(MM)") &&
+                (normalized.Contains("OPENINGSETOUT") || normalized.Contains("PARTIALLINKCOVERAGE"));
+        }
+
+        private static bool Overlaps(BoundingBoxXYZ a, BoundingBoxXYZ b)
+        {
+            return a != null && b != null && a.Min.X < b.Max.X && a.Max.X > b.Min.X &&
+                a.Min.Y < b.Max.Y && a.Max.Y > b.Min.Y;
+        }
+
+        private static bool Overlaps(BoundingBoxXYZ a, Outline b)
+        {
+            return a != null && b != null && a.Min.X < b.MaximumPoint.X &&
+                a.Max.X > b.MinimumPoint.X && a.Min.Y < b.MaximumPoint.Y && a.Max.Y > b.MinimumPoint.Y;
         }
 
         private static string ScheduleText(Document doc, Element foundation,

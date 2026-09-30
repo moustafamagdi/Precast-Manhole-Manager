@@ -487,3 +487,13 @@ Generate now permits the Revit `DetachElements` failure resolution only for a re
 Diagnostics now record failure definition GUID, severity, failing element IDs and additional element IDs, plus any attempted join resolution. The old log omitted IDs, so a successful runtime resolution is not yet established. The next Revit run must verify geometry, updated sheet data, and any reported local join changes.
 
 Implementation references: Autodesk [failure handling](https://help.autodesk.com/cloudhelp/2024/ENU/Revit-API/files/Revit_API_Developers_Guide/Advanced_Topics/Failure_Posting_and_Handling/Revit_API_Revit_API_Developers_Guide_Advanced_Topics_Failure_Posting_and_Handling_Handling_Failures_html.html) and the installed Revit 2024 RevitAPI.xml. Release build and 17 compiled-code clearance/scope assertions pass; no live Revit transaction was run during this fix.
+
+## Opening table recovery (2026-09-30, 14:35 log)
+
+The 14:35 run used 50 mm clearance and retained all four existing openings. It failed when the sheet refresh could not find exactly one table using literal text fragments. The log did not record the note count/content, so the precise mismatch (missing, duplicated, hidden or differently formatted text) was not established.
+
+New tables carry Extensible Storage with the foundation UniqueId. Refresh finds owned TextNotes across the document by OwnerViewId, including hidden notes, and uses the marker before legacy text matching. Legacy matching ignores whitespace and letter case while requiring the generated table headings. Matching legacy tables are marked during refresh; copied matching tables are updated without deleting or repositioning them. A table marked for a different foundation is never adopted by text.
+
+If no table is found, Generate recreates it in the standard lower sheet area, checking overlap against existing notes, viewports and viewport labels, and checking sheet bounds. A conflicting recovery area still aborts atomically with a specific message. The log now includes sheet ID, note IDs, text and match counts. Layout and existing text-note types are retained when updating a found table.
+
+Release build and 23 calculation/scope/text-recognition assertions pass. Creation, recovery placement and Extensible Storage persistence require the next Revit run. The 50 mm run does not validate the earlier join-resolution fix at 100 mm.
