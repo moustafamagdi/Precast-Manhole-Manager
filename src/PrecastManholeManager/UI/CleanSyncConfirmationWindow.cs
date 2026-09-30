@@ -11,6 +11,7 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly CheckBox _profiles;
         private readonly CheckBox _manual;
         private readonly CheckBox _voidCuts;
+        private readonly CheckBox _inPlace;
         private readonly CheckBox _virtual;
         private readonly CheckBox _apply;
         private readonly CheckBox _linksVerified;
@@ -51,6 +52,9 @@ namespace Hatco.PrecastManholeManager.UI
                 plan.ManagedOpeningIds.Count + " | Actual hits: " +
                 review.Rows.FindAll(x => !x.IsVirtual).Count +
                 " | Virtual candidates: " + plan.VirtualCount));
+            root.Children.Add(Line("In-place cutter candidates: " +
+                plan.InPlaceCutterCount + " (pinned instances will be unpinned " +
+                "before targeted deletion, if separately approved)."));
             root.Children.Add(Line("Sloped/skewed virtual deferred: " +
                 plan.SlopedVirtualCount +
                 " (will NOT be cut until exact projected envelope is validated)."));
@@ -85,6 +89,12 @@ namespace Hatco.PrecastManholeManager.UI
                 "REMOVE " + plan.VoidCutCount +
                 " unattached void cutting RELATIONSHIPS on selected walls only",
                 plan.VoidCutCount > 0);
+            _inPlace = Box(root,
+                "UNPIN & DELETE " + plan.InPlaceCutterCount +
+                " classified in-place cutter INSTANCE(S). Only the selected " +
+                "manhole's walls were checked for other hosts; verify the " +
+                "cutter does not affect foundations/other non-wall elements.",
+                plan.InPlaceCutterCount > 0);
             _virtual = Box(root,
                 "Create straight/perpendicular VIRTUAL endpoint cuts (not sloped/skewed)",
                 false);
@@ -153,7 +163,8 @@ namespace Hatco.PrecastManholeManager.UI
                      (_linksVerified != null && _linksVerified.IsChecked == true)) &&
                     (plan.ProfileResetCount == 0 || _profiles.IsChecked == true) &&
                     (plan.VoidCutCount == 0 || _voidCuts.IsChecked == true) &&
-                    (plan.ManualOpeningIds.Count == 0 || _manual.IsChecked == true);
+                    (plan.ManualOpeningIds.Count == 0 || _manual.IsChecked == true) &&
+                    (plan.InPlaceCutterCount == 0 || _inPlace.IsChecked == true);
             };
             _confirmation.TextChanged += (s, e) => refresh();
             _apply.Checked += (s, e) => refresh();
@@ -163,7 +174,8 @@ namespace Hatco.PrecastManholeManager.UI
                 _linksVerified.Checked += (s, e) => refresh();
                 _linksVerified.Unchecked += (s, e) => refresh();
             }
-            foreach (CheckBox cb in new[] { _profiles, _manual, _voidCuts })
+            foreach (CheckBox cb in new[] {
+                _profiles, _manual, _voidCuts, _inPlace })
             {
                 cb.Checked += (s, e) => refresh();
                 cb.Unchecked += (s, e) => refresh();
@@ -178,6 +190,7 @@ namespace Hatco.PrecastManholeManager.UI
                     ResetEditedProfiles = _profiles.IsChecked == true,
                     RemoveManualNative = _manual.IsChecked == true,
                     RemoveVoidCutRelations = _voidCuts.IsChecked == true,
+                    DeleteIsolatedInPlaceCutters = _inPlace.IsChecked == true,
                     IncludeStraightVirtual = _virtual.IsChecked == true,
                     RequiredLinksVerified = plan.UnavailableLinks == 0 ||
                         _linksVerified?.IsChecked == true
