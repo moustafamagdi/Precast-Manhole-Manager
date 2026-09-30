@@ -57,6 +57,7 @@ namespace Hatco.PrecastManholeManager.Commands
 
                     List<ManholeReviewIssue> issues =
                         ManholeReviewRegistry.Load(doc);
+                    ManholeReviewRegistry.ExportReadableCsv(doc, issues);
                     if (issues.Count == 0)
                     {
                         TaskDialog.Show("Manhole Review Queue",
@@ -66,7 +67,15 @@ namespace Hatco.PrecastManholeManager.Commands
                     }
 
                     var window = new ManholeReviewManagerWindow(issues, path);
-                    if (window.ShowDialog() != true || !window.CreateViews)
+                    if (window.ShowDialog() != true)
+                        return Result.Succeeded;
+                    if (window.StatusModified)
+                    {
+                        ManholeReviewRegistry.Save(doc, issues);
+                        ManholeReviewRegistry.ExportReadableCsv(doc, issues);
+                        return Result.Succeeded;
+                    }
+                    if (!window.CreateViews)
                         return Result.Succeeded;
 
                     int created = 0, skipped = 0;
@@ -120,6 +129,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     }
 
                     ManholeReviewRegistry.Save(doc, issues);
+                    ManholeReviewRegistry.ExportReadableCsv(doc, issues);
                     // RequestViewChange must run after the view transaction
                     // is closed. Create all views first, then show the first.
                     if (firstView != null)
