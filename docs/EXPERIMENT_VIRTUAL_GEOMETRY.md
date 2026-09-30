@@ -159,3 +159,16 @@ Do not use experimental data for site cutting until validation of face locations
 5. Repeat preview with *Trim Clearance Only* on a manhole known to have an oversized clearance.
 
 No automatic profile reset, void deletion or batch write should be attempted on this branch at this stage.
+
+
+## Nearby MEP diagnostics enhancement (2026-09-30)
+
+A three-duct test returned 3 nearby MEP centerlines but only 2 virtual candidates. The missing duct could be an actual finite-wall crossing, a tip already inside the wall, over the configured gap/angle, or outside the finite wall segment/height. Do not interpret the virtual candidate count as a count of all visible ducts.
+
+The read-only `Test Virtual MEP + Audit` command now outputs both:
+- `VirtualMepCandidates_*.csv`: eligible virtual extension proposals only.
+- `VirtualMepDiagnostics_*.csv`: **every nearby straight pipe/duct**, including ElementId, source link, category, size, and per-wall reason codes for missing virtual candidates.
+
+The approach deviation is measured in the **horizontal XY plane** separately from the duct's reported 3D slope. A line crossing an infinite wall plane is counted as an actual crossing only when its intersection is inside the finite wall length **and** vertical range. This test remains read-only and does not create missing candidates by relaxing safety rules.
+
+For the next user test, repeat on the same manhole and share both CSV files + TXT log to identify the third duct's exact ElementId and classification. Validate the 10 unavailable Revit links if the expected third duct is absent from the nearby list.
