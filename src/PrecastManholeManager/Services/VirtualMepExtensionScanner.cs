@@ -37,7 +37,9 @@ namespace Hatco.PrecastManholeManager.Services
         public int LoadedLinks { get; set; }
         public int UnavailableLinks { get; set; }
         public int NearbyMep { get; set; }
+        public int DiagnosedNonCandidates { get; set; }
         public string CsvPath { get; set; }
+        public string DiagnosticCsvPath { get; set; }
     }
 
     // Experimental diagnostic only. It extends LINE endpoints mathematically;
@@ -110,6 +112,7 @@ namespace Hatco.PrecastManholeManager.Services
             };
             double minNormalAlignment = Math.Cos(maxDeviationDeg * Math.PI / 180.0);
             var all = new List<VirtualMepCandidate>();
+            var rejectedRows = new List<string>();
 
             foreach (RevitLinkInstance link in new FilteredElementCollector(_doc)
                 .OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>())
@@ -144,6 +147,8 @@ namespace Hatco.PrecastManholeManager.Services
                         continue;
 
                     result.NearbyMep++;
+                    var diagnostic = new List<string>();
+                    bool hasActualCrossing = false;
                     foreach (var item in numbered)
                     {
                         Wall wall = item.Wall;
@@ -161,9 +166,14 @@ namespace Hatco.PrecastManholeManager.Services
 
                         double d0 = (p0 - a).DotProduct(normal);
                         double d1 = (p1 - a).DotProduct(normal);
-                        // Already crossed the host axis: handled by actual scanner,
-                        // even when the wall itself has holes/profile edits.
-                        if (d0 * d1 <= 0) continue;
+                        // Already crossed the host mid-plane: this is not a
+                        // virtual endpoint. Log it rather than dropping silently.
+                        if (d0 * d1 <= 0)
+                        {
+                            hasActualCrossing = true;
+                            diagnostic.Add("W" + item.Number + ":ACTUAL_PLANE_CROSSING");
+                            continue;
+                        }
 
                         for (int endpoint = 0; endpoint < 2; endpoint++)
                         {
@@ -174,28 +184,68 @@ namespace Hatco.PrecastManholeManager.Services
                             extension = extension.Normalize();
 
                             double signed = (tip - a).DotProduct(normal);
+                            // Approach deviation is PLAN/XY only; vertical duct
+                            // slope must not be counted against the wall angle.
+                            XYZ horizontal = new XYZ(extension.X, extension.Y, 0);
+                            if (horizontal.GetLength() < 1e-9)
+                            {
+                                diagnostic.Add("W" + item.Number + ":VERTICAL_AXIS");
+                                continue;
+                            }
+                            horizontal = horizontal.Normalize();
                             double inward = -Math.Sign(signed) *
-                                extension.DotProduct(normal);
-                            if (inward < minNormalAlignment) continue;
+                                horizontal.DotProduct(normal);
+                            double deviation = Math.Acos(Math.Min(1,
+                                Math.Max(-1, inward))) * 180.0 / Math.PI;
+                            if (inward < minNormalAlignment)
+                            {
+                                if (inward > 0)
+                                    diagnostic.Add("W" + item.Number + ":APPROACH_ANGLE_" +
+                                        F(deviation) + "_DEG");
+                                continue;
+                            }
 
                             double faceGapFt = Math.Abs(signed) - wall.Width * 0.5;
                             // Tip is already within wall thickness: actual-wall/void
                             // geometry needs separate inspection, not virtual extension.
-                            if (faceGapFt < -UnitUtil.MmToFt(5)) continue;
+                            if (faceGapFt < -UnitUtil.MmToFt(5))
+                            {
+                                diagnostic.Add("W" + item.Number + ":ENDPOINT_INSIDE_WALL");
+                                continue;
+                            }
                             double gapMm = UnitUtil.FtToMm(Math.Max(0, faceGapFt));
-                            if (gapMm > maxGapMm) continue;
+                            if (gapMm > maxGapMm)
+                            {
+                                diagnostic.Add("W" + item.Number + ":GAP_" +
+                                    F(gapMm) + "_MM");
+                                continue;
+                            }
 
                             double denominator = extension.DotProduct(normal);
-                            if (Math.Abs(denominator) < 1e-8) continue;
+                            if (Math.Abs(denominator) < 1e-8)
+                            {
+                                diagnostic.Add("W" + item.Number + ":PARALLEL_AXIS");
+                                continue;
+                            }
                             double reachFt = -signed / denominator;
-                            if (reachFt <= 0) continue;
+                            if (reachFt <= 0)
+                            {
+                                diagnostic.Add("W" + item.Number + ":PROJECTION_BEHIND_ENDPOINT");
+                                continue;
+                            }
                             XYZ hit = tip + extension * reachFt;
                             double along = (hit - a).DotProduct(tangent);
-                            if (along < 0 || along > axis.Length) continue;
-                            if (hit.Z < box.Min.Z || hit.Z > box.Max.Z) continue;
+                            if (along < 0 || along > axis.Length)
+                            {
+                                diagnostic.Add("W" + item.Number + ":OUTSIDE_WALL_LENGTH");
+                                continue;
+                            }
+                            if (hit.Z < box.Min.Z || hit.Z > box.Max.Z)
+                            {
+                                diagnostic.Add("W" + item.Number + ":OUTSIDE_WALL_HEIGHT");
+                                continue;
+                            }
 
-                            double deviation = Math.Acos(Math.Min(1,
-                                Math.Max(-1, inward))) * 180.0 / Math.PI;
                             all.Add(new VirtualMepCandidate
                             {
                                 LinkInstanceId = link.Id.IntegerValue,
@@ -216,8 +266,27 @@ namespace Hatco.PrecastManholeManager.Services
                                 Status = "REVIEW",
                                 Reason = "Virtual endpoint extension: approval required before any cut."
                             });
+                            diagnostic.Add("W" + item.Number + ":VIRTUAL_CANDIDATE");
                         }
                     }
+
+                    string state = diagnostic.Any(x => x.Contains("VIRTUAL_CANDIDATE"))
+                        ? "HAS_VIRTUAL_CANDIDATE"
+                        : (hasActualCrossing ? "ACTUAL_CROSSING_REVIEW" : "NOT_ELIGIBLE_REVIEW");
+                    string reasons = diagnostic.Count == 0 ? "NO_MATCHING_WALL_OR_DIRECTION"
+                        : string.Join(" | ", diagnostic.Distinct());
+                    // Every local MEP centerline produces one diagnostic row.
+                    rejectedRows.Add(string.Join(",", new[]
+                    {
+                        Escape(state), Escape(link.Name), link.Id.IntegerValue.ToString(),
+                        e.Id.IntegerValue.ToString(), Escape(e.UniqueId),
+                        Escape(e.Category?.Name ?? string.Empty), Escape(ParamText(e, "Size")),
+                        Escape(ParamText(e, "System Name")), Escape(reasons)
+                    }));
+                    _log.Info("NEARBY_MEP Link=" + link.Id.IntegerValue +
+                              " Element=" + e.Id.IntegerValue +
+                              " Size='" + ParamText(e, "Size") + "'" +
+                              " Result=" + state + " Details=" + reasons);
                 }
             }
 
@@ -256,7 +325,12 @@ namespace Hatco.PrecastManholeManager.Services
                           " HitFt=" + c.ProjectedHit + " " + c.Reason);
 
             result.CsvPath = WriteCsv(result.Candidates);
+            result.DiagnosticCsvPath = WriteDiagnostics(rejectedRows);
+            result.DiagnosedNonCandidates = rejectedRows.Count(row =>
+                !row.StartsWith("\"HAS_VIRTUAL_CANDIDATE\"", StringComparison.Ordinal));
             _log.Info("Virtual candidates=" + result.Candidates.Count +
+                      " NonCandidateNearbyMEP=" + result.DiagnosedNonCandidates +
+                      " DiagnosticCSV=" + result.DiagnosticCsvPath +
                       " LoadedLinks=" + result.LoadedLinks +
                       " UnavailableLinks=" + result.UnavailableLinks +
                       " NearbyMEP=" + result.NearbyMep +
@@ -314,6 +388,20 @@ namespace Hatco.PrecastManholeManager.Services
             double horizontal = Math.Sqrt(direction.X * direction.X +
                                           direction.Y * direction.Y);
             return horizontal > 1e-9 ? direction.Z * 100.0 / horizontal : 0;
+        }
+
+        private static string WriteDiagnostics(IEnumerable<string> rows)
+        {
+            string folder = OutputPathService.GetLogsFolder();
+            string path = Path.Combine(folder,
+                "VirtualMepDiagnostics_" + DateTime.Now.ToString(
+                    "yyyyMMdd_HHmmss_fffffff", CultureInfo.InvariantCulture) + "_" +
+                Guid.NewGuid().ToString("N").Substring(0, 6) + ".csv");
+            var csv = new StringBuilder();
+            csv.AppendLine("Classification,Link,LinkId,ElementId,UniqueId,Category,Size,System,PerWallReasons");
+            foreach (string row in rows) csv.AppendLine(row);
+            File.WriteAllText(path, csv.ToString(), new UTF8Encoding(true));
+            return path;
         }
 
         private static string F(double n)
