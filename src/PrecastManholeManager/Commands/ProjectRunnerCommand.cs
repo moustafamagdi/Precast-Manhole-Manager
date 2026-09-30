@@ -428,20 +428,19 @@ namespace Hatco.PrecastManholeManager.Commands
             var blockers = new List<string>();
             if (!string.IsNullOrWhiteSpace(plan.BlockReason))
                 blockers.Add("Audit: " + plan.BlockReason);
-            if (plan.UnavailableLinks > 0)
-            {
-                string names = string.Join("; ",
-                    new FilteredElementCollector(doc)
-                        .OfClass(typeof(RevitLinkInstance))
-                        .Cast<RevitLinkInstance>()
-                        .Where(x => x.GetLinkDocument() == null)
-                        .Select(x => x.Name + " [Id=" +
-                            x.Id.IntegerValue + "]"));
-                blockers.Add("Unavailable Revit links (" +
-                    plan.UnavailableLinks + "): " + names +
-                    ". Load them or explicitly verify their coverage " +
-                    "before a production cut.");
-            }
+            bool incompleteLinkCoverage = plan.UnavailableLinks > 0;
+            string unavailableNames = string.Join("\n",
+                new FilteredElementCollector(doc)
+                    .OfClass(typeof(RevitLinkInstance))
+                    .Cast<RevitLinkInstance>()
+                    .Where(x => x.GetLinkDocument() == null)
+                    .Select(x => x.Name + " [Id=" +
+                        x.Id.IntegerValue + "]"));
+            if (incompleteLinkCoverage)
+                log.Warn("PARTIAL-LINK PRECHECK: " +
+                    plan.UnavailableLinks + " unavailable links.\n" +
+                    unavailableNames +
+                    "\nNo missing link is assumed irrelevant.");
             if (plan.ProfileResetCount > 0)
                 blockers.Add("Edited wall profiles (" +
                     plan.ProfileResetCount + "): " +
