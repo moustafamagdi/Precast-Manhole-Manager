@@ -69,7 +69,7 @@ namespace Hatco.PrecastManholeManager.UI
             Button scan = Button("1   Scan Project", 155, controls);
             Button review = Button("2   Review Selected", 170, controls);
             Button view = Button("Review 3D", 125, controls);
-            Button draft = Button("3   Draft Sheet", 160, controls);
+            Button draft = Button("3   Create 2D Views", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
             top.Children.Add(new TextBlock
@@ -77,9 +77,10 @@ namespace Hatco.PrecastManholeManager.UI
                 Text = "Scan finds the manholes and isolates problem cases. " +
                     "Review Selected performs the detailed MEP/opening inspection " +
                     "without modifying the model. 3D creates a cropped Revit " +
-                    "view. Draft Sheet creates a prototype Plan + 4 wall-facing " +
-                    "orthographic views on one sheet for a selected READY manhole. " +
-                    "Excel uses only previously SAVED fabrication data.",
+                    "view. Create 2D Views makes a real Floor Plan and " +
+                    "four Sections for one selected manhole. You arrange " +
+                    "them on your preferred sheet manually. Excel reads " +
+                    "only previously SAVED fabrication data.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 10)
             });
@@ -157,11 +158,11 @@ namespace Hatco.PrecastManholeManager.UI
                     return;
                 }
                 if (MessageBox.Show(this,
-                    "Generate a real Revit FLOOR PLAN plus " +
-                    "four native SECTIONS (W1-W4), and arrange them " +
-                    "on one draft sheet? This does NOT clean old " +
-                    "cuts, create openings or issue shop drawings. " +
-                    "Use a test RVT copy with an A1/A0 titleblock.",
+                    "Create a real Revit FLOOR PLAN plus four " +
+                    "SECTIONS (W1-W4) for this ONE manhole? " +
+                    "No sheet, viewports or titleblock will be created. " +
+                    "You can set scales and arrange the views yourself. " +
+                    "No wall/opening geometry will change.",
                     "First Manhole Prototype",
                     MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                     return;
