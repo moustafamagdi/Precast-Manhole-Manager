@@ -181,3 +181,39 @@ The **Review 3D** action is unchanged and remains strictly for
 problematic manholes. The old diagnostics and failed automatic layout
 experiments remain in Git history but are no longer invoked by the
 one-time project runner.
+
+
+## Six-row sheet automation: first controlled batch
+
+The user's manually arranged reference sheet established **six horizontal
+manhole rows**, each containing **PLAN, W1, W2, W3, W4** left to
+right. Required view templates: `MH_PLAN` and `MH_SEC`; scale:
+**1:25**. The new **3 Test 6-Row Sheet** button is available in the
+same one-window project runner.
+
+Scope is deliberately **one new test sheet, up to six clean
+manholes per click** until the first generated layout is visually
+approved. It will not change the existing reference sheet. Launch the
+tool while the user's reference sheet is the ACTIVE Revit view to reuse
+that titleblock FAMILY TYPE. Otherwise the code selects the first
+available A0/A1-preferred titleblock, reserving a fixed **165 mm**
+right-hand column and using the remaining printable area as six equal
+rows. The existing five 2D views are reused where safe and new ones
+are generated via the tested service; manually placed views are skipped,
+not removed or duplicated.
+
+Each test row uses PLAN and W1–W4 at 1:25 and five equal-width
+layout cells. Each row is independently transactional: if one
+manhole's crop, template or viewport dimensions don't fit, just that
+row and its newly generated views are rolled back. No invalid row is
+forced into a smaller scale. A completely empty test sheet rolls back.
+The source manually formatted sheet and already-placed views are never
+edited. The sheet is named `HATCO_PRECAST_6MH_TEST_01` and a
+repeat run will stop rather than overwrite it.
+
+**First test:** Open the manually formatted sheet in Revit, then
+launch Precast Manholes > Test 6-Row Sheet. Save a detached test RVT
+before running. Send a screenshot of the resulting sheet and timestamped
+TXT log. If rows are skipped, check their exact `6MH VIEW` paper sizes
+and cell bounds in the log. Only after visual approval should we expand
+beyond the first sheet or add numbering and dimension annotations.
