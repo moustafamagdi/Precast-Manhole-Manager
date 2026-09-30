@@ -101,8 +101,25 @@ namespace Hatco.PrecastManholeManager.Services
                 view.Name = collision
                     ? name + "_" + view.Id.IntegerValue : name;
             }
+            // Set the local geometry BEFORE applying the user template:
+            // the template is allowed to control visibility and graphics.
             view.IsSectionBoxActive = true;
             view.SetSectionBox(box);
+
+            View3D template = new FilteredElementCollector(doc)
+                .OfClass(typeof(View3D)).Cast<View3D>()
+                .FirstOrDefault(x => x.IsTemplate &&
+                    string.Equals(x.Name, "MH_3D",
+                        StringComparison.OrdinalIgnoreCase));
+            if (template == null)
+                throw new InvalidOperationException(
+                    "View template MH_3D is not loaded in this RVT. " +
+                    "Load it before creating manhole 3D review views.");
+            if (view.ViewTemplateId != template.Id)
+                view.ViewTemplateId = template.Id;
+            log?.Info("REVIEW 3D TEMPLATE MH_3D ViewId=" +
+                view.Id.IntegerValue + " TemplateId=" +
+                template.Id.IntegerValue);
             issue.ViewId = view.Id.IntegerValue;
             issue.ViewName = view.Name;
             log?.Info("REVIEW 3D VIEW Foundation=" +
