@@ -134,7 +134,7 @@ namespace Hatco.PrecastManholeManager.Services
                 XlsxCell.Text("Offset = opening C/L from wall reference edge", 7),
                 XlsxCell.Blank(7),
                 XlsxCell.Text("Vertical Reference", 6),
-                XlsxCell.Text("Invert = bottom of service from base top", 7),
+                XlsxCell.Text("Opening Bottom from Base = fabrication height", 7),
                 XlsxCell.Blank(7),
                 XlsxCell.Blank(7));
             sheet.Merges.Add("B7:C7");
@@ -168,7 +168,7 @@ namespace Hatco.PrecastManholeManager.Services
             SetCell(sheet, 5, 10, XlsxCell.Text("│   OPENING    │", 7));
             sheet.Merges.Add("J5:L5");
 
-            SetCell(sheet, 6, 9, XlsxCell.Text("Service Invert →", 6));
+            SetCell(sheet, 6, 9, XlsxCell.Text("Service Invert → (Ref.)", 6));
             SetCell(sheet, 6, 10, XlsxCell.Text("│  ──────────  │", 7));
             sheet.Merges.Add("J6:L6");
 
