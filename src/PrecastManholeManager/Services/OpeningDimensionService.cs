@@ -158,7 +158,7 @@ namespace Hatco.PrecastManholeManager.Services
                 double baseY = (new XYZ(0, 0, foundation.get_BoundingBox(null).Max.Z) - view.Origin)
                     .DotProduct(view.UpDirection);
                 var vertical = new List<Boundary> {
-                    Find(foundationFaces, view.UpDirection, false, baseY, centerX),
+                    BaseReference(faces, foundationFaces, view.UpDirection, baseY, centerX, log),
                     Find(row.Faces, view.UpDirection, false, row.Bottom, centerX),
                     Find(row.Faces, view.UpDirection, false, row.Top, centerX)
                 };
@@ -168,6 +168,24 @@ namespace Hatco.PrecastManholeManager.Services
                 count++;
             }
             return count;
+        }
+
+        private static Boundary BaseReference(List<FaceReference> walls, List<FaceReference> foundation,
+            XYZ up, double baseY, double centerX, DiagnosticLogger log)
+        {
+            // A coincident wall-bottom face is directly referenceable in the exterior section.
+            // Only use it when its actual elevation matches the foundation top (0.5 mm).
+            try
+            {
+                var reference = Find(walls, up, false, baseY, centerX);
+                log.Info("VERTICAL DATUM: wall face coincident with foundation top.");
+                return reference;
+            }
+            catch (InvalidOperationException)
+            {
+                log.Info("VERTICAL DATUM: foundation face; wall bottom is not coincident.");
+                return Find(foundation, up, false, baseY, centerX);
+            }
         }
 
         private static Boundary Find(List<FaceReference> faces, XYZ axis, bool horizontal,
@@ -204,7 +222,10 @@ namespace Hatco.PrecastManholeManager.Services
             if (dimension == null) throw new InvalidOperationException("Revit did not create the dimension.");
             doc.Regenerate();
             if (!dimension.AreReferencesAvailable)
-                throw new InvalidOperationException("Dimension references cannot be resolved.");
+                log.Info("DIMENSION VIEW REFERENCES DEFERRED: verifying geometry and measured values for closed view " + view.Id.IntegerValue);
+            foreach (Boundary boundary in distinct)
+                if (doc.GetElement(boundary.Reference.ElementId)?.GetGeometryObjectFromReference(boundary.Reference) == null)
+                    throw new InvalidOperationException("Dimension reference no longer resolves to model geometry.");
             var measured = dimension.NumberOfSegments == 0 ? new List<double?> { dimension.Value } :
                 dimension.Segments.Cast<DimensionSegment>().Select(segment => segment.Value).ToList();
             if (!SegmentsMatch(distinct.Select(b => b.Position).ToArray(), measured.ToArray()))

@@ -11,7 +11,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, DimensionOne, SixRowLayoutSheet, ExportExcel
+        Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, DimensionOne, SixRowLayoutSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -73,6 +73,7 @@ namespace Hatco.PrecastManholeManager.UI
             };
             top.Children.Add(controls);
             Button scan = Button("1   Scan Project", 155, controls);
+            Button cleanScan = Button("Clean Scan - All Manholes", 210, controls);
             Button number = Button("Assign Internal MH IDs", 175, controls);
             Button review = Button("2   Review Selected", 170, controls);
             Button recheck = Button("Recheck Selected", 155, controls);
@@ -168,6 +169,7 @@ namespace Hatco.PrecastManholeManager.UI
             AddColumn("Reason / what needs review", "Problem", 330);
             AddColumn("3D view", "ViewName", 185);
 
+            cleanScan.Click += (s, e) => Choose(ProjectAction.CleanScan, false);
             scan.Click += (s, e) => Choose(ProjectAction.Scan, false);
             number.Click += (s, e) => Choose(ProjectAction.NumberAll, false);
             recheck.Click += (s, e) => Choose(ProjectAction.RecheckOne, true);
@@ -328,7 +330,7 @@ namespace Hatco.PrecastManholeManager.UI
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
             if (!valid && (requested == ProjectAction.ProductionOne ||
-                requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne))
+                requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");
                 _clearance.Focus();

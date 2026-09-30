@@ -8,6 +8,53 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal static class ManholeRecheckService
     {
+        public static string RunAll(Document doc, double clearanceMm, DiagnosticLogger log)
+        {
+            if (double.IsNaN(clearanceMm) || double.IsInfinity(clearanceMm) || clearanceMm < 0)
+                throw new InvalidOperationException("Enter a finite non-negative clearance.");
+            var items = SimpleProjectScanService.LoadFast(doc);
+            int passed = 0, review = 0, errors = 0;
+            var report = new System.Text.StringBuilder("FoundationId,InternalId,Result,Details\r\n");
+            log.WriteHeader("CLEAN SCAN - ALL MANHOLES - NO MODEL CHANGES");
+            foreach (var item in items)
+            {
+                Element foundation = doc.GetElement(new ElementId(item.FoundationId));
+                string status, details;
+                try
+                {
+                    if (foundation == null || foundation.UniqueId != item.UniqueId)
+                        throw new InvalidOperationException("Foundation identity changed during scan.");
+                    log.Info("CLEAN SCAN " + (passed + review + errors + 1) + "/" + items.Count +
+                        " Foundation=" + item.FoundationId);
+                    details = Run(doc, foundation, clearanceMm, log);
+                    bool open = ManholeReviewRegistry.Load(doc).Any(x =>
+                        x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN");
+                    status = open ? "REVIEW" : "RECHECK PASSED";
+                    if (open) review++; else passed++;
+                }
+                catch (Exception ex)
+                {
+                    errors++;
+                    status = "ERROR";
+                    details = ex.Message;
+                    log.Error("CLEAN SCAN FAILED Foundation=" + item.FoundationId, ex);
+                    if (foundation != null && foundation.UniqueId == item.UniqueId)
+                        ManholeReviewRegistry.Upsert(doc, foundation, "Clean scan error: " + ex.Message,
+                            null, "ERROR", log);
+                }
+                report.AppendLine(item.FoundationId + "," + Csv(item.ManholeName) + "," + status + "," + Csv(details));
+            }
+            string path = System.IO.Path.ChangeExtension(log.LogPath, ".CleanScan.csv");
+            System.IO.File.WriteAllText(path, report.ToString(), new System.Text.UTF8Encoding(true));
+            ManholeReviewRegistry.ExportReadableCsv(doc, ManholeReviewRegistry.Load(doc));
+            return "Clean scan completed for " + items.Count + " manholes.\nPassed: " + passed +
+                "\nStill require review: " + review + "\nScan errors: " + errors +
+                "\nRepaired issues have been resolved. No openings, walls or views were changed." +
+                "\nProduction prerequisites still apply to passed manholes.\nReport: " + path;
+        }
+
+        private static string Csv(string value) => "\"" + (value ?? "").Replace("\"", "\"\"") + "\"";
+
         public static string Run(Document doc, Element foundation, double clearanceMm, DiagnosticLogger log)
         {
             if (double.IsNaN(clearanceMm) || double.IsInfinity(clearanceMm) || clearanceMm < 0)
@@ -54,7 +101,14 @@ namespace Hatco.PrecastManholeManager.Services
             {
                 ManholeReviewRegistry.Upsert(doc, foundation, string.Join("; ", reasons),
                     footprint.Accepted ? footprint.Walls.Select(w => w.Id.IntegerValue) : null, "RECHECK", log);
-                ManholeReviewRegistry.ExportReadableCsv(doc, ManholeReviewRegistry.Load(doc));
+                var currentIssues = ManholeReviewRegistry.Load(doc);
+                foreach (var current in currentIssues.Where(x => x.FoundationUniqueId == foundation.UniqueId))
+                {
+                    log.Info("RECHECK PREVIOUS REASONS: " + current.Reason);
+                    current.Reason = string.Join("; ", reasons);
+                }
+                ManholeReviewRegistry.Save(doc, currentIssues);
+                ManholeReviewRegistry.ExportReadableCsv(doc, currentIssues);
                 return "Still requires REVIEW:\n" + string.Join("\n", reasons) +
                     "\n\nIf the wall still has an edited sketch, use Reset Profile before rechecking." +
                     "\nReview CSV: " + csv;
