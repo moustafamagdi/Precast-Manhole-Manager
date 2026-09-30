@@ -80,7 +80,7 @@ namespace Hatco.PrecastManholeManager.Services
                 var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearanceMm, 150, 15);
                 csv = UnifiedOpeningReviewService.ExportCsv(review);
                 var plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log);
-                reasons.AddRange(PhysicalBlockers(plan));
+                reasons.AddRange(ProductionPreflightService.PhysicalBlockers(plan));
                 var actual = review.Rows.Where(r => !r.IsVirtual).ToList();
                 actualCount = actual.Count;
                 foreach (var row in actual)
@@ -140,19 +140,5 @@ namespace Hatco.PrecastManholeManager.Services
                 "\nNo model geometry was changed.\nReview CSV: " + csv;
         }
 
-        internal static List<string> PhysicalBlockers(CleanSyncPlan plan)
-        {
-            var reasons = new List<string>();
-            if (!string.IsNullOrWhiteSpace(plan.BlockReason)) reasons.Add(plan.BlockReason);
-            if (plan.ProfileResetCount > 0) reasons.Add("Edited wall profiles remain: " + plan.ProfileResetCount);
-            if (plan.VoidCutCount > 0) reasons.Add("Void cuts remain: " + plan.VoidCutCount);
-            if (plan.ManualOpeningIds.Count > 0) reasons.Add("Non-tool openings remain: " + string.Join(",", plan.ManualOpeningIds));
-            if (plan.InPlaceCutterCount > 0) reasons.Add("In-place cutters remain: " + string.Join(",", plan.InPlaceCutterWallIds.Keys));
-            if (plan.SolidCutReviewReasons.Count > 0)
-                reasons.AddRange(plan.SolidCutReviewReasons.Where(reason => !reasons.Contains(reason)));
-            else if (plan.UnsupportedSolidCutWallIds.Count > 0) reasons.Add("Unsupported solid cuts: " + string.Join(",", plan.UnsupportedSolidCutWallIds));
-            // Unloaded links are outside the operator-selected scope; existing managed openings are normal.
-            return reasons;
-        }
     }
 }

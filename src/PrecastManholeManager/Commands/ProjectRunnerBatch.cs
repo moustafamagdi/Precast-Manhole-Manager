@@ -7,6 +7,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.DB.Events;
 using Autodesk.Revit.UI;
 using Hatco.PrecastManholeManager.Infrastructure;
+using Hatco.PrecastManholeManager.Models;
 using Hatco.PrecastManholeManager.Services;
 using Hatco.PrecastManholeManager.UI;
 
@@ -14,13 +15,6 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     public sealed partial class ProjectRunnerCommand
     {
-        private static void ConfigureBatchFailures(Transaction tx, DiagnosticLogger log)
-        {
-            var options = tx.GetFailureHandlingOptions();
-            options.SetFailuresPreprocessor(new OpeningFailurePreprocessor(log));
-            options.SetClearAfterRollback(true); tx.SetFailureHandlingOptions(options);
-        }
-
         private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance)
         {
             var uidoc = app.ActiveUIDocument;
@@ -103,7 +97,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         .ThenBy(i=>i.ManholeName, StringComparer.OrdinalIgnoreCase).ThenBy(i=>i.FoundationId).ToList();
                     using (var tx = new Transaction(doc, "HATCO - Reserve Stable Batch Rows"))
                     {
-                        tx.Start(); ConfigureBatchFailures(tx, log);
+                        tx.Start(); TransactionFailureHandling.Configure(tx, log);
                         BatchSheetLayoutService.Reserve(doc, items.Select(i=>Resolve(doc,i)).ToList(), titleblock);
                         if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Could not reserve sheet rows.");
                     }
@@ -121,6 +115,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         var slot = BatchSheetLayoutService.Find(doc,foundation);
                         WriteBatchRow(writer,item,slot,"RUNNING", "");
                         string status, details;
+                        ProductionManholeResult result;
                         bool modelCommitted = false;
                         try
                         {
@@ -128,11 +123,13 @@ namespace Hatco.PrecastManholeManager.Commands
                             using (var group = new TransactionGroup(doc,"HATCO - Batch Manhole Including Layout"))
                             {
                                 group.Start();
-                                details = GenerateProductionManhole(uidoc,item,log,clearance,true);
+                                result = GenerateProductionManhole(uidoc,item,log,clearance,true);
+                                if (!result.Committed) throw new InvalidOperationException(result.Summary);
+                                details = result.Summary;
                                 if (group.Assimilate() != TransactionStatus.Committed)
                                     throw new InvalidOperationException("Batch manhole transaction rejected.");
                             }
-                            status = details.Contains("DIMENSION REVIEW") ? "COMMITTED - DIMENSION REVIEW" : "COMPLETE";
+                            status = result.DimensionsComplete ? "COMPLETE" : "COMMITTED - DIMENSION REVIEW";
                             modelCommitted = true;
                             committed++;
                             if (status != "COMPLETE") dimensionReview++;
@@ -144,7 +141,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             {
                                 using (var tx = new Transaction(doc,"HATCO - Mark Dimension Review"))
                                 {
-                                    tx.Start(); ConfigureBatchFailures(tx,log);
+                                    tx.Start(); TransactionFailureHandling.Configure(tx,log);
                                     BatchSheetLayoutService.SetStatus(doc,foundation,slot,"DIMENSION REVIEW - openings committed; see run report.");
                                     if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Cannot label dimension review row.");
                                 }
@@ -158,7 +155,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             ManholeReviewRegistry.Upsert(doc,foundation,details,null,"BATCH REVIEW",log);
                             using (var tx = new Transaction(doc,"HATCO - Mark Reserved Review Row"))
                             {
-                                tx.Start(); ConfigureBatchFailures(tx,log);
+                                tx.Start(); TransactionFailureHandling.Configure(tx,log);
                                 BatchSheetLayoutService.SetStatus(doc,foundation,slot,"REVIEW - " + details);
                                 if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Cannot update reserved review row.");
                             }

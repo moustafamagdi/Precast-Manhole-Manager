@@ -87,7 +87,7 @@ Assert-That (!(Test-DimensionSegments @(0,[double]::PositiveInfinity) @(1))) 'No
 
 $planType = $assembly.GetType('Hatco.PrecastManholeManager.Services.CleanSyncPlan')
 $plan = [Activator]::CreateInstance($planType, $true)
-$blockers = $assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeRecheckService').GetMethod('PhysicalBlockers', [Reflection.BindingFlags]'NonPublic,Static')
+$blockers = $assembly.GetType('Hatco.PrecastManholeManager.Services.ProductionPreflightService').GetMethod('PhysicalBlockers', [Reflection.BindingFlags]'NonPublic,Static')
 $plan.UnavailableLinks = 10
 $plan.ManagedOpeningIds.Add('source', 123)
 Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 0) 'Recheck accepts managed openings and ignores unloaded links'
@@ -128,3 +128,15 @@ $overlap = $assembly.GetType('Hatco.PrecastManholeManager.Services.LinkedMepScan
 Assert-That ($overlap.Invoke($null,[object[]]@(-100.0,100.0,-1.0,1.0))) 'Spatial cache retains curves crossing the scan envelope with distant endpoints'
 Assert-That ($overlap.Invoke($null,[object[]]@(-10.0,-5.0,-5.0,0.0))) 'Spatial cache includes touching boundaries at negative coordinates'
 Assert-That (!$overlap.Invoke($null,[object[]]@(0.0,1.0,2.0,3.0))) 'Spatial cache rejects distant curves'
+
+$plan.BlockReason = ''
+$plan.SolidCutReviewReasons.Add('External cutter 901 on wall 100')
+$plan.UnsupportedSolidCutWallIds.Add(100)
+$reasons = $blockers.Invoke($null, [object[]]@($plan))
+Assert-That ($reasons.Count -eq 1 -and $reasons[0].Contains('901')) 'Shared production and recheck blockers preserve exact cutter diagnostics without a duplicate generic reason'
+
+$resultType = $assembly.GetType('Hatco.PrecastManholeManager.Models.ProductionManholeResult')
+$result = [Activator]::CreateInstance($resultType, [object[]]@($true,$true,'Report mentions DIMENSION REVIEW as historical text'))
+Assert-That ($result.Committed -and $result.DimensionsComplete) 'Historical wording in a report cannot turn successful dimensions into a batch failure'
+$result = [Activator]::CreateInstance($resultType, [object[]]@($true,$false,'Localized report without an English status label'))
+Assert-That ($result.Committed -and !$result.DimensionsComplete) 'Incomplete dimensions remain distinguishable from rolled-back geometry regardless of report language'

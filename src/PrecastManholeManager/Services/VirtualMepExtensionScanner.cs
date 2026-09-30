@@ -112,11 +112,6 @@ namespace Hatco.PrecastManholeManager.Services
             double maxY = walls.Max(w => w.get_BoundingBox(null).Max.Y) + scanMargin;
             double maxZ = walls.Max(w => w.get_BoundingBox(null).Max.Z) + scanMargin;
 
-            BuiltInCategory[] categories =
-            {
-                BuiltInCategory.OST_PipeCurves,
-                BuiltInCategory.OST_DuctCurves
-            };
             double minNormalAlignment = Math.Cos(maxDeviationDeg * Math.PI / 180.0);
             var all = new List<VirtualMepCandidate>();
             var rejectedRows = new List<string>();
@@ -134,7 +129,6 @@ namespace Hatco.PrecastManholeManager.Services
                 }
 
                 result.LoadedLinks++;
-                Transform transform = link.GetTotalTransform();
                 foreach (var entry in LinkedMepScanCache.Query(link,
                     new XYZ(minX, minY, minZ), new XYZ(maxX, maxY, maxZ), _log))
                 {

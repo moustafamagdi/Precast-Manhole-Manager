@@ -12,12 +12,6 @@ namespace Hatco.PrecastManholeManager.Services
         private readonly Document _host;
         private readonly DiagnosticLogger _log;
 
-        private static readonly BuiltInCategory[] Categories =
-        {
-            BuiltInCategory.OST_PipeCurves,
-            BuiltInCategory.OST_DuctCurves
-        };
-
         public MepPenetrationScanner(Document host, DiagnosticLogger log)
         {
             _host = host;
@@ -133,37 +127,6 @@ namespace Hatco.PrecastManholeManager.Services
 
             min = new XYZ(minX - margin, minY - margin, minZ - margin);
             max = new XYZ(maxX + margin, maxY + margin, maxZ + margin);
-        }
-
-        private static bool CurveTouchesBox(Curve curve, XYZ min, XYZ max)
-        {
-            IList<XYZ> points;
-            try
-            {
-                points = curve.Tessellate();
-            }
-            catch
-            {
-                points = new List<XYZ>
-                {
-                    curve.GetEndPoint(0),
-                    curve.GetEndPoint(1)
-                };
-            }
-
-            if (points == null || points.Count == 0)
-                return false;
-
-            double cMinX = points.Min(p => p.X);
-            double cMinY = points.Min(p => p.Y);
-            double cMinZ = points.Min(p => p.Z);
-            double cMaxX = points.Max(p => p.X);
-            double cMaxY = points.Max(p => p.Y);
-            double cMaxZ = points.Max(p => p.Z);
-
-            return cMinX <= max.X && cMaxX >= min.X &&
-                   cMinY <= max.Y && cMaxY >= min.Y &&
-                   cMinZ <= max.Z && cMaxZ >= min.Z;
         }
 
         private void MarkPossibleDuplicates(List<PenetrationRecord> records)
@@ -420,11 +383,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             double diameterFt = GetDouble(e, BuiltInParameter.RBS_PIPE_OUTER_DIAMETER);
             if (diameterFt <= 0)
-                diameterFt = GetDouble(e, BuiltInParameter.RBS_CONDUIT_OUTER_DIAM_PARAM);
-            if (diameterFt <= 0)
                 diameterFt = GetDouble(e, BuiltInParameter.RBS_CURVE_DIAMETER_PARAM);
-            if (diameterFt <= 0)
-                diameterFt = GetDouble(e, BuiltInParameter.RBS_CONDUIT_DIAMETER_PARAM);
 
             if (diameterFt <= 0)
                 diameterFt = GetNamedDouble(e, "Diameter");
@@ -439,10 +398,6 @@ namespace Hatco.PrecastManholeManager.Services
             double widthFt = GetDouble(e, BuiltInParameter.RBS_CURVE_WIDTH_PARAM);
             double heightFt = GetDouble(e, BuiltInParameter.RBS_CURVE_HEIGHT_PARAM);
 
-            if (widthFt <= 0)
-                widthFt = GetDouble(e, BuiltInParameter.RBS_CABLETRAY_WIDTH_PARAM);
-            if (heightFt <= 0)
-                heightFt = GetDouble(e, BuiltInParameter.RBS_CABLETRAY_HEIGHT_PARAM);
 
             if (widthFt <= 0)
                 widthFt = GetNamedDouble(e, "Width");

@@ -8,6 +8,7 @@
     <AssemblyName>PrecastManholeManager</AssemblyName>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <UseWPF>true</UseWPF>
+    <DeployRevitAddin Condition="'$(DeployRevitAddin)' == ''">true</DeployRevitAddin>
   </PropertyGroup>
 
   <ItemGroup>
@@ -29,7 +30,7 @@
     </None>
   </ItemGroup>
 
-  <Target Name="DeployToRevit" AfterTargets="Build">
+  <Target Name="DeployToRevit" AfterTargets="Build" Condition="'$(DeployRevitAddin)' == 'true'">
     <PropertyGroup>
       <RevitAddinDir>$(APPDATA)\Autodesk\Revit\Addins\2024\PrecastManholeManager</RevitAddinDir>
     </PropertyGroup>
