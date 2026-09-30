@@ -48,12 +48,14 @@ namespace Hatco.PrecastManholeManager.Commands
             var numbering = ManholeNumberingService.Preview(doc);
             if (numbering.Errors.Count > 0) throw new InvalidOperationException(string.Join("\n", numbering.Errors));
             if (numbering.Rows.Count == 0) throw new InvalidOperationException("No eligible manholes found.");
+            foreach (var row in numbering.Rows)
+                BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
             string folder = Path.Combine(Path.GetDirectoryName(log.LogPath), "Batch_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0,6));
             string output = Path.Combine(folder, "Manhole_Batch_Results.rvt");
             var ask = new TaskDialog("Generate / Update All") {
                 MainInstruction = "Run " + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
-                    "Three fixed rows per sheet at 1:25; failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
+                    "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
                     "Missing internal IDs will be assigned. Repaired issues are checked again. Virtual-only crossings remain deferred.\n" +
                     "A separate RVT copy will become the active document. Saves occur every 10 manholes or 5 minutes and at completion. No synchronization to the original central model.\n" +
                     (doc.IsWorkshared ? "The output is a NEW independent central model.\n" : "") +

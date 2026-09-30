@@ -120,8 +120,8 @@ $nextSlot = $layoutType.GetMethod('NextSlotIndex', [Reflection.BindingFlags]'Non
 $page = $layoutType.GetMethod('Page', [Reflection.BindingFlags]'NonPublic,Static')
 Assert-That ($nextSlot.Invoke($null,[object[]]@(,[int[]]@())) -eq 0) 'First batch starts at the first row'
 Assert-That ($nextSlot.Invoke($null,[object[]]@(,[int[]]@(0,2,5))) -eq 6) 'New manholes append without filling reserved or missing earlier rows'
-Assert-That ($page.Invoke($null,[object[]]@(2)) -eq 0) 'Third manhole retains the last row of the first sheet'
-Assert-That ($page.Invoke($null,[object[]]@(3)) -eq 1) 'Fourth manhole starts the second sheet'
+Assert-That ($page.Invoke($null,[object[]]@(5)) -eq 0) 'Sixth manhole retains the last row of the first sheet'
+Assert-That ($page.Invoke($null,[object[]]@(6)) -eq 1) 'Seventh manhole starts the second sheet'
 $order = $layoutType.GetMethod('ManholeOrder',[Reflection.BindingFlags]'NonPublic,Static')
 Assert-That ($order.Invoke($null,[object[]]@('MH-1000')) -gt $order.Invoke($null,[object[]]@('MH-999'))) 'Sheet order remains numeric beyond MH-999'
 $overlap = $assembly.GetType('Hatco.PrecastManholeManager.Services.LinkedMepScanCache').GetMethod('Overlaps',[Reflection.BindingFlags]'NonPublic,Static')

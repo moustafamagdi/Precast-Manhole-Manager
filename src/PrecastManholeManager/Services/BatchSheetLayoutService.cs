@@ -17,14 +17,15 @@ namespace Hatco.PrecastManholeManager.Services
 
     internal static class BatchSheetLayoutService
     {
-        internal const int RowsPerSheet = 3;
-        private static readonly Guid Id = new Guid("C2CA9C23-70BC-493C-9C2D-32701CB0A046");
+        internal const int RowsPerSheet = 6;
+        private static readonly Guid Id = new Guid("EE82A896-0A1D-4D53-A813-85940C28287B");
+        private static readonly Guid LegacyThreeRowId = new Guid("C2CA9C23-70BC-493C-9C2D-32701CB0A046");
         private static Schema Storage()
         {
             var schema = Schema.Lookup(Id);
             if (schema != null) return schema;
             var builder = new SchemaBuilder(Id);
-            builder.SetSchemaName("HatcoBatchManholeSlot");
+            builder.SetSchemaName("HatcoBatchManholeSixRowSlot");
             builder.AddSimpleField("Sheet", typeof(string));
             builder.AddSimpleField("Index", typeof(int));
             builder.AddSimpleField("Note", typeof(string));
@@ -32,6 +33,9 @@ namespace Hatco.PrecastManholeManager.Services
         }
         internal static BatchSheetSlot Find(Document doc, Element foundation)
         {
+            var legacy = Schema.Lookup(LegacyThreeRowId);
+            if (legacy != null && foundation.GetEntity(legacy).IsValid())
+                throw new InvalidOperationException("This RVT contains the previous three-row batch layout. Start the six-row run from the original pre-batch RVT; existing reservations have not been moved.");
             var schema = Schema.Lookup(Id);
             if (schema == null) return null;
             var entity = foundation.GetEntity(schema);
@@ -103,8 +107,8 @@ namespace Hatco.PrecastManholeManager.Services
             double right = outline.Max.U - UnitUtil.MmToFt(165);
             double top = outline.Max.V - UnitUtil.MmToFt(20);
             double height = (top - outline.Min.V - UnitUtil.MmToFt(20)) / RowsPerSheet;
-            if (right - left < UnitUtil.MmToFt(520) || height < UnitUtil.MmToFt(130))
-                throw new InvalidOperationException("Titleblock is too small for three reserved manhole rows at 1:25.");
+            if (right - left < UnitUtil.MmToFt(520) || height < UnitUtil.MmToFt(75))
+                throw new InvalidOperationException("Titleblock is too small for six reserved manhole rows at 1:25.");
             return new[] { left, right, top - height * slot.Row, height };
         }
         internal static void SetStatus(Document doc, Element foundation, BatchSheetSlot slot, string status)
@@ -176,9 +180,9 @@ namespace Hatco.PrecastManholeManager.Services
                 var box = port.GetBoxOutline();
                 double width = box.MaximumPoint.X - box.MinimumPoint.X;
                 double height = box.MaximumPoint.Y - box.MinimumPoint.Y;
-                if (width > cell - UnitUtil.MmToFt(4) || height > b[3] - UnitUtil.MmToFt(45))
+                if (width > cell - UnitUtil.MmToFt(4) || height > b[3] - UnitUtil.MmToFt(24))
                     throw new InvalidOperationException("View and dimensions exceed reserved row at 1:25: " + name);
-                port.SetBoxCenter(new XYZ(b[0] + cell * (col + .5), b[2] - UnitUtil.MmToFt(30) - height / 2, 0));
+                port.SetBoxCenter(new XYZ(b[0] + cell * (col + .5), b[2] - UnitUtil.MmToFt(10) - height / 2, 0));
                 port.LabelLineLength = UnitUtil.MmToFt(22);
                 doc.Regenerate();
                 box = port.GetBoxOutline();
@@ -197,7 +201,7 @@ namespace Hatco.PrecastManholeManager.Services
             if (slot.Note != null)
             {
                 var note = slot.Note.get_BoundingBox(slot.Sheet);
-                if (note == null || note.Min.Y < b[2] - UnitUtil.MmToFt(26))
+                if (note == null || note.Min.Y < b[2] - UnitUtil.MmToFt(8))
                     throw new InvalidOperationException("Row header exceeds reserved note band.");
             }
         }
