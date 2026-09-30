@@ -16,6 +16,7 @@ namespace Hatco.PrecastManholeManager.UI
         public double ClearanceMm { get; set; } = 50;
         public bool PreviewOnly { get; set; } = true;
         public bool AuditExistingOpenings { get; set; } = true;
+        public bool IncludeVirtualMep { get; set; } = false;
         public BatchEdgePolicy EdgePolicy { get; set; } = BatchEdgePolicy.Review;
     }
 
@@ -25,6 +26,7 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly ComboBox _edge;
         private readonly CheckBox _preview;
         private readonly CheckBox _audit;
+        private readonly CheckBox _virtualMep;
 
         public BatchRunOptions SelectedOptions { get; private set; }
 
@@ -94,6 +96,14 @@ namespace Hatco.PrecastManholeManager.UI
             };
             root.Children.Add(_audit);
 
+            _virtualMep = new CheckBox
+            {
+                Content = "Also scan virtual pipe/duct endpoints (slow on large batches)",
+                IsChecked = false,
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            root.Children.Add(_virtualMep);
+
             root.Children.Add(new TextBlock
             {
                 Text = "Safety: profile edits and in-place void cuts are NEVER reset in this version. " +
@@ -133,7 +143,8 @@ namespace Hatco.PrecastManholeManager.UI
                     EdgePolicy = _edge.SelectedIndex == 1
                         ? BatchEdgePolicy.TrimClearanceOnly : BatchEdgePolicy.Review,
                     PreviewOnly = true,
-                    AuditExistingOpenings = _audit.IsChecked != false
+                    AuditExistingOpenings = _audit.IsChecked != false,
+                    IncludeVirtualMep = _virtualMep.IsChecked == true
                 };
                 DialogResult = true;
             };
