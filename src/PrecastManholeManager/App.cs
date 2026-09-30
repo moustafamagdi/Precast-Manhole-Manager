@@ -100,6 +100,17 @@ namespace Hatco.PrecastManholeManager
                         ToolTip = "Experimental read-only: combine actual and virtual penetrations with opening/profile/void audit, fit checks and unified CSV."
                     });
 
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "TestCleanSync",
+                        "Test Clean\nSync",
+                        assemblyPath,
+                        typeof(Commands.TestCleanSyncCommand).FullName)
+                    {
+                        ToolTip = "EXPERIMENTAL: preview one manhole; explicitly approve reset of non-tool profile/native/void cuts and atomically synchronize tool-managed openings. Test COPY only."
+                    });
+
                 return Result.Succeeded;
             }
             catch
