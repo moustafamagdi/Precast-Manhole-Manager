@@ -16,6 +16,9 @@ namespace Hatco.PrecastManholeManager.Services
         public int SourceElementId { get; set; }
         public string SourceUniqueId { get; set; }
         public string Category { get; set; }
+        public string SourceSize { get; set; }
+        public string SystemName { get; set; }
+        public double SlopePercent { get; set; }
         public int WallId { get; set; }
         public int WallNumber { get; set; }
         public int Endpoint { get; set; }
@@ -200,6 +203,9 @@ namespace Hatco.PrecastManholeManager.Services
                                 SourceElementId = e.Id.IntegerValue,
                                 SourceUniqueId = e.UniqueId,
                                 Category = e.Category?.Name ?? string.Empty,
+                                SourceSize = ParamText(e, "Size"),
+                                SystemName = ParamText(e, "System Name"),
+                                SlopePercent = SlopePercent(extension),
                                 WallId = wall.Id.IntegerValue,
                                 WallNumber = item.Number,
                                 Endpoint = endpoint,
@@ -246,6 +252,7 @@ namespace Hatco.PrecastManholeManager.Services
                           " GapFaceMm=" + F(c.GapToFaceMm) +
                           " ReachAxisMm=" + F(c.ReachToAxisMm) +
                           " DirectionDeg=" + F(c.DeviationDeg) +
+                          " SlopePercent=" + F(c.SlopePercent) +
                           " HitFt=" + c.ProjectedHit + " " + c.Reason);
 
             result.CsvPath = WriteCsv(result.Candidates);
@@ -273,7 +280,7 @@ namespace Hatco.PrecastManholeManager.Services
                 "VirtualMepCandidates_" + DateTime.Now.ToString(
                     "yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".csv");
             var csv = new StringBuilder();
-            csv.AppendLine("Status,Link,LinkId,ElementId,UniqueId,Category,Wall,WallId,Endpoint,GapToFace_mm,ReachToAxis_mm,Deviation_deg,HitX_mm,HitY_mm,HitZ_mm,Reason");
+            csv.AppendLine("Status,Link,LinkId,ElementId,UniqueId,Category,SourceSize,System,Wall,WallId,Endpoint,GapToFace_mm,ReachToAxis_mm,Deviation_deg,Slope_percent,HitX_mm,HitY_mm,HitZ_mm,Reason");
             foreach (VirtualMepCandidate r in records)
             {
                 csv.AppendLine(string.Join(",", new[]
@@ -281,15 +288,31 @@ namespace Hatco.PrecastManholeManager.Services
                     Escape(r.Status), Escape(r.LinkName),
                     r.LinkInstanceId.ToString(), r.SourceElementId.ToString(),
                     Escape(r.SourceUniqueId), Escape(r.Category),
+                    Escape(r.SourceSize), Escape(r.SystemName),
                     "W" + r.WallNumber, r.WallId.ToString(),
                     r.Endpoint.ToString(), F(r.GapToFaceMm), F(r.ReachToAxisMm),
-                    F(r.DeviationDeg), F(UnitUtil.FtToMm(r.ProjectedHit.X)),
+                    F(r.DeviationDeg), F(r.SlopePercent),
+                    F(UnitUtil.FtToMm(r.ProjectedHit.X)),
                     F(UnitUtil.FtToMm(r.ProjectedHit.Y)),
                     F(UnitUtil.FtToMm(r.ProjectedHit.Z)), Escape(r.Reason)
                 }));
             }
             File.WriteAllText(path, csv.ToString(), new UTF8Encoding(true));
             return path;
+        }
+
+        private static string ParamText(Element element, string name)
+        {
+            Parameter p = element.LookupParameter(name);
+            if (p == null) return string.Empty;
+            return p.AsString() ?? p.AsValueString() ?? string.Empty;
+        }
+
+        private static double SlopePercent(XYZ direction)
+        {
+            double horizontal = Math.Sqrt(direction.X * direction.X +
+                                          direction.Y * direction.Y);
+            return horizontal > 1e-9 ? direction.Z * 100.0 / horizontal : 0;
         }
 
         private static string F(double n)
