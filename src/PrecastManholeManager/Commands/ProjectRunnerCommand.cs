@@ -63,6 +63,9 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.DraftSheet)
                                 GenerateDraftSheet(uiDoc,
                                     window.SelectedManhole, log);
+                            else if (window.Action == ProjectAction.ProductionOne)
+                                GenerateProductionManhole(uiDoc,
+                                    window.SelectedManhole, log);
                             else if (window.Action == ProjectAction.SixRowLayoutSheet)
                                 GenerateSixRowLayoutSheet(uiDoc,
                                     window.SheetCandidates, referenceSheet, log);
@@ -283,6 +286,208 @@ namespace Hatco.PrecastManholeManager.Commands
                 "dimensioned fabrication shop drawings." +
                 "\nNo wall geometry or openings were changed." +
                 "\nSave the RVT to keep the five views.");
+        }
+
+        // First production milestone: ONE clean manhole with real,
+        // confirmed ACTUAL linked-MEP crossings only. One transaction
+        // group makes the physical openings + views + sheet atomic.
+        private static void GenerateProductionManhole(UIDocument uidoc,
+            SimpleManholeItem selected, DiagnosticLogger log)
+        {
+            Document doc = uidoc.Document;
+            Element foundation = Resolve(doc, selected);
+            if (doc.IsReadOnly || doc.IsLinked)
+                throw new InvalidOperationException(
+                    "Production requires an editable host RVT.");
+            if (ManholeReviewRegistry.Load(doc).Any(x =>
+                x.FoundationUniqueId == foundation.UniqueId &&
+                x.Status == "OPEN"))
+                throw new InvalidOperationException(
+                    "This manhole has an OPEN review issue. Resolve it " +
+                    "before making production cuts.");
+
+            string id = ManholeViewTitleService.Name(doc, foundation, log);
+            if (id == "UNNUMBERED MANHOLE")
+                throw new InvalidOperationException(
+                    "Set the foundation Mark / Manhole Number first. " +
+                    "Production drawings cannot use an ElementId instead.");
+
+            VirtualFoundationResult footprint =
+                new VirtualFoundationRecoveryService(doc, log)
+                    .Analyze(foundation);
+            if (!footprint.Accepted)
+                throw new InvalidOperationException(
+                    "Foundation geometry not approved: " + footprint.Reason);
+
+            // Explicitly avoid overwriting old manually arranged views.
+            string prefix = "MH_" + foundation.Id.IntegerValue +
+                "_DRAFT_2D";
+            HashSet<int> onSheet = new HashSet<int>(
+                new FilteredElementCollector(doc)
+                    .OfClass(typeof(Viewport)).Cast<Viewport>()
+                    .Select(x => x.ViewId.IntegerValue));
+            bool placed = new FilteredElementCollector(doc)
+                .OfClass(typeof(View)).Cast<View>()
+                .Any(x => !x.IsTemplate &&
+                    (x.Name == prefix + "_PLAN" ||
+                     x.Name == prefix + "_OUT_W1" ||
+                     x.Name == prefix + "_OUT_W2" ||
+                     x.Name == prefix + "_OUT_W3" ||
+                     x.Name == prefix + "_OUT_W4") &&
+                     onSheet.Contains(x.Id.IntegerValue));
+            if (placed)
+                throw new InvalidOperationException(
+                    "The production Plan/Sections already appear on a " +
+                    "sheet. Existing manual layouts are protected.");
+
+            log.WriteHeader("FIRST PRODUCTION MANHOLE - READ ONLY PREFLIGHT");
+            // Defaults validated by earlier unified review: 50 mm clearance,
+            // 150 mm virtual preview radius and 15-degree limit.
+            UnifiedOpeningReviewResult review =
+                UnifiedOpeningReviewService.Collect(doc, foundation,
+                    footprint, log, 50, 150, 15);
+            string csv = UnifiedOpeningReviewService.ExportCsv(review);
+            CleanSyncPlan plan = CleanSyncPlanService.Build(doc,
+                foundation.Id.IntegerValue, footprint, review, log);
+
+            if (!string.IsNullOrWhiteSpace(plan.BlockReason) ||
+                plan.UnavailableLinks != 0 ||
+                plan.ProfileResetCount != 0 ||
+                plan.VoidCutCount != 0 ||
+                plan.ManualOpeningIds.Count != 0 ||
+                plan.InPlaceCutterCount != 0 ||
+                plan.UnsupportedSolidCutWallIds.Count != 0)
+                throw new InvalidOperationException(
+                    "Selected manhole is not clean enough for automatic " +
+                    "production. No old geometry will be deleted. " +
+                    "Block=" + (plan.BlockReason ?? "legacy cuts or links") +
+                    ". See " + csv);
+
+            List<UnifiedOpeningReviewRow> actual = review.Rows
+                .Where(x => !x.IsVirtual).ToList();
+            if (actual.Count == 0)
+                throw new InvalidOperationException(
+                    "No confirmed actual linked-MEP wall penetrations. " +
+                    "Production will not cut any wall based on virtual " +
+                    "candidates alone. Review: " + csv);
+            if (actual.Any(x => x.Status != "ACTUAL FIT PREVIEW" &&
+                 !(x.Source.ExistingOpeningStatus == "MANAGED" &&
+                   x.Source.CutWidthMm > 0 &&
+                   x.Source.CutHeightMm > 0)))
+                throw new InvalidOperationException(
+                    "At least one actual opening requires manual review. " +
+                    "All openings must pass validation. See " + csv);
+            foreach (var row in actual)
+            {
+                string reason;
+                if (!OpeningFitValidationService.TryValidate(
+                    doc, row.Source, out reason))
+                    throw new InvalidOperationException(
+                        "Opening fit failed W" + row.Source.WallNumber +
+                        ": " + reason + ". Review " + csv);
+            }
+            // Never let virtual extensions enter the write plan during
+            // the first production rollout; they remain in CSV for review.
+            plan.ProposedRows.RemoveAll(x => x.IsVirtual);
+            if (actual.Select(x => x.Source.SourceKey).Distinct().Count() !=
+                actual.Count)
+                throw new InvalidOperationException(
+                    "Duplicate actual crossing source keys. Review " + csv);
+
+            log.Info("PRODUCTION PREFLIGHT Name=" + id +
+                " Actual=" + actual.Count +
+                " VirtualDeferred=" + review.VirtualCount +
+                " ReviewCsv=" + csv);
+            var confirm = new TaskDialog("Approve first production cuts");
+            confirm.MainInstruction = id + " | " + actual.Count +
+                " confirmed actual opening(s)";
+            confirm.MainContent =
+                "50 mm clearance per side. These are REAL Revit cuts " +
+                "to this one manhole's four walls, followed by a new " +
+                "1:25 Plan + 4 exterior Sections sheet.\\n\\n" +
+                "Virtual candidates deferred: " + review.VirtualCount +
+                ". No old cuts/profiles/void cutters will be removed." +
+                "\\nRead-only audit CSV: " + csv +
+                "\\n\\nContinue only on a saved test RVT copy.";
+            confirm.CommonButtons = TaskDialogCommonButtons.Yes |
+                TaskDialogCommonButtons.No;
+            confirm.DefaultButton = TaskDialogResult.No;
+            if (confirm.Show() != TaskDialogResult.Yes)
+            {
+                log.Info("PRODUCTION CANCELLED by operator. No model edits.");
+                return;
+            }
+
+            CleanSyncApplyResult applied;
+            ViewSheet newSheet;
+            using (var group = new TransactionGroup(doc,
+                "HATCO - One Manhole Openings and Drawing"))
+            {
+                group.Start();
+                try
+                {
+                    applied = CleanSyncAtomicService.Apply(doc, plan,
+                        new CleanSyncApplyOptions
+                        {
+                            ResetEditedProfiles = false,
+                            RemoveManualNative = false,
+                            RemoveVoidCutRelations = false,
+                            DeleteIsolatedInPlaceCutters = false,
+                            IncludeStraightVirtual = false,
+                            RequiredLinksVerified = false
+                        }, log);
+                    if (!applied.Committed)
+                        throw new InvalidOperationException(
+                            "Native opening transaction failed: " +
+                            applied.Error);
+                    using (var tx = new Transaction(doc,
+                        "HATCO - First Production Draft and Sheet"))
+                    {
+                        tx.Start();
+                        try
+                        {
+                            DraftSheetResult views =
+                                DraftManholeSheetService.Generate(doc,
+                                    foundation, footprint, log);
+                            newSheet = FirstProductionSheetService.Build(
+                                doc, foundation, views, actual, log);
+                            if (tx.Commit() != TransactionStatus.Committed)
+                                throw new InvalidOperationException(
+                                    "Could not commit first production sheet.");
+                        }
+                        catch
+                        {
+                            if (tx.GetStatus() == TransactionStatus.Started)
+                                tx.RollBack();
+                            throw;
+                        }
+                    }
+                    if (group.Assimilate() != TransactionStatus.Committed)
+                        throw new InvalidOperationException(
+                            "Production transaction group did not commit.");
+                }
+                catch (Exception ex)
+                {
+                    if (group.GetStatus() == TransactionStatus.Started)
+                        group.RollBack();
+                    log.Error("FIRST PRODUCTION FAILED: all cuts, " +
+                        "views and sheet rolled back.", ex);
+                    throw;
+                }
+            }
+            uidoc.RequestViewChange(newSheet);
+            TaskDialog.Show("First Production Manhole",
+                "COMMITTED: " + id +
+                "\\nNew native openings: " + applied.NewOpenings +
+                "\\nManaged unchanged: " + applied.ManagedUnchanged +
+                "\\nManaged updated: " + applied.ManagedUpdated +
+                "\\nVirtual deferred: " + review.VirtualCount +
+                "\\nSheet: " + newSheet.SheetNumber +
+                " / " + newSheet.Name +
+                "\\nPreliminary opening setout is shown on the sheet. " +
+                "Verify dimensions and elevations before issuing." +
+                "\\nReview CSV: " + csv +
+                "\\nSave the RVT to retain the output.");
         }
 
         private static void GenerateSixRowLayoutSheet(UIDocument uidoc,
