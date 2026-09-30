@@ -66,12 +66,14 @@ namespace Hatco.PrecastManholeManager.Services
             if (sections.Count != 4 || all.Count == 0)
                 return "Dimensions: generate the manhole's production views and openings first.";
             var type = new FilteredElementCollector(doc).OfClass(typeof(DimensionType))
-                .Cast<DimensionType>().FirstOrDefault(x => x.StyleType == DimensionStyleType.Linear);
-            if (type == null) return "Dimensions: load a linear dimension type first.";
+                .Cast<DimensionType>().FirstOrDefault(x => x.StyleType == DimensionStyleType.Linear &&
+                    x.Name.Equals("HTC_DIM_1.8mm", StringComparison.OrdinalIgnoreCase));
+            if (type == null) return "Dimensions: load the required linear dimension type 'HTC_DIM_1.8mm' first.";
             ViewFamilyType sectionType = ManholeViewTitleService.RequiredSectionType(doc);
             int created = 0, failed = 0;
             var diagnostics = new List<string>();
             log.WriteHeader("ASSOCIATIVE OPENING DIMENSIONS");
+            log.Info("DIMENSION TYPE: " + type.Name);
             foreach (ViewSection view in sections.OrderBy(v => v.Name))
             {
                 int number = int.Parse(view.Name.Substring(prefix.Length));
