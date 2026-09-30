@@ -111,6 +111,17 @@ namespace Hatco.PrecastManholeManager
                         ToolTip = "EXPERIMENTAL: preview one manhole; explicitly approve reset of non-tool profile/native/void cuts and atomically synchronize tool-managed openings. Test COPY only."
                     });
 
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "ManholeReviewQueue",
+                        "Review\nQueue / 3D",
+                        assemblyPath,
+                        typeof(Commands.ManageManholeReviewsCommand).FullName)
+                    {
+                        ToolTip = "Scan all recognized manholes for existing cuts/geometry problems, save a per-RVT review register, and create individually cropped 3D views for selected problems."
+                    });
+
                 return Result.Succeeded;
             }
             catch
