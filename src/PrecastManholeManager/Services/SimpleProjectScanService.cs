@@ -49,8 +49,7 @@ namespace Hatco.PrecastManholeManager.Services
                     UniqueId = baseElement.UniqueId,
                     TypeName = doc.GetElement(baseElement.GetTypeId()).Name,
                     ManholeName = (ManholeIdentityStore.Read(baseElement) ??
-                        baseElement.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() ??
-                        "").Trim(),
+                        "NOT ASSIGNED").Trim(),
                     State = "READY",
                     Problem = ""
                 };
@@ -158,8 +157,7 @@ namespace Hatco.PrecastManholeManager.Services
                     UniqueId = el.UniqueId,
                     TypeName = doc.GetElement(el.GetTypeId()).Name,
                     ManholeName = (ManholeIdentityStore.Read(el) ??
-                        el.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() ??
-                        "").Trim(),
+                        "NOT ASSIGNED").Trim(),
                     State = flagged ? "REVIEW" : "NO ISSUE RECORDED",
                     Problem = flagged ? issue.Reason : "",
                     ViewName = found ? issue.ViewName : ""
