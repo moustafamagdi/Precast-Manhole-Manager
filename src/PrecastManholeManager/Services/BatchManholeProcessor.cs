@@ -4,6 +4,7 @@ using System.Linq;
 using Autodesk.Revit.DB;
 using Hatco.PrecastManholeManager.Infrastructure;
 using Hatco.PrecastManholeManager.Models;
+using Hatco.PrecastManholeManager.UI;
 
 namespace Hatco.PrecastManholeManager.Services
 {
@@ -24,10 +25,14 @@ namespace Hatco.PrecastManholeManager.Services
         public int CarriersSaved { get; set; }
         public int OpeningsLinked { get; set; }
         public string LogPath { get; set; }
+        public bool PreviewOnly { get; set; }
+        public int ProposedCuts { get; set; }
+        public int ProposedTrims { get; set; }
 
         public override string ToString()
         {
             return
+                (PreviewOnly ? "PREVIEW ONLY (NO MODEL CHANGES)\\n" : "") +
                 "Foundations: " + Selected +
                 " | Valid: " + Valid +
                 " | Review: " + NeedsReview +
@@ -35,6 +40,8 @@ namespace Hatco.PrecastManholeManager.Services
                 "\nPenetrations: " + Penetrations +
                 " | Manual OK: " + ManualSufficient +
                 " | Manual Too Small: " + ManualTooSmall +
+                "\nProposed cuts: " + ProposedCuts +
+                " | Proposed clearance trims: " + ProposedTrims +
                 "\nOpenings Created: " + OpeningsCreated +
                 " | Updated: " + OpeningsUpdated +
                 " | Unchanged: " + OpeningsUnchanged +
@@ -50,14 +57,16 @@ namespace Hatco.PrecastManholeManager.Services
         public static BatchManholeResult Process(
             Document doc,
             IList<Element> foundations,
-            DiagnosticLogger log)
+            DiagnosticLogger log,
+            BatchRunOptions options = null)
         {
             if (doc == null) throw new ArgumentNullException(nameof(doc));
 
             var result = new BatchManholeResult
             {
                 Selected = foundations?.Count ?? 0,
-                LogPath = log?.LogPath
+                LogPath = log?.LogPath,
+                PreviewOnly = options?.PreviewOnly == true
             };
 
             int totalLinks;
@@ -70,7 +79,7 @@ namespace Hatco.PrecastManholeManager.Services
                 " LoadedLinks=" + loadedLinks +
                 " LoadedMEPLinks=" + loadedMepLinks);
 
-            if (loadedMepLinks == 0)
+            if (loadedMepLinks == 0 && options?.PreviewOnly != true)
             {
                 throw new InvalidOperationException(
                     "Batch processing stopped: no loaded Revit link containing Pipes, Ducts, Cable Trays, or Conduits is available. " +
@@ -95,8 +104,25 @@ namespace Hatco.PrecastManholeManager.Services
 
                 try
                 {
-                    var detector = new ManholeDetectionService(doc, log);
-                    ManholeDetectionResult manhole = detector.Detect(foundation);
+                    ManholeDetectionResult manhole;
+                    if (options == null)
+                    {
+                        // Preserve the legacy Batch Selected route until tested separately.
+                        manhole = new ManholeDetectionService(doc, log).Detect(foundation);
+                    }
+                    else
+                    {
+                        VirtualFoundationResult virtualFootprint =
+                            new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
+                        if (!virtualFootprint.Accepted)
+                        {
+                            result.NeedsReview++;
+                            log?.Warn("BATCH VIRTUAL REVIEW Foundation=" + foundation.Id.IntegerValue +
+                                      " Reason=" + virtualFootprint.Reason);
+                            continue;
+                        }
+                        manhole = FromVirtualFootprint(foundation, virtualFootprint);
+                    }
 
                     if (!manhole.IsValid || !string.IsNullOrWhiteSpace(manhole.Warning))
                     {
@@ -117,6 +143,63 @@ namespace Hatco.PrecastManholeManager.Services
                         penetrations,
                         log);
 
+                    if (options != null)
+                    {
+                        foreach (PenetrationRecord record in penetrations)
+                            record.ClearanceMm = options.ClearanceMm;
+                    }
+
+                    // Always inventory profile/void/manual openings before any
+                    // experimental write; disabling optional preview logging
+                    // never bypasses destructive-cut safeguards.
+                    OpeningResetAuditResult audit = null;
+                    if (options != null && (options.AuditExistingOpenings || !options.PreviewOnly))
+                        audit = OpeningResetAuditService.Audit(
+                            doc, manhole.Walls.Select(w => w.Wall), log);
+
+                    if (options != null && !options.PreviewOnly && audit != null &&
+                        (audit.ProfileEditedWalls > 0 || audit.ProfileUnknownWalls > 0 ||
+                         audit.VoidCutRelations > 0 || audit.VoidUnknownWalls > 0))
+                    {
+                        result.NeedsReview++;
+                        log?.Warn("BATCH SKIPPED Foundation=" + foundation.Id.IntegerValue +
+                            " has edited/unknown wall profiles or void cuts. " +
+                            "No reset or new openings attempted. Review audit log.");
+                        continue;
+                    }
+
+                    foreach (PenetrationRecord r in penetrations)
+                    {
+                        if (!r.Accepted || r.ExistingOpeningStatus == "EXISTING SUFFICIENT" ||
+                            r.ExistingOpeningStatus == "EXISTING TOO SMALL")
+                            continue;
+
+                        string fitReason;
+                        if (OpeningFitValidationService.TryValidate(doc, r, out fitReason))
+                        {
+                            result.ProposedCuts++;
+                            continue;
+                        }
+
+                        if (options?.EdgePolicy == BatchEdgePolicy.TrimClearanceOnly &&
+                            SafeOpeningEdgeService.TryTrimClearance(doc, r, log, out fitReason))
+                        {
+                            result.ProposedCuts++;
+                            result.ProposedTrims++;
+                            log?.Warn("BATCH TRIM PROPOSAL Source=" + r.LinkedElementId +
+                                " Wall=" + r.HostWallId +
+                                " Clearance-only cut=" + r.CutWidthMm.ToString("0.#") +
+                                "x" + r.CutHeightMm.ToString("0.#") + " mm.");
+                        }
+                        else
+                        {
+                            result.OpeningReviews++;
+                            r.Accepted = false;
+                            log?.Warn("BATCH OPENING REVIEW Source=" + r.LinkedElementId +
+                                      " Wall=" + r.HostWallId + " Reason=" + fitReason);
+                        }
+                    }
+
                     result.Penetrations += penetrations.Count;
                     result.ManualSufficient += penetrations.Count(x =>
                         x.ExistingOpeningStatus == "EXISTING SUFFICIENT");
@@ -136,6 +219,20 @@ namespace Hatco.PrecastManholeManager.Services
                     }
 
                     ManholeDataRecord data = BuildDataRecord(foundation, manhole, manholeNumber);
+
+                    if (options?.PreviewOnly == true)
+                    {
+                        result.Valid++;
+                        log?.Info("BATCH PREVIEW " + manholeNumber +
+                            " Foundation=" + foundation.Id.IntegerValue +
+                            " Penetrations=" + penetrations.Count +
+                            " Proposed cuts this manhole=" +
+                            penetrations.Count(x => x.Accepted &&
+                              x.ExistingOpeningStatus != "EXISTING SUFFICIENT" &&
+                              x.ExistingOpeningStatus != "EXISTING TOO SMALL") +
+                            " (NO TRANSACTION / NO CHANGES)");
+                        continue;
+                    }
 
                     using (var tx = new Transaction(doc, "HATCO - Batch Precast Manhole " + manholeNumber))
                     {
@@ -209,6 +306,68 @@ namespace Hatco.PrecastManholeManager.Services
             log?.Info(result.ToString());
 
             return result;
+        }
+
+        private static ManholeDetectionResult FromVirtualFootprint(
+            Element foundation, VirtualFoundationResult footprint)
+        {
+            BoundingBoxXYZ box = foundation.get_BoundingBox(null);
+            XYZ center = footprint.VirtualCenter;
+
+            var walls = footprint.Walls.Select(w =>
+            {
+                Line axis = ((LocationCurve)w.Location).Curve as Line;
+                XYZ d = new XYZ(axis.Direction.X, axis.Direction.Y, 0).Normalize();
+                return new ManholeWall
+                {
+                    Wall = w, Axis = axis,
+                    Direction = d,
+                    MidPoint = (axis.GetEndPoint(0) + axis.GetEndPoint(1)) * 0.5,
+                    LengthFt = axis.Length
+                };
+            }).OrderBy(w =>
+            {
+                XYZ v = w.MidPoint - center;
+                double angle = Math.Atan2(v.X, v.Y);
+                return angle < 0 ? angle + 2 * Math.PI : angle;
+            }).ToList();
+
+            int[] numbering = { 1, 2, 4, 3 };
+            for (int i = 0; i < walls.Count; i++) walls[i].Number = numbering[i];
+
+            ManholeWall w1 = walls.First(w => w.Number == 1);
+            ManholeWall w2 = walls.First(w => w.Number == 2);
+            ManholeWall w3 = walls.First(w => w.Number == 3);
+            ManholeWall w4 = walls.First(w => w.Number == 4);
+
+            double span14 = WallSeparation(w1, w4);
+            double span23 = WallSeparation(w2, w3);
+            double t14 = (w1.Wall.Width + w4.Wall.Width) * 0.5;
+            double t23 = (w2.Wall.Width + w3.Wall.Width) * 0.5;
+
+            return new ManholeDetectionResult
+            {
+                Foundation = foundation,
+                FoundationBox = box,
+                Center = center,
+                FoundationTopZ = box.Max.Z,
+                FoundationThicknessFt = box.Max.Z - box.Min.Z,
+                ClearW1W4Ft = span14 - t14,
+                ClearW2W3Ft = span23 - t23,
+                OuterW1W4Ft = span14 + t14,
+                OuterW2W3Ft = span23 + t23,
+                WallHeightFt = walls.Max(w => w.Wall.get_BoundingBox(null).Max.Z) -
+                               walls.Min(w => w.Wall.get_BoundingBox(null).Min.Z),
+                CandidateWallIds = footprint.Walls.Select(w => w.Id.IntegerValue).ToList(),
+                Walls = walls.OrderBy(w => w.Number).ToList()
+            };
+        }
+
+        private static double WallSeparation(ManholeWall a, ManholeWall b)
+        {
+            XYZ tangent = a.Direction;
+            XYZ normal = new XYZ(-tangent.Y, tangent.X, 0);
+            return Math.Abs((b.MidPoint - a.MidPoint).DotProduct(normal));
         }
 
         private static void EvaluateLinkAvailability(
