@@ -8,8 +8,22 @@ using Hatco.PrecastManholeManager.Infrastructure;
 
 namespace Hatco.PrecastManholeManager.Services
 {
+    internal sealed class WallOpeningAuditInfo
+    {
+        public int WallId { get; set; }
+        public string ProfileStatus { get; set; }
+        public int VoidCutCount { get; set; }
+        public int NativeManaged { get; set; }
+        public int NativeUnmanaged { get; set; }
+        public bool NeedsReview =>
+            ProfileStatus != "NO EDITED SKETCH" ||
+            VoidCutCount != 0 || NativeUnmanaged > 0;
+    }
+
     internal sealed class OpeningResetAuditResult
     {
+        public Dictionary<int, WallOpeningAuditInfo> WallDetails { get; } =
+            new Dictionary<int, WallOpeningAuditInfo>();
         public int NativeManaged { get; set; }
         public int NativeUnmanaged { get; set; }
         public int ProfileEditedWalls { get; set; }
@@ -46,6 +60,13 @@ namespace Hatco.PrecastManholeManager.Services
                 if (cuts < 0) result.VoidUnknownWalls++;
                 else result.VoidCutRelations += cuts;
 
+                result.WallDetails[wall.Id.IntegerValue] = new WallOpeningAuditInfo
+                {
+                    WallId = wall.Id.IntegerValue,
+                    ProfileStatus = profile,
+                    VoidCutCount = cuts
+                };
+
                 log?.Info("WALL_AUDIT Wall=" + wall.Id.IntegerValue +
                           " Profile=" + profile +
                           " UnattachedVoidCutCount=" + (cuts < 0 ? "UNKNOWN" : cuts.ToString()));
@@ -60,12 +81,14 @@ namespace Hatco.PrecastManholeManager.Services
                 if (OpeningStorageService.TryRead(opening, out managed))
                 {
                     result.NativeManaged++;
+                    result.WallDetails[opening.Host.Id.IntegerValue].NativeManaged++;
                     log?.Info("NATIVE_MANAGED Opening=" + opening.Id.IntegerValue +
                               " Wall=" + opening.Host.Id.IntegerValue);
                 }
                 else
                 {
                     result.NativeUnmanaged++;
+                    result.WallDetails[opening.Host.Id.IntegerValue].NativeUnmanaged++;
                     log?.Warn("NATIVE_MANUAL Opening=" + opening.Id.IntegerValue +
                               " Wall=" + opening.Host.Id.IntegerValue +
                               " (preserve until explicitly reviewed)");
