@@ -10,6 +10,7 @@ namespace Hatco.PrecastManholeManager.Services
     internal sealed class CleanSyncPlan
     {
         public int FoundationId { get; set; }
+        public int UnavailableLinks { get; set; }
         public List<int> WallIds { get; } = new List<int>();
         public Dictionary<int, string> Profiles { get; } = new Dictionary<int, string>();
         public Dictionary<int, List<int>> VoidCutIds { get; } =
@@ -45,7 +46,11 @@ namespace Hatco.PrecastManholeManager.Services
                 review == null)
                 throw new InvalidOperationException("Valid footprint and review required.");
 
-            var plan = new CleanSyncPlan { FoundationId = foundationId };
+            var plan = new CleanSyncPlan
+            {
+                FoundationId = foundationId,
+                UnavailableLinks = review.VirtualScan.UnavailableLinks
+            };
             plan.WallIds.AddRange(footprint.Walls.Select(x => x.Id.IntegerValue));
             plan.ProposedRows.AddRange(review.Rows);
 
@@ -166,6 +171,7 @@ namespace Hatco.PrecastManholeManager.Services
                 " VoidRelations=" + plan.VoidCutCount +
                 " ProposedActual=" + review.Rows.Count(x => !x.IsVirtual) +
                 " ProposedVirtual=" + plan.VirtualCount +
+                " UnavailableLinks=" + plan.UnavailableLinks +
                 " SlopedOrSkewedVirtual=" + plan.SlopedVirtualCount);
             foreach (var wall in plan.Profiles)
                 log.Info("CLEAN WALL " + wall.Key + " Profile=" + wall.Value +
