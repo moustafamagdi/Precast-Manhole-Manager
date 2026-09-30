@@ -81,10 +81,10 @@ namespace Hatco.PrecastManholeManager.Services
                 " LoadedLinks=" + loadedLinks +
                 " LoadedMEPLinks=" + loadedMepLinks);
 
-            if (loadedMepLinks == 0 && options?.PreviewOnly != true)
+            if (loadedMepLinks == 0)
             {
                 throw new InvalidOperationException(
-                    "Batch processing stopped: no loaded Revit link containing Pipes, Ducts, Cable Trays, or Conduits is available. " +
+                    "Batch preview/process stopped: no loaded Revit link containing Pipes, Ducts, Cable Trays, or Conduits is available. " +
                     "Load the required MEP links before running Batch Selected / Batch All.");
             }
 
