@@ -13,6 +13,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool RemoveManualNative { get; set; }
         public bool RemoveVoidCutRelations { get; set; }
         public bool IncludeStraightVirtual { get; set; }
+        public bool RequiredLinksVerified { get; set; }
     }
 
     internal sealed class CleanSyncApplyResult
@@ -58,6 +59,10 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException("Cleanup blocked: " + plan.BlockReason);
             if (plan.UnsupportedSolidCutWallIds.Count != 0)
                 throw new InvalidOperationException("Unclassified solid cuts exist.");
+            if (plan.UnavailableLinks > 0 && !options.RequiredLinksVerified)
+                throw new InvalidOperationException(
+                    "Required link coverage was not acknowledged: " +
+                    plan.UnavailableLinks + " Revit links unavailable.");
             if (plan.ProfileResetCount > 0 && !options.ResetEditedProfiles)
                 throw new InvalidOperationException("Edited profiles require explicit reset approval.");
             if (plan.VoidCutCount > 0 && !options.RemoveVoidCutRelations)
