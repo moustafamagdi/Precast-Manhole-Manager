@@ -380,8 +380,8 @@ namespace Hatco.PrecastManholeManager.Commands
             string id = (ManholeIdentityStore.Read(foundation) ?? "").Trim();
             if (id.Length == 0)
                 throw new InvalidOperationException(
-                    "Set the foundation Mark / Manhole Number first. " +
-                    "Production drawings cannot use an ElementId instead.");
+                    "Run Assign Internal IDs first. " +
+                    "Internal MH-### names are required before production.");
 
             VirtualFoundationResult footprint =
                 new VirtualFoundationRecoveryService(doc, log)
