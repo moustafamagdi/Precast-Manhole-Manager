@@ -352,6 +352,17 @@ namespace Hatco.PrecastManholeManager.Services
                 sb.Append("</dataValidations>");
             }
 
+            if (sheet.Landscape || sheet.FitToOnePageWide)
+            {
+                sb.Append("<pageMargins left=\"0.25\" right=\"0.25\" top=\"0.35\" bottom=\"0.35\" header=\"0.15\" footer=\"0.15\"/>");
+                sb.Append("<pageSetup paperSize=\"9\" orientation=\"");
+                sb.Append(sheet.Landscape ? "landscape" : "portrait");
+                sb.Append("\"");
+                if (sheet.FitToOnePageWide)
+                    sb.Append(" fitToWidth=\"1\" fitToHeight=\"0\"");
+                sb.Append("/>");
+            }
+
             if (sheet.HorizontalPageBreakRows.Count > 0)
             {
                 sb.Append("<rowBreaks count=\"");
@@ -368,17 +379,6 @@ namespace Hatco.PrecastManholeManager.Services
                 }
 
                 sb.Append("</rowBreaks>");
-            }
-
-            if (sheet.Landscape || sheet.FitToOnePageWide)
-            {
-                sb.Append("<pageMargins left=\"0.25\" right=\"0.25\" top=\"0.35\" bottom=\"0.35\" header=\"0.15\" footer=\"0.15\"/>");
-                sb.Append("<pageSetup paperSize=\"9\" orientation=\"");
-                sb.Append(sheet.Landscape ? "landscape" : "portrait");
-                sb.Append("\"");
-                if (sheet.FitToOnePageWide)
-                    sb.Append(" fitToWidth=\"1\" fitToHeight=\"0\"");
-                sb.Append("/>");
             }
 
             sb.Append("</worksheet>");
