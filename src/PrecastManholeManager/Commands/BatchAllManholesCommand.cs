@@ -6,6 +6,7 @@ using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 using Hatco.PrecastManholeManager.Infrastructure;
 using Hatco.PrecastManholeManager.Services;
+using Hatco.PrecastManholeManager.UI;
 
 namespace Hatco.PrecastManholeManager.Commands
 {
@@ -55,7 +56,12 @@ namespace Hatco.PrecastManholeManager.Commands
                     foreach (Element e in foundations)
                         log.Info("Candidate Foundation=" + e.Id.IntegerValue + " Name='" + e.Name + "'");
 
-                    BatchManholeResult result = BatchManholeProcessor.Process(doc, foundations, log);
+                    log.Info("Experimental batch settings: PreviewOnly=" + options.PreviewOnly +
+                        " ClearancePerSideMm=" + options.ClearanceMm +
+                        " EdgePolicy=" + options.EdgePolicy +
+                        " OpeningAudit=" + options.AuditExistingOpenings);
+                    BatchManholeResult result = BatchManholeProcessor.Process(
+                        doc, foundations, log, options);
 
                     TaskDialog.Show(
                         "Batch All Manholes",
@@ -79,17 +85,12 @@ namespace Hatco.PrecastManholeManager.Commands
 
         private static bool IsLikelyManholeFoundation(Element e)
         {
-            string elementName = e?.Name ?? string.Empty;
             Element type = e?.Document?.GetElement(e.GetTypeId());
-            string typeName = type?.Name ?? string.Empty;
-
-            string combined = (elementName + " " + typeName).ToUpperInvariant();
-
-            return combined.Contains("MANHOLE") ||
-                   combined.Contains("_MH") ||
-                   combined.Contains("MH_") ||
-                   combined.EndsWith(" MH") ||
-                   combined.Contains("PRECAST") && combined.Contains("MH");
+            string typeName = (type?.Name ?? string.Empty).Trim();
+            return string.Equals(typeName, "HTC_ST_PRECAST_FN_200mm_MH",
+                       StringComparison.OrdinalIgnoreCase) ||
+                   string.Equals(typeName, "HTC_ST_PRECAST_FN_300mm_MH",
+                       StringComparison.OrdinalIgnoreCase);
         }
 
         private static double GetSortYDescending(Element e)
