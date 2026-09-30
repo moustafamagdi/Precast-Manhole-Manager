@@ -32,7 +32,7 @@ namespace Hatco.PrecastManholeManager.Services
         public override string ToString()
         {
             return
-                (PreviewOnly ? "PREVIEW ONLY (NO MODEL CHANGES)\\n" : "") +
+                (PreviewOnly ? "PREVIEW ONLY (NO MODEL CHANGES)\n" : "") +
                 "Foundations: " + Selected +
                 " | Valid: " + Valid +
                 " | Review: " + NeedsReview +
