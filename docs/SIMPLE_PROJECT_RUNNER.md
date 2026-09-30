@@ -361,3 +361,34 @@ preliminary setout note against the source model before relying on
 the dimensions. Send the TXT log and new sheet screenshot if the
 production run aborts. **No Revit-host compilation/runtime verification
 has been performed in this development environment.**
+
+## Current internal-only manhole naming workflow
+
+Use **Assign Internal MH IDs** on a saved/editable host RVT.
+The tool finds supported precast manhole foundations, including ones
+isolated from opening generation. It previews one stable ID per
+foundation (`MH-001`, `MH-002`, ...), exports a timestamped
+`Internal_Manhole_Numbers_*.csv`, and asks for confirmation.
+It ignores project/consultant numbering for assignment. Native Revit
+`Mark` and project naming parameters are **read-only references**;
+the bulk action never changes them. The tool-only internal name is
+stored in ExtensibleStorage on each foundation, all in a single
+Revit Transaction. Existing tool-only IDs are always retained on
+repeated runs. Duplicate pre-existing internal IDs stop the run
+without changing anything. Click Save or Synchronize in Revit to
+persist the resulting transaction.
+
+`ManholeViewTitleService` uses that stored internal ID **first**,
+ahead of saved fabrication carrier names and project Marks. It
+produces `MH-001 - PLAN` and `MH-001 - WALL W1` through `W4`
+in Title on Sheet. Immediately after assignment the tool also
+refreshes *only recognizable auto-generated titles* in its existing
+DRAFT/PROD views, leaving handwritten titles unchanged. The main
+project table displays the dedicated `Internal MH ID` column and
+marks unnamed foundations as `NOT ASSIGNED`.
+
+**First production prerequisite:** number all foundations before
+clicking Generate Selected Manhole. Its physical opening routine
+reads the stored tool-only ID and uses separate `_PROD_2D` views,
+so earlier manually arranged `_DRAFT_2D` views are not moved.
+This change does not itself create or approve any wall openings.
