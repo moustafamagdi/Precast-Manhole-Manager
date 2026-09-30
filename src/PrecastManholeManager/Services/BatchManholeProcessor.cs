@@ -501,9 +501,7 @@ namespace Hatco.PrecastManholeManager.Services
             BuiltInCategory[] categories =
             {
                 BuiltInCategory.OST_PipeCurves,
-                BuiltInCategory.OST_DuctCurves,
-                BuiltInCategory.OST_CableTray,
-                BuiltInCategory.OST_Conduit
+                BuiltInCategory.OST_DuctCurves
             };
 
             foreach (RevitLinkInstance link in links)

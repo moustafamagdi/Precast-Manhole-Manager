@@ -15,9 +15,7 @@ namespace Hatco.PrecastManholeManager.Services
         private static readonly BuiltInCategory[] Categories =
         {
             BuiltInCategory.OST_PipeCurves,
-            BuiltInCategory.OST_DuctCurves,
-            BuiltInCategory.OST_CableTray,
-            BuiltInCategory.OST_Conduit
+            BuiltInCategory.OST_DuctCurves
         };
 
         public MepPenetrationScanner(Document host, DiagnosticLogger log)
@@ -28,6 +26,7 @@ namespace Hatco.PrecastManholeManager.Services
 
         public List<PenetrationRecord> Scan(ManholeDetectionResult manhole)
         {
+            _log.Info("MEP SCAN SCOPE: Pipes and Ducts only; Conduits and Cable Trays excluded.");
             var records = new List<PenetrationRecord>();
             _log.WriteHeader("MEP LINK SCAN");
             _log.Info("Detection mode: WallCenterPlane (independent of existing wall openings).");
