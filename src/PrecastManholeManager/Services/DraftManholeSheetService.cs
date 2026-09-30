@@ -153,6 +153,7 @@ namespace Hatco.PrecastManholeManager.Services
                 sheet.Name = prefix;
             }
             result.Sheet = sheet;
+            doc.Regenerate();
 
             // Prototype layout is based on actual sheet outline dimensions.
             // Revit uses feet for sheet-space coordinates.
