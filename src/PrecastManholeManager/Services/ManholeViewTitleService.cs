@@ -7,6 +7,16 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal static class ManholeViewTitleService
     {
+        internal static ViewFamilyType RequiredSectionType(Document doc)
+        {
+            var type = new FilteredElementCollector(doc).OfClass(typeof(ViewFamilyType))
+                .Cast<ViewFamilyType>().FirstOrDefault(t => t.ViewFamily == ViewFamily.Section &&
+                    t.Name.Equals("Manhole Sec", StringComparison.OrdinalIgnoreCase));
+            if (type == null)
+                throw new InvalidOperationException("Missing required Section type 'Manhole Sec'. Load it into this RVT before generating or updating manhole sections.");
+            return type;
+        }
+
         internal static string Name(Document doc, Element foundation, DiagnosticLogger log)
         {
             string name = (ManholeIdentityStore.Read(foundation) ?? "").Trim();

@@ -54,9 +54,7 @@ namespace Hatco.PrecastManholeManager.Services
             ViewFamilyType planType = new FilteredElementCollector(doc)
                 .OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
                 .FirstOrDefault(t => t.ViewFamily == ViewFamily.FloorPlan);
-            ViewFamilyType sectionType = new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewFamilyType)).Cast<ViewFamilyType>()
-                .FirstOrDefault(t => t.ViewFamily == ViewFamily.Section);
+            ViewFamilyType sectionType = ManholeViewTitleService.RequiredSectionType(doc);
             if (planType == null || sectionType == null)
                 throw new InvalidOperationException(
                     "The project needs Floor Plan and Section view types.");
@@ -178,6 +176,8 @@ namespace Hatco.PrecastManholeManager.Services
                 ViewSection elevation = GetOrCreateSection(doc, name,
                     sectionType, w.Axis, w.Mid, outward,
                     w.Wall.Width, minZ - pad, maxZ + pad, pad);
+                if (elevation.GetTypeId() != sectionType.Id)
+                    elevation.ChangeTypeId(sectionType.Id);
                 if (!alreadyExists)
                 {
                     elevation.Scale = 25;

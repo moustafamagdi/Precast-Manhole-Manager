@@ -68,6 +68,7 @@ namespace Hatco.PrecastManholeManager.Services
             var type = new FilteredElementCollector(doc).OfClass(typeof(DimensionType))
                 .Cast<DimensionType>().FirstOrDefault(x => x.StyleType == DimensionStyleType.Linear);
             if (type == null) return "Dimensions: load a linear dimension type first.";
+            ViewFamilyType sectionType = ManholeViewTitleService.RequiredSectionType(doc);
             int created = 0, failed = 0;
             var diagnostics = new List<string>();
             log.WriteHeader("ASSOCIATIVE OPENING DIMENSIONS");
@@ -84,6 +85,8 @@ namespace Hatco.PrecastManholeManager.Services
                     tx.SetFailureHandlingOptions(options);
                     try
                     {
+                        if (view.GetTypeId() != sectionType.Id)
+                            view.ChangeTypeId(sectionType.Id);
                         ManholeViewTitleService.UpdateTitle(view,
                             ManholeViewTitleService.Name(doc, foundation, log), number,
                             foundation.Id.IntegerValue, log);
