@@ -69,7 +69,7 @@ namespace Hatco.PrecastManholeManager.UI
             };
             top.Children.Add(controls);
             Button scan = Button("1   Scan Project", 155, controls);
-            Button number = Button("Assign Manhole Names", 175, controls);
+            Button number = Button("Assign Internal MH IDs", 175, controls);
             Button review = Button("2   Review Selected", 170, controls);
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
@@ -79,9 +79,9 @@ namespace Hatco.PrecastManholeManager.UI
 
             top.Children.Add(new TextBlock
             {
-                Text = "Assign Manhole Names previews all IDs, preserves " +
-                    "existing designations, and writes approved generated names " +
-                    "to each foundation Mark. Scan finds manholes and " +
+                Text = "Assign Internal MH IDs saves MH-001, MH-002, etc. in " +
+                    "this RVT without changing project Mark or approved " +
+                    "site designations. Scan finds manholes and " +
                     "isolates problem cases. " +
                     "Review Selected performs the detailed MEP/opening inspection " +
                     "without modifying the model. 3D creates a cropped Revit " +
@@ -145,7 +145,7 @@ namespace Hatco.PrecastManholeManager.UI
             };
             root.Children.Add(_grid);
             AddColumn("Foundation", "FoundationId", 100);
-            AddColumn("Manhole Name", "ManholeName", 152);
+            AddColumn("Internal MH ID", "ManholeName", 152);
             AddColumn("Status", "State", 155);
             AddColumn("Type", "TypeName", 204);
             AddColumn("Reason / what needs review", "Problem", 330);
