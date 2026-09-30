@@ -56,6 +56,8 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException("Document cannot be modified.");
             if (!string.IsNullOrWhiteSpace(plan.BlockReason))
                 throw new InvalidOperationException("Cleanup blocked: " + plan.BlockReason);
+            if (plan.UnsupportedSolidCutWallIds.Count != 0)
+                throw new InvalidOperationException("Unclassified solid cuts exist.");
             if (plan.ProfileResetCount > 0 && !options.ResetEditedProfiles)
                 throw new InvalidOperationException("Edited profiles require explicit reset approval.");
             if (plan.VoidCutCount > 0 && !options.RemoveVoidCutRelations)
@@ -181,9 +183,12 @@ namespace Hatco.PrecastManholeManager.Services
                             throw new InvalidOperationException(
                                 "Manual opening changed since preview: " + openingId);
                         ManagedOpeningData unexpected;
-                        if (OpeningStorageService.TryRead(opening, out unexpected))
+                        if (OpeningStorageService.TryRead(opening, out unexpected) &&
+                            (!unexpected.AdoptedManual ||
+                             !plan.AdoptedManualOpeningIds.Contains(openingId)))
                             throw new InvalidOperationException(
-                                "Manual opening became managed: " + openingId);
+                                "Manual opening became tool-managed or changed: " +
+                                openingId);
 
                         ICollection<ElementId> deleted = doc.Delete(opening.Id);
                         if (deleted.Any(id => plan.WallIds.Contains(id.IntegerValue) ||
