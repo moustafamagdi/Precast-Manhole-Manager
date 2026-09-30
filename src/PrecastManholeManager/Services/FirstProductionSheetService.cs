@@ -74,6 +74,7 @@ namespace Hatco.PrecastManholeManager.Services
                 viewports.Add(Viewport.Create(doc, sheet.Id, v.Id,
                     new XYZ(left + (i + 0.5) * cellW,
                         (top + rowBottom) * 0.5, 0)));
+                ManholeViewTitleService.UpdateDetailNumber(v, i, log);
             }
             doc.Regenerate();
             for (int i = 0; i < 5; i++)

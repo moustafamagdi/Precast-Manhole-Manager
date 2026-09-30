@@ -37,6 +37,7 @@ namespace Hatco.PrecastManholeManager.Services
         internal static void UpdateTitle(View view, string manholeName, int wallNumber,
             int foundationId, DiagnosticLogger log)
         {
+            UpdateDetailNumber(view, wallNumber, log);
             Parameter p = view.get_Parameter(BuiltInParameter.VIEW_DESCRIPTION);
             if (p == null || p.IsReadOnly)
             {
@@ -54,6 +55,34 @@ namespace Hatco.PrecastManholeManager.Services
                 ? " - PLAN"
                 : " - W" + wallNumber);
             if (existing != title) p.Set(title);
+        }
+
+        internal static void UpdateDetailNumber(View view, int wallNumber, DiagnosticLogger log)
+        {
+            if (wallNumber < 1 || wallNumber > 4) return;
+            var ports = new FilteredElementCollector(view.Document).OfClass(typeof(Viewport))
+                .Cast<Viewport>().ToList();
+            string number = "W" + wallNumber;
+            foreach (Viewport port in ports.Where(p => p.ViewId == view.Id))
+            {
+                Parameter parameter = port.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER);
+                if (parameter == null || parameter.IsReadOnly)
+                {
+                    log?.Warn("Detail Number not editable: " + view.Name);
+                    continue;
+                }
+                if (parameter.AsString() == number) continue;
+                if (ports.Any(p => p.Id != port.Id && p.SheetId == port.SheetId &&
+                    string.Equals(p.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER)?.AsString(),
+                        number, StringComparison.OrdinalIgnoreCase)))
+                {
+                    log?.Warn("Detail Number " + number + " already used on sheet " +
+                        port.SheetId.IntegerValue + "; preserved existing number for " + view.Name);
+                    continue;
+                }
+                parameter.Set(number);
+                log?.Info("SECTION DETAIL NUMBER " + view.Name + " => " + number);
+            }
         }
 
         // Rename only tool-created view titles that are still recognizably
