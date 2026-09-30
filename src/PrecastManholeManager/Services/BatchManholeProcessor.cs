@@ -28,6 +28,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool PreviewOnly { get; set; }
         public int ProposedCuts { get; set; }
         public int ProposedTrims { get; set; }
+        public int ExistingManagedRecords { get; set; }
         public int VirtualMepCandidates { get; set; }
 
         public override string ToString()
@@ -43,6 +44,7 @@ namespace Hatco.PrecastManholeManager.Services
                 " | Manual Too Small: " + ManualTooSmall +
                 "\nProposed cuts: " + ProposedCuts +
                 " | Proposed clearance trims: " + ProposedTrims +
+                " | Existing managed records: " + ExistingManagedRecords +
                 "\nVirtual MEP endpoint candidates (review only): " + VirtualMepCandidates +
                 "\nOpenings Created: " + OpeningsCreated +
                 " | Updated: " + OpeningsUpdated +
@@ -197,10 +199,28 @@ namespace Hatco.PrecastManholeManager.Services
                             r.ExistingOpeningStatus == "EXISTING TOO SMALL")
                             continue;
 
+                        if (options?.PreviewOnly == true &&
+                            r.ExistingOpeningStatus == "MANAGED")
+                        {
+                            result.ExistingManagedRecords++;
+                            log?.Info("EXISTING MANAGED source=" + r.LinkedElementId +
+                                " Wall=" + r.HostWallId +
+                                " Geometry changes require managed-sync comparison.");
+                            continue;
+                        }
+
                         string fitReason;
                         if (OpeningFitValidationService.TryValidate(doc, r, out fitReason))
                         {
                             result.ProposedCuts++;
+                            log?.Info("BATCH CUT PROPOSAL Source=" + r.LinkedElementId +
+                                " Wall=" + r.HostWallId +
+                                " Size=" + r.CutWidthMm.ToString("0.#") +
+                                "x" + r.CutHeightMm.ToString("0.#") +
+                                " mm ClearancePerSide=" + r.ClearanceMm.ToString("0.#") +
+                                " mm Center=(" + r.Xmm.ToString("0.#") + "," +
+                                r.Ymm.ToString("0.#") + "," +
+                                r.Zmm.ToString("0.#") + ") mm");
                             continue;
                         }
 
