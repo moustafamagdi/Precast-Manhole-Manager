@@ -100,3 +100,17 @@ Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 1) 'Manual na
 $plan.ManualOpeningIds.Clear()
 $plan.BlockReason = 'Cannot verify wall audit'
 Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 1) 'An inconclusive audit prevents resolving review'
+
+$bodyJoin = $assembly.GetType('Hatco.PrecastManholeManager.Services.CleanSyncPlanService').GetMethod('IsLocalBodyJoin', [Reflection.BindingFlags]'NonPublic,Static')
+function Test-BodyJoin([int]$wall, [int]$cutter, [int[]]$scope, [bool]$joined, [bool]$cutsWall) {
+    return [bool]$bodyJoin.Invoke($null, [object[]]@($wall, $cutter, $scope, 200, $joined, $cutsWall))
+}
+Assert-That (Test-BodyJoin 100 101 @(100,101,102,103) $true $true) 'Verified join between selected manhole walls is preserved'
+Assert-That (Test-BodyJoin 100 200 @(100,101,102,103) $true $true) 'Verified selected foundation join is preserved'
+Assert-That (!(Test-BodyJoin 100 999 @(100,101,102,103) $true $true)) 'External cutter remains blocked even when joined'
+Assert-That (!(Test-BodyJoin 100 101 @(100,101,102,103) $false $true)) 'Local solid cut without a geometry join remains blocked'
+Assert-That (!(Test-BodyJoin 100 101 @(100,101,102,103) $true $false)) 'An inconsistent cut direction remains blocked'
+Assert-That (!(Test-BodyJoin 999 100 @(100,101,102,103) $true $true)) 'A wall outside the selected manhole is rejected'
+Assert-That (!(Test-BodyJoin 100 100 @(100,101,102,103) $true $true)) 'Self references are rejected'
+Assert-That (!(Test-BodyJoin 100 101 @(100,101,102) $true $true)) 'Incomplete footprints cannot authorize local joins'
+Assert-That (!(Test-BodyJoin 100 101 @(100,101,102,102) $true $true)) 'Duplicate walls cannot authorize local joins'

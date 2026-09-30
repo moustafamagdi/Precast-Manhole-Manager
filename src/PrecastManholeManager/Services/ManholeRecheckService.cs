@@ -137,7 +137,9 @@ namespace Hatco.PrecastManholeManager.Services
             if (plan.VoidCutCount > 0) reasons.Add("Void cuts remain: " + plan.VoidCutCount);
             if (plan.ManualOpeningIds.Count > 0) reasons.Add("Non-tool openings remain: " + string.Join(",", plan.ManualOpeningIds));
             if (plan.InPlaceCutterCount > 0) reasons.Add("In-place cutters remain: " + string.Join(",", plan.InPlaceCutterWallIds.Keys));
-            if (plan.UnsupportedSolidCutWallIds.Count > 0) reasons.Add("Unsupported solid cuts: " + string.Join(",", plan.UnsupportedSolidCutWallIds));
+            if (plan.SolidCutReviewReasons.Count > 0)
+                reasons.AddRange(plan.SolidCutReviewReasons.Where(reason => !reasons.Contains(reason)));
+            else if (plan.UnsupportedSolidCutWallIds.Count > 0) reasons.Add("Unsupported solid cuts: " + string.Join(",", plan.UnsupportedSolidCutWallIds));
             // Unloaded links are outside the operator-selected scope; existing managed openings are normal.
             return reasons;
         }

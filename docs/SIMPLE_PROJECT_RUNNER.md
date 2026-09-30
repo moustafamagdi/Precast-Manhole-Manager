@@ -1,5 +1,11 @@
 # Simple one-time project runner (first integration pass)
 
+## Solid-cut classification
+
+Clean Scan and production preflight now inspect each solid cutter. A cut is accepted as a preserved local body join only when the host is one of the four verified manhole walls, the cutter is another selected wall or the selected foundation, and Revit confirms both the geometry join and its cutting direction. External cutters, non-join solid cuts, inconsistent directions, and inspection failures still block production. No joins or cutters are removed by this classification.
+
+Review reports identify the cutting element ID, class, category and name; the log records the classification of every inspected relation. Run Clean Scan again to replace historical reasons. The number of resolved manholes requires validation in the live project; policy tests alone do not establish it.
+
 ## Current behavior: configurable clearance and loaded-link scope (2026-09-30)
 
 This section supersedes the historical fixed-50-mm and partial-link trial notes below.

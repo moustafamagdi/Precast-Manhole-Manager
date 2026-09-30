@@ -24,6 +24,7 @@ namespace Hatco.PrecastManholeManager.Services
         public Dictionary<string, int> ManagedOpeningIds { get; } =
             new Dictionary<string, int>(StringComparer.Ordinal);
         public List<int> UnsupportedSolidCutWallIds { get; } = new List<int>();
+        public List<string> SolidCutReviewReasons { get; } = new List<string>();
         public List<UnifiedOpeningReviewRow> ProposedRows { get; } =
             new List<UnifiedOpeningReviewRow>();
         public string BlockReason { get; set; }
@@ -83,17 +84,34 @@ namespace Hatco.PrecastManholeManager.Services
                 plan.VoidCutIds[id] = cutting.Select(x => x.IntegerValue)
                     .Distinct().ToList();
 
-                // In-place/other solid-solid cutting arrangements are not
-                // equivalent to unattached void relations. Never silently reset.
+                // Preserve verified local joins; unexplained or external cutters
+                // remain blockers. Neither kind is removed by this read-only scan.
                 try
                 {
                     ICollection<ElementId> otherCuts =
                         SolidSolidCutUtils.GetCuttingSolids(wall);
-                    if (otherCuts != null && otherCuts.Count > 0)
+                    foreach (ElementId cutterId in otherCuts ?? new List<ElementId>())
                     {
-                        plan.UnsupportedSolidCutWallIds.Add(id);
-                        plan.BlockReason =
-                            "Unclassified solid-solid cuts exist on wall " + id;
+                        Element cutter = doc.GetElement(cutterId);
+                        bool joined = cutter != null && JoinGeometryUtils.AreElementsJoined(doc, wall, cutter);
+                        bool cutsWall = joined && JoinGeometryUtils.IsCuttingElementInJoin(doc, cutter, wall);
+                        bool localJoin = IsLocalBodyJoin(id, cutterId.IntegerValue,
+                            plan.WallIds, foundationId, joined, cutsWall);
+                        string identity = "Wall=" + id + " Cutter=" + cutterId.IntegerValue +
+                            " Class=" + (cutter?.GetType().Name ?? "MISSING") +
+                            " Category=" + (cutter?.Category?.Name ?? "UNKNOWN") +
+                            " Name=" + (cutter?.Name ?? "UNKNOWN");
+                        log.Info("SOLID CUT CLASSIFICATION " + identity +
+                            " Joined=" + joined + " CutterCutsWall=" + cutsWall +
+                            " Result=" + (localJoin ? "LOCAL BODY JOIN - PRESERVED" : "REVIEW"));
+                        if (localJoin) continue;
+                        if (!plan.UnsupportedSolidCutWallIds.Contains(id))
+                            plan.UnsupportedSolidCutWallIds.Add(id);
+                        string reason = "Solid cut requires review: " + identity +
+                            (joined ? " (join outside verified local body scope or inconsistent cut direction)"
+                                    : " (not a verified geometry join)");
+                        plan.SolidCutReviewReasons.Add(reason);
+                        plan.BlockReason = reason;
                     }
                 }
                 catch (Exception ex)
@@ -248,6 +266,14 @@ namespace Hatco.PrecastManholeManager.Services
             if (!string.IsNullOrWhiteSpace(plan.BlockReason))
                 log.Warn("PLAN BLOCKED: " + plan.BlockReason);
             return plan;
+        }
+
+        internal static bool IsLocalBodyJoin(int wallId, int cutterId,
+            ICollection<int> wallIds, int foundationId, bool joined, bool cutterCutsWall)
+        {
+            return wallIds != null && wallIds.Count == 4 && wallIds.Distinct().Count() == 4 &&
+                wallIds.Contains(wallId) && cutterId != wallId &&
+                (wallIds.Contains(cutterId) || cutterId == foundationId) && joined && cutterCutsWall;
         }
     }
 }
