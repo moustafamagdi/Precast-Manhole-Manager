@@ -226,7 +226,11 @@ namespace Hatco.PrecastManholeManager.Services
                                                  v.Name == viewPrefix + "_W1" ||
                                                  v.Name == viewPrefix + "_W2" ||
                                                  v.Name == viewPrefix + "_W3" ||
-                                                 v.Name == viewPrefix + "_W4"))
+                                                 v.Name == viewPrefix + "_W4" ||
+                                                 v.Name == viewPrefix + "_OUT_W1" ||
+                                                 v.Name == viewPrefix + "_OUT_W2" ||
+                                                 v.Name == viewPrefix + "_OUT_W3" ||
+                                                 v.Name == viewPrefix + "_OUT_W4"))
                                             .Select(v => v.Id.IntegerValue));
                                 DraftSheetResult views =
                                     DraftManholeSheetService.Generate(
