@@ -8,6 +8,7 @@ using Autodesk.Revit.UI.Selection;
 using Hatco.PrecastManholeManager.Infrastructure;
 using Hatco.PrecastManholeManager.Selection;
 using Hatco.PrecastManholeManager.Services;
+using Hatco.PrecastManholeManager.UI;
 
 namespace Hatco.PrecastManholeManager.Commands
 {
@@ -47,11 +48,34 @@ namespace Hatco.PrecastManholeManager.Commands
                 return Result.Succeeded;
             }
 
+            var settingsWindow = new BatchOptionsWindow(foundations.Count);
+            if (settingsWindow.ShowDialog() != true)
+                return Result.Cancelled;
+
+            BatchRunOptions options = settingsWindow.SelectedOptions;
+            if (!options.PreviewOnly)
+            {
+                TaskDialog confirm = new TaskDialog("Batch Selected - APPLY CHANGES");
+                confirm.MainInstruction = "Apply managed opening changes to " +
+                    foundations.Count + " selected manholes?";
+                confirm.MainContent =
+                    "No profile reset or in-place void removal will be performed. " +
+                    "Use a test project copy first.";
+                confirm.CommonButtons =
+                    TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No;
+                if (confirm.Show() != TaskDialogResult.Yes)
+                    return Result.Cancelled;
+            }
+
             using (var log = new DiagnosticLogger())
             {
                 try
                 {
-                    BatchManholeResult result = BatchManholeProcessor.Process(doc, foundations, log);
+                    log.Info("Experimental Batch Selected settings: PreviewOnly=" +
+                        options.PreviewOnly + " ClearanceMm=" + options.ClearanceMm +
+                        " EdgePolicy=" + options.EdgePolicy);
+                    BatchManholeResult result = BatchManholeProcessor.Process(
+                        doc, foundations, log, options);
                     TaskDialog.Show(
                         "Batch Selected Manholes",
                         result + "\n\nLog:\n" + log.LogPath);
