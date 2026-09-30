@@ -404,11 +404,11 @@ namespace Hatco.PrecastManholeManager.Commands
             confirm.MainContent =
                 "50 mm clearance per side. These are REAL Revit cuts " +
                 "to this one manhole's four walls, followed by a new " +
-                "1:25 Plan + 4 exterior Sections sheet.\\n\\n" +
+                "1:25 Plan + 4 exterior Sections sheet.\n\n" +
                 "Virtual candidates deferred: " + review.VirtualCount +
                 ". No old cuts/profiles/void cutters will be removed." +
-                "\\nRead-only audit CSV: " + csv +
-                "\\n\\nContinue only on a saved test RVT copy.";
+                "\nRead-only audit CSV: " + csv +
+                "\n\nContinue only on a saved test RVT copy.";
             confirm.CommonButtons = TaskDialogCommonButtons.Yes |
                 TaskDialogCommonButtons.No;
             confirm.DefaultButton = TaskDialogResult.No;
@@ -478,16 +478,16 @@ namespace Hatco.PrecastManholeManager.Commands
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",
                 "COMMITTED: " + id +
-                "\\nNew native openings: " + applied.NewOpenings +
-                "\\nManaged unchanged: " + applied.ManagedUnchanged +
-                "\\nManaged updated: " + applied.ManagedUpdated +
-                "\\nVirtual deferred: " + review.VirtualCount +
-                "\\nSheet: " + newSheet.SheetNumber +
+                "\nNew native openings: " + applied.NewOpenings +
+                "\nManaged unchanged: " + applied.ManagedUnchanged +
+                "\nManaged updated: " + applied.ManagedUpdated +
+                "\nVirtual deferred: " + review.VirtualCount +
+                "\nSheet: " + newSheet.SheetNumber +
                 " / " + newSheet.Name +
-                "\\nPreliminary opening setout is shown on the sheet. " +
+                "\nPreliminary opening setout is shown on the sheet. " +
                 "Verify dimensions and elevations before issuing." +
-                "\\nReview CSV: " + csv +
-                "\\nSave the RVT to retain the output.");
+                "\nReview CSV: " + csv +
+                "\nSave the RVT to retain the output.");
         }
 
         private static void GenerateSixRowLayoutSheet(UIDocument uidoc,
