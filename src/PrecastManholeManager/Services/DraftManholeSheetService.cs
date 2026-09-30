@@ -91,6 +91,43 @@ namespace Hatco.PrecastManholeManager.Services
                     maxY + pad, minZ - pad, maxZ + pad, centerZ);
                 plan.Scale = 25;
                 plan.ViewTemplateId = planTemplate.Id;
+                // Reduce oversized plan viewport bounds caused by
+                // section markers/other annotations. This is ONLY for
+                // freshly created views; the template may control this
+                // setting, in which case the user's template wins.
+                try
+                {
+                    Parameter annotation = plan.get_Parameter(
+                        BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE);
+                    if (annotation != null && !annotation.IsReadOnly)
+                        annotation.Set(1);
+                    using (ViewCropRegionShapeManager cropManager =
+                        plan.GetCropRegionShapeManager())
+                    {
+                        if (cropManager.CanHaveAnnotationCrop)
+                        {
+                            double annotationMargin = UnitUtil.MmToFt(4);
+                            cropManager.LeftAnnotationCropOffset =
+                                annotationMargin;
+                            cropManager.RightAnnotationCropOffset =
+                                annotationMargin;
+                            cropManager.TopAnnotationCropOffset =
+                                annotationMargin;
+                            cropManager.BottomAnnotationCropOffset =
+                                annotationMargin;
+                            log.Info("PLAN ANNOTATION CROP = 4mm (view units) " +
+                                "on new plan " + plan.Id.IntegerValue +
+                                "; section marks outside may be clipped.");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    log.Warn("PLAN annotation crop is controlled by " +
+                        "MH_PLAN or is unavailable: " + ex.Message +
+                        ". Oversized plans will be skipped rather " +
+                        "than changing the approved 1:25 scale.");
+                }
             }
             result.Views.Add(plan);
             log.Info("2D DRAFT PLAN ViewId=" + plan.Id.IntegerValue +
