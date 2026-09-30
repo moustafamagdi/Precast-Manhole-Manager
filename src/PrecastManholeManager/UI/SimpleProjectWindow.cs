@@ -10,7 +10,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, ReviewOne, Make3D, DraftSheet, SixRowLayoutSheet, ExportExcel
+        Close, Scan, ReviewOne, Make3D, DraftSheet, ProductionOne, SixRowLayoutSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -72,6 +72,7 @@ namespace Hatco.PrecastManholeManager.UI
             Button review = Button("2   Review Selected", 170, controls);
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
+            Button produce = Button("Generate Selected Manhole", 210, controls);
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
@@ -81,7 +82,10 @@ namespace Hatco.PrecastManholeManager.UI
                     "Review Selected performs the detailed MEP/opening inspection " +
                     "without modifying the model. 3D creates a cropped Revit " +
                     "view. Create 2D Views makes a real Floor Plan and " +
-                    "four Sections for one selected manhole. The test six-row " +
+                    "four Sections for one selected manhole. Generate Selected " +
+                    "Manhole reviews actual MEP cuts and asks permission " +
+                    "before creating real openings and its own sheet. " +
+                    "The test six-row " +
                     "sheet attempts up to six clean, unplaced manholes at " +
                     "1:25 without touching your existing manual sheet. Excel reads " +
                     "only previously SAVED fabrication data.",
@@ -171,6 +175,25 @@ namespace Hatco.PrecastManholeManager.UI
                     MessageBoxButton.YesNo) != MessageBoxResult.Yes)
                     return;
                 Choose(ProjectAction.DraftSheet, true);
+            };
+            produce.Click += (sender, args) =>
+            {
+                SimpleManholeItem row = _grid.SelectedItem as SimpleManholeItem;
+                if (row == null)
+                {
+                    MessageBox.Show(this, "Select ONE manhole first.");
+                    return;
+                }
+                if (row.State == "REVIEW")
+                {
+                    MessageBox.Show(this, "Resolve this manhole's recorded " +
+                        "review issues before production.");
+                    return;
+                }
+                // Detailed scan runs AFTER the dialog closes. The user
+                // receives actual sizes/counts plus a second approval
+                // dialog before any physical Revit wall changes.
+                Choose(ProjectAction.ProductionOne, true);
             };
             six.Click += (sender, args) =>
             {
