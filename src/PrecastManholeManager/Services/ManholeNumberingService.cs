@@ -121,14 +121,6 @@ namespace Hatco.PrecastManholeManager.Services
                 if (existing.Length > 0 && !used.Add(existing))
                     plan.Errors.Add("Duplicate existing designation " +
                         existing + " (foundation " + f.Id.IntegerValue + ")");
-                var markParameter = f.get_Parameter(
-                    BuiltInParameter.ALL_MODEL_MARK);
-                if (markParameter == null ||
-                    (markParameter.IsReadOnly && mark != existing))
-                    plan.Errors.Add("Foundation " + f.Id.IntegerValue +
-                        " cannot sync its Revit Mark. Check worksharing " +
-                        "permissions and category parameters.");
-
                 plan.Rows.Add(new ManholeNumberingRow
                 {
                     FoundationId = f.Id.IntegerValue,
@@ -171,8 +163,18 @@ namespace Hatco.PrecastManholeManager.Services
                 row.NewNumber = true;
             }
             foreach (var row in plan.Rows)
+            {
                 row.SyncMark = !string.Equals(row.OldMark,
                     row.ProposedName, StringComparison.Ordinal);
+                Element element = doc.GetElement(
+                    new ElementId(row.FoundationId));
+                Parameter mark = element?.get_Parameter(
+                    BuiltInParameter.ALL_MODEL_MARK);
+                if (row.SyncMark && (mark == null || mark.IsReadOnly))
+                    plan.Errors.Add("Foundation " + row.FoundationId +
+                        " cannot write native Revit Mark; check " +
+                        "instance parameter and editing permissions.");
+            }
             return plan;
         }
 
