@@ -10,7 +10,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, ReviewOne, Make3D, DraftSheet, ProductionOne, SixRowLayoutSheet, ExportExcel
+        Close, Scan, NumberAll, ReviewOne, Make3D, DraftSheet, ProductionOne, SixRowLayoutSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -69,6 +69,7 @@ namespace Hatco.PrecastManholeManager.UI
             };
             top.Children.Add(controls);
             Button scan = Button("1   Scan Project", 155, controls);
+            Button number = Button("Assign Manhole Names", 175, controls);
             Button review = Button("2   Review Selected", 170, controls);
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
@@ -78,7 +79,10 @@ namespace Hatco.PrecastManholeManager.UI
 
             top.Children.Add(new TextBlock
             {
-                Text = "Scan finds the manholes and isolates problem cases. " +
+                Text = "Assign Manhole Names previews all IDs, preserves " +
+                    "existing designations, and writes approved generated names " +
+                    "to each foundation Mark. Scan finds manholes and " +
+                    "isolates problem cases. " +
                     "Review Selected performs the detailed MEP/opening inspection " +
                     "without modifying the model. 3D creates a cropped Revit " +
                     "view. Create 2D Views makes a real Floor Plan and " +
@@ -147,6 +151,7 @@ namespace Hatco.PrecastManholeManager.UI
             AddColumn("3D view", "ViewName", 185);
 
             scan.Click += (s, e) => Choose(ProjectAction.Scan, false);
+            number.Click += (s, e) => Choose(ProjectAction.NumberAll, false);
             review.Click += (s, e) => Choose(ProjectAction.ReviewOne, true);
             view.Click += (s, e) => Choose(ProjectAction.Make3D, true);
             draft.Click += (s, e) =>
