@@ -23,45 +23,31 @@ namespace Hatco.PrecastManholeManager.Services
         {
             ManufacturerWorkbookData data = ManufacturerWorkbookDataService.Collect(doc, log);
 
+            data.Manholes = data.Manholes
+                .OrderBy(x => NaturalManholeNumber(x.ManholeNumber))
+                .ThenBy(x => x.ManholeNumber ?? string.Empty)
+                .ToList();
+
             string folder = OutputPathService.GetManufacturerExportsFolder();
             string stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss", CultureInfo.InvariantCulture);
             string path = Path.Combine(folder, "Precast_Manholes_" + stamp + ".xlsx");
 
             var sheets = new List<XlsxSheet>
             {
-                BuildManholesSheet(data),
-                BuildOpeningsSheet(data)
+                BuildManholeView(data),
+                BuildPrintReport(data),
+                BuildDataManholes(data),
+                BuildDataOpenings(data)
             };
-
-            HashSet<string> usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-            {
-                "MANHOLES",
-                "OPENINGS"
-            };
-
-            foreach (ManholeDataRecord manhole in data.Manholes)
-            {
-                List<ManufacturerOpeningRow> openings = data.Openings
-                    .Where(x => x.FoundationId == manhole.FoundationId)
-                    .OrderBy(x => x.WallNumber)
-                    .ThenBy(x => x.OpeningNumber ?? string.Empty)
-                    .ToList();
-
-                string sheetName = CreateUniqueSheetName(
-                    manhole.ManholeNumber,
-                    manhole.FoundationId,
-                    usedSheetNames);
-
-                sheets.Add(BuildManholeDetailSheet(sheetName, manhole, openings));
-            }
 
             SimpleXlsxWriter.Write(path, sheets);
 
             log?.WriteHeader("PHASE 5 EXCEL EXPORT");
             log?.Info("Workbook: " + path);
+            log?.Info("Visible worksheets: MANHOLE VIEW, PRINT REPORT");
+            log?.Info("Hidden worksheets: DATA_MANHOLES, DATA_OPENINGS");
             log?.Info("Manholes exported: " + data.Manholes.Count);
             log?.Info("Openings exported: " + data.Openings.Count);
-            log?.Info("Worksheet count: " + sheets.Count);
 
             return new ManufacturerExcelExportResult
             {
@@ -72,119 +58,317 @@ namespace Hatco.PrecastManholeManager.Services
             };
         }
 
-        private static XlsxSheet BuildManholesSheet(ManufacturerWorkbookData data)
+        private static XlsxSheet BuildManholeView(ManufacturerWorkbookData data)
         {
             var sheet = new XlsxSheet
             {
-                Name = "MANHOLES",
-                FreezeRows = 3
+                Name = "MANHOLE VIEW",
+                FreezeRows = 11
             };
 
-            sheet.ColumnWidths[1] = 16;
-            sheet.ColumnWidths[2] = 14;
-            sheet.ColumnWidths[3] = 15;
-            sheet.ColumnWidths[4] = 15;
-            sheet.ColumnWidths[5] = 15;
-            sheet.ColumnWidths[6] = 15;
-            sheet.ColumnWidths[7] = 14;
-            sheet.ColumnWidths[8] = 14;
-            sheet.ColumnWidths[9] = 18;
-            sheet.ColumnWidths[10] = 12;
-            sheet.ColumnWidths[11] = 12;
-            sheet.ColumnWidths[12] = 12;
-            sheet.ColumnWidths[13] = 12;
-            sheet.ColumnWidths[14] = 14;
+            double[] widths = { 13, 18, 18, 18, 18, 24, 18, 4, 4, 16 };
+            for (int i = 0; i < widths.Length; i++)
+                sheet.ColumnWidths[i + 1] = widths[i];
 
-            sheet.AddRow(XlsxCell.Text("PRECAST MANHOLES - MANUFACTURER SUMMARY", 1));
-            sheet.Merges.Add("A1:N1");
-            sheet.AddRow(XlsxCell.Text("All dimensions and elevations are in millimeters.", 8));
-            sheet.Merges.Add("A2:N2");
+            sheet.HiddenColumns.Add(10);
 
             sheet.AddRow(
-                XlsxCell.Text("Manhole No.", 2),
-                XlsxCell.Text("Foundation ID", 2),
-                XlsxCell.Text("Clear W1-W4", 2),
-                XlsxCell.Text("Clear W2-W3", 2),
-                XlsxCell.Text("Outer W1-W4", 2),
-                XlsxCell.Text("Outer W2-W3", 2),
-                XlsxCell.Text("Wall Height", 2),
-                XlsxCell.Text("Base Thickness", 2),
-                XlsxCell.Text("Base Top Elev.", 2),
-                XlsxCell.Text("W1 ID", 2),
-                XlsxCell.Text("W2 ID", 2),
-                XlsxCell.Text("W3 ID", 2),
-                XlsxCell.Text("W4 ID", 2),
-                XlsxCell.Text("Openings", 2));
+                XlsxCell.Text("PRECAST MANHOLE - FABRICATION VIEW", 1));
+            sheet.Merges.Add("A1:G1");
 
-            foreach (ManholeDataRecord m in data.Manholes)
+            sheet.AddRow(
+                XlsxCell.Text(
+                    "Select a manhole below. Only fabrication data is shown. All dimensions are in mm.",
+                    8));
+            sheet.Merges.Add("A2:G2");
+
+            string firstManhole = data.Manholes.FirstOrDefault()?.ManholeNumber ?? string.Empty;
+
+            sheet.AddRow(
+                XlsxCell.Text("Select Manhole", 6),
+                XlsxCell.Text(firstManhole, 7));
+            sheet.Merges.Add("B3:C3");
+
+            if (data.Manholes.Count > 0)
             {
-                int openingCount = data.Openings.Count(x => x.FoundationId == m.FoundationId);
+                sheet.DataValidations.Add(new XlsxDataValidation
+                {
+                    SqRef = "B3",
+                    Formula1 = "$J$2:$J$" + (data.Manholes.Count + 1)
+                });
+            }
+
+            sheet.AddRow(XlsxCell.Text("MANHOLE DATA", 3));
+            sheet.Merges.Add("A4:G4");
+
+            sheet.AddRow(
+                XlsxCell.Text("Internal Clear Size", 6),
+                XlsxCell.Formula(
+                    "IFERROR(TEXT(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,2,FALSE),\"0\")&\" x \"&TEXT(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,3,FALSE),\"0\"),\"\")",
+                    7),
+                XlsxCell.Text("Overall Size", 6),
+                XlsxCell.Formula(
+                    "IFERROR(TEXT(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,4,FALSE),\"0\")&\" x \"&TEXT(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,5,FALSE),\"0\"),\"\")",
+                    7),
+                XlsxCell.Text("Wall Height", 6),
+                XlsxCell.Formula(
+                    "IFERROR(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,6,FALSE),\"\")",
+                    7),
+                XlsxCell.Text("mm", 7));
+
+            sheet.AddRow(
+                XlsxCell.Text("Base Thickness", 6),
+                XlsxCell.Formula(
+                    "IFERROR(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,7,FALSE),\"\")",
+                    7),
+                XlsxCell.Text("Total Openings", 6),
+                XlsxCell.Formula(
+                    "IFERROR(VLOOKUP($B$3,'DATA_MANHOLES'!$A:$I,8,FALSE),\"\")",
+                    7),
+                XlsxCell.Text("Wall Arrangement", 6),
+                XlsxCell.Text("W1 opposite W4 / W2 opposite W3", 7),
+                XlsxCell.Blank(7));
+
+            sheet.AddRow(
+                XlsxCell.Text("Opening Position", 6),
+                XlsxCell.Text("Offset = opening C/L from wall reference edge", 7),
+                XlsxCell.Text("Vertical Position", 6),
+                XlsxCell.Text("Invert = bottom of service from base top", 7));
+            sheet.Merges.Add("B7:C7");
+            sheet.Merges.Add("D7:E7");
+            sheet.Merges.Add("F7:G7");
+
+            sheet.AddRow(XlsxCell.Text(
+                "For fabrication use the opening schedule below. Revit IDs and internal model references are intentionally excluded.",
+                8));
+            sheet.Merges.Add("A8:G8");
+
+            sheet.AddRow(XlsxCell.Blank());
+            sheet.AddRow(XlsxCell.Blank());
+
+            sheet.AddRow(XlsxCell.Text("OPENING SCHEDULE", 3));
+            sheet.Merges.Add("A11:G11");
+
+            sheet.AddRow(
+                XlsxCell.Text("Wall", 2),
+                XlsxCell.Text("Opening", 2),
+                XlsxCell.Text("Opening Size W x H", 2),
+                XlsxCell.Text("Offset from Ref. Edge", 2),
+                XlsxCell.Text("Invert from Base", 2),
+                XlsxCell.Text("Service / System", 2),
+                XlsxCell.Text("Type", 2));
+
+            int dataLastRow = Math.Max(2, data.Openings.Count + 1);
+            int maxOpenings = data.Manholes.Count == 0
+                ? 8
+                : Math.Max(
+                    8,
+                    data.Manholes.Max(m => data.Openings.Count(o => o.FoundationId == m.FoundationId)));
+
+            int firstOpeningRow = 13;
+
+            for (int i = 0; i < maxOpenings; i++)
+            {
+                int excelRow = firstOpeningRow + i;
+                string nth = "ROWS($A$" + firstOpeningRow + ":A" + excelRow + ")";
+                string match =
+                    "AGGREGATE(15,6,(ROW('DATA_OPENINGS'!$A$2:$A$" + dataLastRow +
+                    ")-ROW('DATA_OPENINGS'!$A$2)+1)/('DATA_OPENINGS'!$A$2:$A$" + dataLastRow +
+                    "=$B$3)," + nth + ")";
 
                 sheet.AddRow(
-                    XlsxCell.Text(m.ManholeNumber),
-                    XlsxCell.Integer(m.FoundationId),
-                    XlsxCell.Number(m.ClearW1W4Mm),
-                    XlsxCell.Number(m.ClearW2W3Mm),
-                    XlsxCell.Number(m.OuterW1W4Mm),
-                    XlsxCell.Number(m.OuterW2W3Mm),
-                    XlsxCell.Number(m.WallHeightMm),
-                    XlsxCell.Number(m.BaseThicknessMm),
-                    XlsxCell.Number(m.BaseTopZmm),
-                    XlsxCell.Integer(m.Wall1Id),
-                    XlsxCell.Integer(m.Wall2Id),
-                    XlsxCell.Integer(m.Wall3Id),
-                    XlsxCell.Integer(m.Wall4Id),
-                    XlsxCell.Integer(openingCount));
+                    XlsxCell.Formula(
+                        "IFERROR(INDEX('DATA_OPENINGS'!$B$2:$B$" + dataLastRow + "," + match + "),\"\")"),
+                    XlsxCell.Formula(
+                        "IFERROR(INDEX('DATA_OPENINGS'!$C$2:$C$" + dataLastRow + "," + match + "),\"\")"),
+                    XlsxCell.Formula(
+                        "IFERROR(TEXT(INDEX('DATA_OPENINGS'!$D$2:$D$" + dataLastRow + "," + match + "),\"0\")&\" x \"&TEXT(INDEX('DATA_OPENINGS'!$E$2:$E$" + dataLastRow + "," + match + "),\"0\"),\"\")"),
+                    XlsxCell.Formula(
+                        "IFERROR(INDEX('DATA_OPENINGS'!$F$2:$F$" + dataLastRow + "," + match + "),\"\")",
+                        5),
+                    XlsxCell.Formula(
+                        "IFERROR(INDEX('DATA_OPENINGS'!$G$2:$G$" + dataLastRow + "," + match + "),\"\")",
+                        5),
+                    XlsxCell.Formula(
+                        "IFERROR(INDEX('DATA_OPENINGS'!$H$2:$H$" + dataLastRow + "," + match + ")&IF(INDEX('DATA_OPENINGS'!$I$2:$I$" + dataLastRow + "," + match + ")<>\"\",\" / \"&INDEX('DATA_OPENINGS'!$I$2:$I$" + dataLastRow + "," + match + "),\"\"),\"\")"),
+                    XlsxCell.Formula(
+                        "IFERROR(INDEX('DATA_OPENINGS'!$J$2:$J$" + dataLastRow + "," + match + "),\"\")"));
+            }
+
+            for (int i = 0; i < data.Manholes.Count; i++)
+            {
+                int row = i + 2;
+                SetCell(sheet, row, 10, XlsxCell.Text(data.Manholes[i].ManholeNumber));
             }
 
             return sheet;
         }
 
-        private static XlsxSheet BuildOpeningsSheet(ManufacturerWorkbookData data)
+        private static XlsxSheet BuildPrintReport(ManufacturerWorkbookData data)
         {
             var sheet = new XlsxSheet
             {
-                Name = "OPENINGS",
-                FreezeRows = 3
+                Name = "PRINT REPORT",
+                Landscape = true,
+                FitToOnePageWide = true
             };
 
-            double[] widths =
-            {
-                15, 8, 10, 22, 14, 14, 14, 16, 14, 18,
-                18, 18, 18, 18, 18, 24, 22, 12, 36, 14
-            };
-
+            double[] widths = { 11, 14, 19, 18, 17, 27, 18 };
             for (int i = 0; i < widths.Length; i++)
                 sheet.ColumnWidths[i + 1] = widths[i];
 
-            sheet.AddRow(XlsxCell.Text("PRECAST MANHOLE OPENING SCHEDULE", 1));
-            sheet.Merges.Add("A1:T1");
-            sheet.AddRow(XlsxCell.Text(
-                "Opening size = actual precast wall opening. Offset is from the stable wall start used by the add-in.",
-                8));
-            sheet.Merges.Add("A2:T2");
+            foreach (ManholeDataRecord m in data.Manholes)
+            {
+                int pageStartRow = sheet.Rows.Count + 1;
+
+                List<ManufacturerOpeningRow> openings = data.Openings
+                    .Where(x => x.FoundationId == m.FoundationId)
+                    .OrderBy(x => x.WallNumber)
+                    .ThenBy(x => x.OpeningNumber ?? string.Empty)
+                    .ToList();
+
+                sheet.AddRow(XlsxCell.Text(
+                    "PRECAST MANHOLE FABRICATION REPORT - " + (m.ManholeNumber ?? string.Empty),
+                    1));
+                sheet.Merges.Add("A" + pageStartRow + ":G" + pageStartRow);
+
+                sheet.AddRow(
+                    XlsxCell.Text("Internal Clear Size", 6),
+                    XlsxCell.Text(
+                        F0(m.ClearW2W3Mm) + " x " + F0(m.ClearW1W4Mm),
+                        7),
+                    XlsxCell.Text("Overall Size", 6),
+                    XlsxCell.Text(
+                        F0(m.OuterW2W3Mm) + " x " + F0(m.OuterW1W4Mm),
+                        7),
+                    XlsxCell.Text("Wall Height", 6),
+                    XlsxCell.Number(m.WallHeightMm, 7),
+                    XlsxCell.Text("mm", 7));
+
+                sheet.AddRow(
+                    XlsxCell.Text("Base Thickness", 6),
+                    XlsxCell.Number(m.BaseThicknessMm, 7),
+                    XlsxCell.Text("Total Openings", 6),
+                    XlsxCell.Integer(openings.Count, 7),
+                    XlsxCell.Text("Wall Arrangement", 6),
+                    XlsxCell.Text("W1-W4 opposite / W2-W3 opposite", 7),
+                    XlsxCell.Blank(7));
+
+                sheet.AddRow(XlsxCell.Text(
+                    "Opening positions: horizontal offset is opening C/L from the wall reference edge; invert is measured from base top.",
+                    8));
+                sheet.Merges.Add("A" + (pageStartRow + 3) + ":G" + (pageStartRow + 3));
+
+                sheet.AddRow(XlsxCell.Blank());
+
+                sheet.AddRow(
+                    XlsxCell.Text("Wall", 2),
+                    XlsxCell.Text("Opening", 2),
+                    XlsxCell.Text("Opening Size W x H", 2),
+                    XlsxCell.Text("Offset Ref. Edge", 2),
+                    XlsxCell.Text("Invert Base", 2),
+                    XlsxCell.Text("Service / System", 2),
+                    XlsxCell.Text("Type", 2));
+
+                if (openings.Count == 0)
+                {
+                    int noOpenRow = sheet.Rows.Count + 1;
+                    sheet.AddRow(XlsxCell.Text("No managed fabrication openings", 8));
+                    sheet.Merges.Add("A" + noOpenRow + ":G" + noOpenRow);
+                }
+                else
+                {
+                    foreach (ManufacturerOpeningRow o in openings)
+                    {
+                        string service = o.ServiceCategory ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(o.SystemName))
+                            service += (service.Length > 0 ? " / " : string.Empty) + o.SystemName;
+
+                        sheet.AddRow(
+                            XlsxCell.Text("W" + o.WallNumber),
+                            XlsxCell.Text(o.OpeningNumber),
+                            XlsxCell.Text(
+                                F0(o.OpeningWidthMm) + " x " + F0(o.OpeningHeightMm)),
+                            XlsxCell.Number(o.OffsetMm),
+                            XlsxCell.Number(o.InvertFromBaseMm),
+                            XlsxCell.Text(service),
+                            XlsxCell.Text(o.OpeningType));
+                    }
+                }
+
+                sheet.AddRow(XlsxCell.Blank());
+                int noteRow = sheet.Rows.Count + 1;
+                sheet.AddRow(XlsxCell.Text(
+                    "Fabrication note: verify wall orientation and reference edge against the approved coordination drawing before production.",
+                    8));
+                sheet.Merges.Add("A" + noteRow + ":G" + noteRow);
+
+                sheet.AddRow(XlsxCell.Blank());
+
+                int pageEndRow = sheet.Rows.Count;
+                if (m != data.Manholes.Last())
+                    sheet.HorizontalPageBreakRows.Add(pageEndRow);
+            }
+
+            return sheet;
+        }
+
+        private static XlsxSheet BuildDataManholes(ManufacturerWorkbookData data)
+        {
+            var sheet = new XlsxSheet
+            {
+                Name = "DATA_MANHOLES",
+                Hidden = true
+            };
 
             sheet.AddRow(
-                XlsxCell.Text("Manhole", 2),
-                XlsxCell.Text("Wall", 2),
-                XlsxCell.Text("Opening", 2),
-                XlsxCell.Text("Opening Code", 2),
-                XlsxCell.Text("Width", 2),
-                XlsxCell.Text("Height", 2),
-                XlsxCell.Text("Offset", 2),
-                XlsxCell.Text("Invert From Base", 2),
-                XlsxCell.Text("Absolute Invert", 2),
-                XlsxCell.Text("Center Elev.", 2),
-                XlsxCell.Text("Opening Type", 2),
-                XlsxCell.Text("Service", 2),
-                XlsxCell.Text("System", 2),
-                XlsxCell.Text("Family / Type", 2),
-                XlsxCell.Text("Opening ID", 2),
-                XlsxCell.Text("Source Link", 2),
-                XlsxCell.Text("Source Element ID", 2),
-                XlsxCell.Text("Foundation ID", 2),
-                XlsxCell.Text("Source Unique ID", 2),
-                XlsxCell.Text("Status", 2));
+                XlsxCell.Text("Manhole"),
+                XlsxCell.Text("ClearLength"),
+                XlsxCell.Text("ClearWidth"),
+                XlsxCell.Text("OuterLength"),
+                XlsxCell.Text("OuterWidth"),
+                XlsxCell.Text("WallHeight"),
+                XlsxCell.Text("BaseThickness"),
+                XlsxCell.Text("OpeningCount"),
+                XlsxCell.Text("FoundationId"));
+
+            foreach (ManholeDataRecord m in data.Manholes)
+            {
+                sheet.AddRow(
+                    XlsxCell.Text(m.ManholeNumber),
+                    XlsxCell.Number(m.ClearW2W3Mm),
+                    XlsxCell.Number(m.ClearW1W4Mm),
+                    XlsxCell.Number(m.OuterW2W3Mm),
+                    XlsxCell.Number(m.OuterW1W4Mm),
+                    XlsxCell.Number(m.WallHeightMm),
+                    XlsxCell.Number(m.BaseThicknessMm),
+                    XlsxCell.Integer(data.Openings.Count(x => x.FoundationId == m.FoundationId)),
+                    XlsxCell.Integer(m.FoundationId));
+            }
+
+            return sheet;
+        }
+
+        private static XlsxSheet BuildDataOpenings(ManufacturerWorkbookData data)
+        {
+            var sheet = new XlsxSheet
+            {
+                Name = "DATA_OPENINGS",
+                Hidden = true
+            };
+
+            sheet.AddRow(
+                XlsxCell.Text("Manhole"),
+                XlsxCell.Text("Wall"),
+                XlsxCell.Text("Opening"),
+                XlsxCell.Text("Width"),
+                XlsxCell.Text("Height"),
+                XlsxCell.Text("Offset"),
+                XlsxCell.Text("InvertFromBase"),
+                XlsxCell.Text("Service"),
+                XlsxCell.Text("System"),
+                XlsxCell.Text("Type"),
+                XlsxCell.Text("Status"));
 
             foreach (ManufacturerOpeningRow r in data.Openings)
             {
@@ -192,194 +376,56 @@ namespace Hatco.PrecastManholeManager.Services
                     XlsxCell.Text(r.ManholeNumber),
                     XlsxCell.Text("W" + r.WallNumber),
                     XlsxCell.Text(r.OpeningNumber),
-                    XlsxCell.Text(r.OpeningCode),
                     XlsxCell.Number(r.OpeningWidthMm),
                     XlsxCell.Number(r.OpeningHeightMm),
                     XlsxCell.Number(r.OffsetMm),
                     XlsxCell.Number(r.InvertFromBaseMm),
-                    XlsxCell.Number(r.AbsoluteInvertMm),
-                    XlsxCell.Number(r.CenterElevationMm),
-                    XlsxCell.Text(r.OpeningType),
                     XlsxCell.Text(r.ServiceCategory),
                     XlsxCell.Text(r.SystemName),
-                    XlsxCell.Text(r.FamilyType),
-                    XlsxCell.Integer(r.OpeningElementId),
-                    XlsxCell.Text(r.SourceLink),
-                    XlsxCell.Integer(r.SourceElementId),
-                    XlsxCell.Integer(r.FoundationId),
-                    XlsxCell.Text(r.SourceUniqueId),
+                    XlsxCell.Text(r.OpeningType),
                     XlsxCell.Text(r.Status));
             }
 
             return sheet;
         }
 
-        private static XlsxSheet BuildManholeDetailSheet(
-            string sheetName,
-            ManholeDataRecord m,
-            IList<ManufacturerOpeningRow> openings)
+        private static void SetCell(
+            XlsxSheet sheet,
+            int rowNumber,
+            int columnNumber,
+            XlsxCell cell)
         {
-            var sheet = new XlsxSheet
-            {
-                Name = sheetName,
-                FreezeRows = 1
-            };
+            while (sheet.Rows.Count < rowNumber)
+                sheet.Rows.Add(new List<XlsxCell>());
 
-            sheet.ColumnWidths[1] = 18;
-            sheet.ColumnWidths[2] = 18;
-            sheet.ColumnWidths[3] = 14;
-            sheet.ColumnWidths[4] = 16;
-            sheet.ColumnWidths[5] = 18;
-            sheet.ColumnWidths[6] = 18;
-            sheet.ColumnWidths[7] = 20;
-            sheet.ColumnWidths[8] = 34;
+            List<XlsxCell> row = sheet.Rows[rowNumber - 1];
 
-            sheet.AddRow(XlsxCell.Text(
-                "PRECAST MANHOLE DATA SHEET - " + (m.ManholeNumber ?? string.Empty),
-                1));
-            sheet.Merges.Add("A1:H1");
+            while (row.Count < columnNumber)
+                row.Add(XlsxCell.Blank());
 
-            sheet.AddRow(XlsxCell.Text("General Data", 3));
-            sheet.Merges.Add("A2:H2");
-
-            sheet.AddRow(
-                XlsxCell.Text("Manhole No.", 6),
-                XlsxCell.Text(m.ManholeNumber, 7),
-                XlsxCell.Text("Foundation ID", 6),
-                XlsxCell.Integer(m.FoundationId, 7),
-                XlsxCell.Text("Total Openings", 6),
-                XlsxCell.Integer(openings.Count, 7),
-                XlsxCell.Blank(7),
-                XlsxCell.Blank(7));
-
-            sheet.AddRow(
-                XlsxCell.Text("Clear W1-W4", 6),
-                XlsxCell.Number(m.ClearW1W4Mm, 7),
-                XlsxCell.Text("Clear W2-W3", 6),
-                XlsxCell.Number(m.ClearW2W3Mm, 7),
-                XlsxCell.Text("Wall Height", 6),
-                XlsxCell.Number(m.WallHeightMm, 7),
-                XlsxCell.Text("mm", 7),
-                XlsxCell.Blank(7));
-
-            sheet.AddRow(
-                XlsxCell.Text("Outer W1-W4", 6),
-                XlsxCell.Number(m.OuterW1W4Mm, 7),
-                XlsxCell.Text("Outer W2-W3", 6),
-                XlsxCell.Number(m.OuterW2W3Mm, 7),
-                XlsxCell.Text("Base Thickness", 6),
-                XlsxCell.Number(m.BaseThicknessMm, 7),
-                XlsxCell.Text("mm", 7),
-                XlsxCell.Blank(7));
-
-            sheet.AddRow(
-                XlsxCell.Text("Base Top Elev.", 6),
-                XlsxCell.Number(m.BaseTopZmm, 7),
-                XlsxCell.Text("W1 / W4", 6),
-                XlsxCell.Text(m.Wall1Id + " / " + m.Wall4Id, 7),
-                XlsxCell.Text("W2 / W3", 6),
-                XlsxCell.Text(m.Wall2Id + " / " + m.Wall3Id, 7),
-                XlsxCell.Blank(7),
-                XlsxCell.Blank(7));
-
-            sheet.AddRow(XlsxCell.Text(
-                "Wall convention: W1 opposite W4, W2 opposite W3. All dimensions are millimeters.",
-                8));
-            sheet.Merges.Add("A7:H7");
-
-            for (int wall = 1; wall <= 4; wall++)
-            {
-                List<ManufacturerOpeningRow> wallOpenings = openings
-                    .Where(x => x.WallNumber == wall)
-                    .OrderBy(x => x.OpeningNumber ?? string.Empty)
-                    .ToList();
-
-                int sectionRow = sheet.Rows.Count + 1;
-                sheet.AddRow(XlsxCell.Text(
-                    "WALL W" + wall + " - " + wallOpenings.Count + " OPENING(S)",
-                    3));
-                sheet.Merges.Add("A" + sectionRow + ":H" + sectionRow);
-
-                sheet.AddRow(
-                    XlsxCell.Text("Opening Code", 2),
-                    XlsxCell.Text("Size W x H", 2),
-                    XlsxCell.Text("Offset", 2),
-                    XlsxCell.Text("Invert Base", 2),
-                    XlsxCell.Text("Abs. Invert", 2),
-                    XlsxCell.Text("Service", 2),
-                    XlsxCell.Text("System", 2),
-                    XlsxCell.Text("Source", 2));
-
-                if (wallOpenings.Count == 0)
-                {
-                    int noOpeningRow = sheet.Rows.Count + 1;
-                    sheet.AddRow(XlsxCell.Text("No openings", 8));
-                    sheet.Merges.Add("A" + noOpeningRow + ":H" + noOpeningRow);
-                }
-                else
-                {
-                    foreach (ManufacturerOpeningRow r in wallOpenings)
-                    {
-                        sheet.AddRow(
-                            XlsxCell.Text(r.OpeningCode),
-                            XlsxCell.Text(
-                                r.OpeningWidthMm.ToString("0.#", CultureInfo.InvariantCulture) +
-                                " x " +
-                                r.OpeningHeightMm.ToString("0.#", CultureInfo.InvariantCulture)),
-                            XlsxCell.Number(r.OffsetMm),
-                            XlsxCell.Number(r.InvertFromBaseMm),
-                            XlsxCell.Number(r.AbsoluteInvertMm),
-                            XlsxCell.Text(r.ServiceCategory),
-                            XlsxCell.Text(r.SystemName),
-                            XlsxCell.Text(
-                                (r.SourceLink ?? string.Empty) +
-                                " | ID " +
-                                r.SourceElementId));
-                    }
-                }
-
-                sheet.AddRow(XlsxCell.Blank());
-            }
-
-            return sheet;
+            row[columnNumber - 1] = cell;
         }
 
-        private static string CreateUniqueSheetName(
-            string manholeNumber,
-            int foundationId,
-            HashSet<string> used)
+        private static int NaturalManholeNumber(string value)
         {
-            string baseName = string.IsNullOrWhiteSpace(manholeNumber)
-                ? "MH-" + foundationId
-                : manholeNumber;
+            if (string.IsNullOrWhiteSpace(value))
+                return int.MaxValue;
 
-            foreach (char invalid in new[] { ':', '\\', '/', '?', '*', '[', ']' })
-                baseName = baseName.Replace(invalid, '-');
+            string digits = new string(
+                value.Reverse()
+                    .TakeWhile(char.IsDigit)
+                    .Reverse()
+                    .ToArray());
 
-            baseName = baseName.Trim();
-            if (baseName.Length == 0)
-                baseName = "MH-" + foundationId;
+            int number;
+            return int.TryParse(digits, out number)
+                ? number
+                : int.MaxValue;
+        }
 
-            if (baseName.Length > 31)
-                baseName = baseName.Substring(0, 31);
-
-            string candidate = baseName;
-            int suffix = 2;
-
-            while (used.Contains(candidate))
-            {
-                string suffixText = "-" + suffix;
-                int maxBase = 31 - suffixText.Length;
-                string shortBase = baseName.Length > maxBase
-                    ? baseName.Substring(0, maxBase)
-                    : baseName;
-
-                candidate = shortBase + suffixText;
-                suffix++;
-            }
-
-            used.Add(candidate);
-            return candidate;
+        private static string F0(double value)
+        {
+            return value.ToString("0", CultureInfo.InvariantCulture);
         }
     }
 }
