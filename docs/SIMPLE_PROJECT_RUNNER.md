@@ -217,3 +217,41 @@ before running. Send a screenshot of the resulting sheet and timestamped
 TXT log. If rows are skipped, check their exact `6MH VIEW` paper sizes
 and cell bounds in the log. Only after visual approval should we expand
 beyond the first sheet or add numbering and dimension annotations.
+
+
+## Seven-row layout revision (2026-09-30)
+
+The user approved the first automated sheet, then requested **seven**
+manholes per sheet and centered, non-overlapping view titles. The new
+**Test 7-Row Sheet** action is wired to
+`SevenRowManholeSheetService`; it creates a NEW
+`HATCO_PRECAST_7MH_TEST_01` sheet and never edits the manually
+arranged reference sheet or the earlier six-row test sheet.
+
+Each 1:25 row is PLAN, W1, W2, W3, W4. The generator can consider up
+to **12 unplaced candidates** to fill at most **7 fitting rows**.
+Each row has a dedicated paper-space label band. All five drawing
+boxes align along the TOP of the row; the label of each viewport is
+measured with `GetLabelOutline`, shifted to the horizontal center
+below its drawing with `LabelOffset` and checked against its own
+view, neighboring views, cell edges and lower row boundary.
+It prefers the user's existing **NO BUBBLE NTS** viewport type and
+only supplies concise title-on-sheet text for newly made views.
+Existing user-entered view titles remain unchanged.
+
+The new Plan tries to activate and tighten its annotation crop to
+approximately 4 mm around the model crop, reducing viewport bounds
+caused by distant section heads. If `MH_PLAN` template locks the
+annotation crop, it is NOT overridden; the log reports the restriction
+and an oversized manhole is skipped at 1:25. This step may crop
+out-of-bound section heads; the first test must visually verify them.
+
+Every row is atomic: if a drawing or label fails seven-row fit, its
+new views/viewports roll back independently; the remaining fitting
+manholes continue. Do not shrink the agreed 1:25 scale to force a fit.
+The output log records each viewport's footprint and skip reason.
+
+Run on a detached/saved test RVT with the reference sheet active
+to reuse its titleblock type. Send a screenshot of the new sheet and
+its timestamped TXT log. This is still a *layout* acceptance test,
+not a fully dimensioned manufacturing submission.
