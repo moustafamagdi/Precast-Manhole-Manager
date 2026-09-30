@@ -125,3 +125,33 @@ For first acceptance testing:
    milestone will use that geometry to generate true dimensioned
    fabrication elevations and an opening schedule, after one
    controlled clean-manhole opening-sync test.
+
+
+## Milestone 2 correction — actual 2D Draft Plan + Sections
+
+The first orthographic-3D sheet attempt was rejected because Revit's
+whole-project 3D camera crop produced physically huge paper viewport
+bounds. The expected workflow does **not** require 3D views on
+fabrication sheets.
+
+Draft generation now uses real Revit **ViewPlan (Floor Plan)** for PLAN
+and four native **ViewSection** views W1-W4. Each view is cropped to the
+validated four-wall footprint or an individual wall. The floor plan
+view-range includes the base and the wall heights relative to the
+nearest Level. Section view transforms face each wall from outside
+with a tight depth to avoid the opposite wall. The 3D Review command
+remains separate and only supports troubleshooting.
+
+New sheet/view prefix `MH_<FoundationId>_DRAFT_2D`, to avoid ever
+reusing/overwriting old 3D trial views. One transaction generates
+these five views and arranges them on an A1/A0 titleblock, trying
+paper scales 1:25–1:200. The previous large 3D-crop workaround is no
+longer part of the draft generation path.
+
+**Acceptance:** On a detached saved RVT, choose the same healthy
+foundation 4409885 (1200×1200 internal, 1600×1600 outer), hit
+Draft Sheet, verify a PLAN looking down plus four wall Sections.
+Send sheet screenshot and TXT log. If its plan cut elevation or
+section facing direction is wrong, fix those orientation/view-range
+details before any annotation work. These are still unannotated
+draft model views and not issued manufacturing drawings.
