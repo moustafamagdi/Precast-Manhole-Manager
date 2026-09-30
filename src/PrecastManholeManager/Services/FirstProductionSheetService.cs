@@ -162,10 +162,11 @@ namespace Hatco.PrecastManholeManager.Services
                 lines.Add("NO APPROVED ACTUAL PENETRATIONS FOUND.");
             string schedule = string.Join(Environment.NewLine, lines);
             double noteWidth = content - UnitUtil.MmToFt(12);
+            var textOptions = new TextNoteOptions(noteType.Id);
             TextNote.Create(doc, sheet.Id,
                 new XYZ(left + UnitUtil.MmToFt(5),
                     rowBottom - UnitUtil.MmToFt(28), 0),
-                noteWidth, schedule, noteType.Id);
+                noteWidth, schedule, textOptions);
             log.Info("PRODUCTION SHEET " + sheet.Id.IntegerValue +
                 " Openings=" + actual.Count + " Layout=1 PLAN + 4 EXT SECTIONS");
             return sheet;
