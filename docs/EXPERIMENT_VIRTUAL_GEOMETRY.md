@@ -120,3 +120,42 @@ approval before any APPLY run.
 On this branch, Batch Selected now uses the same settings as Batch All: Preview Only is checked by default and APPLY requires explicit confirmation. Audited edited or unknown wall profiles and void cuts are marked for review even in preview, without counting cut proposals for those walls. The legacy behavior on main is unchanged.
 
 Virtual endpoint reports also include source size, system and slope (%). GapToFace is measured against the wall solid mid-plane where Revit geometry is available; ReachToAxis includes the remaining reach to the wall axis.
+
+
+## Stage B — read-only virtual MEP + opening reset audit (experimental code ready for Revit test)
+
+Command: **Hatco > Precast Tools > Test Virtual MEP + Audit**.
+Select a recognized manhole Structural Foundation. This command:
+- Reconstructs the complete four-wall footprint using the accepted virtual foundation detector.
+- Scans linked straight Pipes and Ducts without modifying them.
+- Evaluates eligible endpoints ending up to **150 mm before wall face**, with default **15°** maximum approach deviation from wall normal. Preserves their original 3D slope in projected coordinates.
+- Checks projected hit against finite wall axis and wall vertical extents; skips actual plane crossings.
+- Emits **VirtualMepCandidates_<timestamp>.csv** and timestamped TXT log in the usual Desktop Logs folder.
+- Classifies *every* virtual candidate as **REVIEW**, including ambiguous candidate walls. Does not create openings.
+
+The same command inventories:
+- Revit native managed / unmanaged `Opening` objects hosted by the four walls.
+- Wall SketchId/profile status when detectable; UNKNOWN is explicitly reported.
+- Unattached void-cut relationships accessible through the Revit API; UNKNOWN is explicitly reported.
+
+**No reset or uncut** is performed. Profile edits could include intended geometry, and deleting an in-place cutting family could affect many unrelated objects. This is deliberately inventory-only until user review and case-specific safety checks exist.
+
+## Experimental Batch All preview
+The experimental **Batch All** command now shows a settings window. It only selects the two approved foundation type names. Options:
+- Clearance per side (0–500 mm), default 50 mm.
+- Boundary policy: flag as REVIEW (default), or propose a clearance-only clipped rectangle **provided the actual MEP section remains fully enclosed**.
+- Optional existing opening/profile/void audit, default ON.
+- Optional expensive virtual endpoint scan of every candidate foundation, default OFF.
+
+**Preview Only is mandatory in this experimental build.** No new openings or data carriers are created from these settings. Results include proposed cuts, proposed clearance reductions, opening reviews, and optional virtual endpoint candidates. Output and logs are preliminary; successful geometry tests do not constitute fabrication approval.
+
+Do not use experimental data for site cutting until validation of face locations, wall cuts, opening positions and legacy edited profiles is completed. The legacy Batch Selected command is not part of this experimental preview route.
+
+### Please test in this order
+1. **Test Virtual MEP + Audit** on a cropped-base manhole whose pipe stops at a wall face.
+2. Repeat on a manhole with a wall sketch/profile opening and a wall cut by an in-place void family.
+3. Inspect the per-run candidate CSV and diagnostic log. Confirm linked Element IDs, wall IDs, gap, projection, and opening inventory.
+4. Run **Batch All** with *Preview Only*, standard 50 mm clearance and *Review* edge policy; compare proposals with your model.
+5. Repeat preview with *Trim Clearance Only* on a manhole known to have an oversized clearance.
+
+No automatic profile reset, void deletion or batch write should be attempted on this branch at this stage.
