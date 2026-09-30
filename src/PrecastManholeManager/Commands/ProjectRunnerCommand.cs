@@ -130,7 +130,7 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             if (preview.Errors.Count != 0)
             {
-                TaskDialog.Show("Resolve Naming Conflicts",
+                TaskDialog.Show("Duplicate Internal IDs",
                     "No IDs changed. " + preview.Errors.Count +
                     " duplicate INTERNAL ID(s).\n" +
                     string.Join("\n", preview.Errors.Take(5)) +
@@ -147,7 +147,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 .Select(x => x.FoundationId + " => " + x.ProposedName));
             if (examples.Length == 0) examples =
                 "All manholes already have names.";
-            var ask = new TaskDialog("Assign Manhole Names")
+            var ask = new TaskDialog("Assign Internal IDs")
             {
                 MainInstruction = "Assign stable names to " +
                     preview.Rows.Count + " precast manhole(s)?",
@@ -155,7 +155,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     preview.ExistingPreserved +
                     "\nNew IDs (MH-001, MH-002, ...): " +
                     preview.NewlyNumbered +
-                    "\nProject Mark updates: NONE" + 0 +
+                    "\nProject Mark changes: NONE" +
                     "\n\nExamples:\n" + examples +
                     "\n\nNumbers are generated in initial " +
                     "ElementId order, NOT consultant-approved site " +
@@ -179,7 +179,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 " manholes.\nGenerated: " +
                 preview.NewlyNumbered + "\nPreserved: " +
                 preview.ExistingPreserved + "\nNative Mark untouched: " +
-                preview.MarkWrites + "\n\nPreview CSV: " + csv +
+                "no changes\n\nPreview CSV: " + csv +
                 "\nSave/Synchronize the RVT to retain the names.");
         }
 
