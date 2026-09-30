@@ -381,6 +381,9 @@ namespace Hatco.PrecastManholeManager.Services
             // current crop-box (view-local) coordinate system.
             v.CropBoxActive = true;
             v.CropBoxVisible = false;
+            // Refresh Revit's local crop coordinate system after changing
+            // camera orientation and section box.
+            v.Document.Regenerate();
             BoundingBoxXYZ current = v.CropBox;
             if (current == null)
                 throw new InvalidOperationException(
