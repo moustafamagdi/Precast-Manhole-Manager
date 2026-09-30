@@ -102,6 +102,34 @@ namespace Hatco.PrecastManholeManager.Services
             }
         }
 
+        public static string ExportReadableCsv(Document doc,
+            IEnumerable<ManholeReviewIssue> values)
+        {
+            string path = Path.ChangeExtension(RegisterPath(doc), ".csv");
+            var sb = new StringBuilder();
+            sb.AppendLine("FoundationId,Status,Severity,Reason,WallIds,ReviewViewId,ReviewViewName,UpdatedUtc,FoundationUniqueId");
+            foreach (ManholeReviewIssue issue in values.OrderBy(x =>
+                x.FoundationId))
+                sb.AppendLine(string.Join(",", new[]
+                {
+                    issue.FoundationId.ToString(CultureInfo.InvariantCulture),
+                    Csv(issue.Status), Csv(issue.Severity),
+                    Csv(issue.Reason), Csv(issue.WallIds),
+                    issue.ViewId.ToString(CultureInfo.InvariantCulture),
+                    Csv(issue.ViewName), Csv(issue.UpdatedUtc),
+                    Csv(issue.FoundationUniqueId)
+                }));
+            File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
+            return path;
+        }
+
+        private static string Csv(string s)
+        {
+            string quote = ((char)34).ToString();
+            return quote + (s ?? string.Empty).Replace(quote, quote + quote) +
+                quote;
+        }
+
         public static void Save(Document doc,
             IEnumerable<ManholeReviewIssue> values)
         {
