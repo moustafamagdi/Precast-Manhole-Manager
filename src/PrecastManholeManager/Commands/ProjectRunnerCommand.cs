@@ -123,7 +123,7 @@ namespace Hatco.PrecastManholeManager.Commands
             string csv = ManholeNumberingService.ExportPreview(preview);
             if (preview.Rows.Count == 0)
             {
-                TaskDialog.Show("Assign Manhole Names",
+                TaskDialog.Show("Assign Internal IDs",
                     "No eligible precast foundations were found. " +
                     "No project elements changed.\nPreview: " + csv);
                 return;
@@ -132,10 +132,10 @@ namespace Hatco.PrecastManholeManager.Commands
             {
                 TaskDialog.Show("Resolve Naming Conflicts",
                     "No IDs changed. " + preview.Errors.Count +
-                    " numbering conflict(s).\n" +
+                    " duplicate INTERNAL ID(s).\n" +
                     string.Join("\n", preview.Errors.Take(5)) +
                     "\n\nFull audit CSV: " + csv +
-                    "\nCorrect existing duplicate/mismatched names " +
+                    "\nCorrect duplicate internal names " +
                     "in Revit and run again.");
                 log.Warn("MANHOLE NUMBERING CANCELLED PreflightErrors=" +
                     preview.Errors.Count + " CSV=" + csv);
@@ -155,12 +155,12 @@ namespace Hatco.PrecastManholeManager.Commands
                     preview.ExistingPreserved +
                     "\nNew IDs (MH-001, MH-002, ...): " +
                     preview.NewlyNumbered +
-                    "\nRevit Mark updates: " + preview.MarkWrites +
+                    "\nProject Mark updates: NONE" + 0 +
                     "\n\nExamples:\n" + examples +
                     "\n\nNumbers are generated in initial " +
                     "ElementId order, NOT consultant-approved site " +
                     "designations. Once committed, they remain fixed " +
-                    "across reruns and are saved in foundation Mark " +
+                    "across reruns and are saved in foundation storage " +
                     "and internal project data.\n\nAudit: " + csv +
                     "\n\nCheck the CSV and confirm to proceed.",
                 CommonButtons = TaskDialogCommonButtons.Yes |
@@ -178,7 +178,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "Saved to the RVT: " + preview.Rows.Count +
                 " manholes.\nGenerated: " +
                 preview.NewlyNumbered + "\nPreserved: " +
-                preview.ExistingPreserved + "\nNative Mark updated: " +
+                preview.ExistingPreserved + "\nNative Mark untouched: " +
                 preview.MarkWrites + "\n\nPreview CSV: " + csv +
                 "\nSave/Synchronize the RVT to retain the names.");
         }
