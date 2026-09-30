@@ -12,6 +12,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool ResetEditedProfiles { get; set; }
         public bool RemoveManualNative { get; set; }
         public bool RemoveVoidCutRelations { get; set; }
+        public bool DeleteIsolatedInPlaceCutters { get; set; }
         public bool IncludeStraightVirtual { get; set; }
         public bool RequiredLinksVerified { get; set; }
     }
@@ -23,6 +24,7 @@ namespace Hatco.PrecastManholeManager.Services
         public int ProfilesReset { get; set; }
         public int UnattachedVoidRelationsRemoved { get; set; }
         public int ManualNativeDeleted { get; set; }
+        public int InPlaceCuttersUnpinnedDeleted { get; set; }
         public int ManagedUnchanged { get; set; }
         public int ManagedUpdated { get; set; }
         public int NewOpenings { get; set; }
@@ -34,6 +36,8 @@ namespace Hatco.PrecastManholeManager.Services
                 "\nEdited profiles reset: " + ProfilesReset +
                 "\nVoid cut relations removed: " + UnattachedVoidRelationsRemoved +
                 "\nNon-tool native openings removed: " + ManualNativeDeleted +
+                "\nPinned/unpinned isolated in-place cutters deleted: " +
+                InPlaceCuttersUnpinnedDeleted +
                 "\nManaged unchanged: " + ManagedUnchanged +
                 "\nManaged updated: " + ManagedUpdated +
                 "\nNew openings created: " + NewOpenings +
@@ -69,6 +73,10 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException("Void-cut relations require explicit uncut approval.");
             if (plan.ManualOpeningIds.Count > 0 && !options.RemoveManualNative)
                 throw new InvalidOperationException("Manual native openings require explicit delete approval.");
+            if (plan.InPlaceCutterCount > 0 &&
+                !options.DeleteIsolatedInPlaceCutters)
+                throw new InvalidOperationException(
+                    "In-place cutter deletion requires separate explicit approval.");
 
             var selected = new List<PenetrationRecord>();
             var keys = new HashSet<string>(StringComparer.Ordinal);
@@ -166,6 +174,84 @@ namespace Hatco.PrecastManholeManager.Services
                             log.Warn("REMOVE VOID CUT RELATION Wall=" + wallId +
                                      " Cutter=" + cutterId);
                         }
+                    }
+
+                    // This route is EXPLICIT test-copy deletion of a pinned
+                    // in-place cutter instance, not the family/type. The read-only
+                    // plan has verified no OTHER WALL advertises this insert.
+                    // Non-wall cuts cannot be exhaustively inferred from
+                    // FindInserts, so the UI requires additional acknowledgement.
+                    foreach (var pair in plan.InPlaceCutterWallIds)
+                    {
+                        FamilyInstance instance = doc.GetElement(
+                            new ElementId(pair.Key)) as FamilyInstance;
+                        if (instance?.Symbol?.Family == null ||
+                            !instance.Symbol.Family.IsInPlace)
+                            throw new InvalidOperationException(
+                                "In-place cutter identity changed: " + pair.Key);
+
+                        foreach (int hostId in pair.Value)
+                        {
+                            Wall host = doc.GetElement(new ElementId(hostId)) as Wall;
+                            if (host == null || !host.FindInserts(true, true, true, true)
+                                .Any(id => id.IntegerValue == pair.Key))
+                                throw new InvalidOperationException(
+                                    "Cutter/host relation changed: Cutter=" +
+                                    pair.Key + " Wall=" + hostId);
+                        }
+
+                        // A dry-run SubTransaction catches cascade deletion
+                        // before committing real deletion; it cannot detect
+                        // changed geometry in otherwise surviving elements.
+                        using (var trial = new SubTransaction(doc))
+                        {
+                            trial.Start();
+                            if (instance.Pinned) instance.Pinned = false;
+                            ICollection<ElementId> removed = doc.Delete(
+                                instance.Id);
+                            var permitted = new HashSet<int> {
+                                pair.Key
+                            };
+                            // Family instance subcomponents may be deleted
+                            // with the instance, but other project elements
+                            // must not disappear.
+                            ICollection<ElementId> nested = instance.GetSubComponentIds();
+                            foreach (ElementId id in nested)
+                                permitted.Add(id.IntegerValue);
+                            if (removed.Any(id => !permitted.Contains(
+                                id.IntegerValue)))
+                            {
+                                trial.RollBack();
+                                throw new InvalidOperationException(
+                                    "In-place cutter would cascade-delete additional " +
+                                    "elements. Cutter=" + pair.Key);
+                            }
+                            trial.RollBack();
+                        }
+
+                        // Re-fetch after trial rollback: old managed wrappers
+                        // should never be relied upon following regeneration.
+                        instance = doc.GetElement(new ElementId(pair.Key))
+                            as FamilyInstance;
+                        if (instance == null)
+                            throw new InvalidOperationException(
+                                "Cutter unavailable after deletion dry-run: " +
+                                pair.Key);
+                        if (instance.Pinned)
+                        {
+                            instance.Pinned = false;
+                            log.Warn("UNPIN INPLACE CUTTER " + pair.Key);
+                        }
+                        ICollection<ElementId> deleted = doc.Delete(instance.Id);
+                        if (deleted.Any(id => plan.WallIds.Contains(
+                                id.IntegerValue) ||
+                                plan.ManagedOpeningIds.Values.Contains(
+                                    id.IntegerValue)))
+                            throw new InvalidOperationException(
+                                "In-place cut deletion affected protected wall/managed opening.");
+                        output.InPlaceCuttersUnpinnedDeleted++;
+                        log.Warn("DELETE INPLACE CUTTER INSTANCE " + pair.Key +
+                            " WALLS=" + string.Join(",", pair.Value));
                     }
 
                     // Confirm Revit regeneration succeeds BEFORE removing any
@@ -280,6 +366,7 @@ namespace Hatco.PrecastManholeManager.Services
                     output.ProfilesReset = 0;
                     output.UnattachedVoidRelationsRemoved = 0;
                     output.ManualNativeDeleted = 0;
+                    output.InPlaceCuttersUnpinnedDeleted = 0;
                     output.ManagedUpdated = 0;
                     output.NewOpenings = 0;
                     log.Error("ATOMIC CLEAN SYNC ABORTED; changes rolled back.", ex);
