@@ -213,6 +213,21 @@ namespace Hatco.PrecastManholeManager.Services
                             sub.Start();
                             try
                             {
+                                string viewPrefix = "MH_" +
+                                    foundation.Id.IntegerValue +
+                                    "_DRAFT_2D";
+                                HashSet<int> previouslyExisting =
+                                    new HashSet<int>(
+                                        new FilteredElementCollector(doc)
+                                            .OfClass(typeof(View))
+                                            .Cast<View>()
+                                            .Where(v => !v.IsTemplate &&
+                                                (v.Name == viewPrefix + "_PLAN" ||
+                                                 v.Name == viewPrefix + "_W1" ||
+                                                 v.Name == viewPrefix + "_W2" ||
+                                                 v.Name == viewPrefix + "_W3" ||
+                                                 v.Name == viewPrefix + "_W4"))
+                                            .Select(v => v.Id.IntegerValue));
                                 DraftSheetResult views =
                                     DraftManholeSheetService.Generate(
                                         doc, foundation, footprint, log);
@@ -228,7 +243,9 @@ namespace Hatco.PrecastManholeManager.Services
                                     View v = views.Views[col];
                                     Parameter description = v.get_Parameter(
                                         BuiltInParameter.VIEW_DESCRIPTION);
-                                    if (description != null &&
+                                    if (!previouslyExisting.Contains(
+                                        v.Id.IntegerValue) &&
+                                        description != null &&
                                         !description.IsReadOnly &&
                                         string.IsNullOrWhiteSpace(
                                             description.AsString()))
