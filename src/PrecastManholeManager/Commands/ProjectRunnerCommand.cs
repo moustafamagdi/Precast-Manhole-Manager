@@ -421,18 +421,64 @@ namespace Hatco.PrecastManholeManager.Commands
             CleanSyncPlan plan = CleanSyncPlanService.Build(doc,
                 foundation.Id.IntegerValue, footprint, review, log);
 
-            if (!string.IsNullOrWhiteSpace(plan.BlockReason) ||
-                plan.UnavailableLinks != 0 ||
-                plan.ProfileResetCount != 0 ||
-                plan.VoidCutCount != 0 ||
-                plan.ManualOpeningIds.Count != 0 ||
-                plan.InPlaceCutterCount != 0 ||
-                plan.UnsupportedSolidCutWallIds.Count != 0)
-                throw new InvalidOperationException(
-                    "Selected manhole is not clean enough for automatic " +
-                    "production. No old geometry will be deleted. " +
-                    "Block=" + (plan.BlockReason ?? "legacy cuts or links") +
-                    ". See " + csv);
+            // Report the EXACT blockers instead of grouping every
+            // distinct legacy cut/link issue into "legacy cuts or links".
+            // Diagnosis stays read-only; no automatic deletion or
+            // blanket assumption that an unloaded link is irrelevant.
+            var blockers = new List<string>();
+            if (!string.IsNullOrWhiteSpace(plan.BlockReason))
+                blockers.Add("Audit: " + plan.BlockReason);
+            if (plan.UnavailableLinks > 0)
+            {
+                string names = string.Join("; ",
+                    new FilteredElementCollector(doc)
+                        .OfClass(typeof(RevitLinkInstance))
+                        .Cast<RevitLinkInstance>()
+                        .Where(x => x.GetLinkDocument() == null)
+                        .Select(x => x.Name + " [Id=" +
+                            x.Id.IntegerValue + "]"));
+                blockers.Add("Unavailable Revit links (" +
+                    plan.UnavailableLinks + "): " + names +
+                    ". Load them or explicitly verify their coverage " +
+                    "before a production cut.");
+            }
+            if (plan.ProfileResetCount > 0)
+                blockers.Add("Edited wall profiles (" +
+                    plan.ProfileResetCount + "): " +
+                    string.Join(",", plan.Profiles
+                        .Where(x => x.Value == "EDITED PROFILE")
+                        .Select(x => x.Key)));
+            if (plan.VoidCutCount > 0)
+                blockers.Add("Existing unattached void cuts (" +
+                    plan.VoidCutCount + "): " +
+                    string.Join(",", plan.VoidCutIds
+                        .Where(x => x.Value.Count > 0)
+                        .Select(x => x.Key + " => " +
+                            string.Join("/", x.Value))));
+            if (plan.ManualOpeningIds.Count > 0)
+                blockers.Add("Existing non-tool native openings (" +
+                    plan.ManualOpeningIds.Count + "): " +
+                    string.Join(",", plan.ManualOpeningIds));
+            if (plan.InPlaceCutterCount > 0)
+                blockers.Add("In-place wall cutters (" +
+                    plan.InPlaceCutterCount + "): " +
+                    string.Join(",", plan.InPlaceCutterWallIds.Keys));
+            if (plan.UnsupportedSolidCutWallIds.Count > 0)
+                blockers.Add("Unsupported solid-solid cuts on walls: " +
+                    string.Join(",", plan.UnsupportedSolidCutWallIds));
+            if (blockers.Count > 0)
+            {
+                log.WriteHeader("PRODUCTION PRECHECK: EXACT BLOCKERS");
+                foreach (string blocker in blockers)
+                    log.Warn("PRODUCTION BLOCKED Foundation=" +
+                        foundation.Id.IntegerValue + " " + blocker);
+                TaskDialog.Show("Production Precheck - " + id,
+                    "No geometry was modified.\n\n" +
+                    string.Join("\n\n", blockers) +
+                    "\n\nOpening review CSV:\n" + csv +
+                    "\n\nDetailed TXT log:\n" + log.LogPath);
+                return;
+            }
 
             List<UnifiedOpeningReviewRow> actual = review.Rows
                 .Where(x => !x.IsVirtual).ToList();
