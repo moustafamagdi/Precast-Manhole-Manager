@@ -34,6 +34,11 @@ namespace Hatco.PrecastManholeManager.Models
         public double WidthMm { get; set; }
         public double HeightMm { get; set; }
 
+        // Optional per-record opening cut after safe edge fitting.
+        // Source sizes/clearance remain unchanged for audit.
+        public double CutWidthOverrideMm { get; set; }
+        public double CutHeightOverrideMm { get; set; }
+
         public int ExistingOpeningId { get; set; }
         public double ExistingOpeningWidthMm { get; set; }
         public double ExistingOpeningHeightMm { get; set; }
@@ -132,8 +137,10 @@ namespace Hatco.PrecastManholeManager.Models
             }
         }
 
-        public double CutWidthMm => Shape == "Round" ? OpeningDiameterMm : OpeningWidthMm;
-        public double CutHeightMm => Shape == "Round" ? OpeningDiameterMm : OpeningHeightMm;
+        public double CutWidthMm => CutWidthOverrideMm > 0 ? CutWidthOverrideMm :
+            (Shape == "Round" ? OpeningDiameterMm : OpeningWidthMm);
+        public double CutHeightMm => CutHeightOverrideMm > 0 ? CutHeightOverrideMm :
+            (Shape == "Round" ? OpeningDiameterMm : OpeningHeightMm);
         public string SourceKey => LinkInstanceId.ToString(CultureInfo.InvariantCulture) + "|" +
                                    (LinkedUniqueId ?? LinkedElementId.ToString(CultureInfo.InvariantCulture)) + "|" +
                                    HostWallId.ToString(CultureInfo.InvariantCulture);
