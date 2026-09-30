@@ -550,6 +550,48 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException(
                     "Duplicate actual crossing source keys. Review " + csv);
 
+            // An explicit second gate allows a limited first-model TEST
+            // from actual intersections in the loaded source links.
+            // It NEVER declares unavailable MEP/structural links
+            // irrelevant and marks the result NOT FOR ISSUE.
+            if (incompleteLinkCoverage)
+            {
+                string loadedSources = string.Join("\n",
+                    actual.Select(x => x.Source.LinkName)
+                        .Distinct(StringComparer.Ordinal));
+                var coverage = new TaskDialog(
+                    "Incomplete linked-model coverage")
+                {
+                    MainInstruction = "Create a PARTIAL TEST from " +
+                        actual.Count + " actual crossing(s)?",
+                    MainContent = "Detected from LOADED source(s):\n" +
+                        loadedSources +
+                        "\n\nUNAVAILABLE links (" +
+                        plan.UnavailableLinks + "):\n" +
+                        unavailableNames +
+                        "\n\nOther links could contain more " +
+                        "penetrations. This option creates real " +
+                        "native openings ONLY for the detected " +
+                        "sources in this saved TEST RVT. The new " +
+                        "sheet will be marked PARTIAL - NOT FOR ISSUE." +
+                        "\nNo old opening or void will be deleted." +
+                        "\n\nContinue with this deliberately " +
+                        "incomplete test?",
+                    CommonButtons = TaskDialogCommonButtons.Yes |
+                        TaskDialogCommonButtons.No,
+                    DefaultButton = TaskDialogResult.No
+                };
+                if (coverage.Show() != TaskDialogResult.Yes)
+                {
+                    log.Info("PARTIAL LINK TEST cancelled by operator.");
+                    return;
+                }
+                log.Warn("PARTIAL LINK TEST EXPLICITLY APPROVED " +
+                    "Foundation=" + foundation.Id.IntegerValue +
+                    " Count=" + actual.Count +
+                    " UnavailableLinks=" + plan.UnavailableLinks);
+            }
+
             log.Info("PRODUCTION PREFLIGHT Name=" + id +
                 " Actual=" + actual.Count +
                 " VirtualDeferred=" + review.VirtualCount +
@@ -568,7 +610,9 @@ namespace Hatco.PrecastManholeManager.Commands
                 "to this one manhole's four walls, followed by a new " +
                 "1:25 Plan + 4 exterior Sections sheet.\n\n" +
                 "Virtual candidates deferred: " + review.VirtualCount +
-                ". No old cuts/profiles/void cutters will be removed." +
+                (incompleteLinkCoverage ?
+                    ". PARTIAL LINK COVERAGE - NOT FOR ISSUE." : ".") +
+                " No old cuts/profiles/void cutters will be removed." +
                 "\nRead-only audit CSV: " + csv +
                 "\n\nContinue only on a saved test RVT copy.";
             confirm.CommonButtons = TaskDialogCommonButtons.Yes |
@@ -597,7 +641,9 @@ namespace Hatco.PrecastManholeManager.Commands
                             RemoveVoidCutRelations = false,
                             DeleteIsolatedInPlaceCutters = false,
                             IncludeStraightVirtual = false,
-                            RequiredLinksVerified = false
+                            RequiredLinksVerified = false,
+                            AllowIncompleteLinkCoverageForPreview =
+                                incompleteLinkCoverage
                         }, log);
                     if (!applied.Committed)
                         throw new InvalidOperationException(
@@ -614,7 +660,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                     foundation, footprint, log,
                                     forProduction: true);
                             newSheet = FirstProductionSheetService.Build(
-                                doc, foundation, views, actual, log);
+                                doc, foundation, views, actual, log,
+                                incompleteLinkCoverage);
                             production3D = ManholeReviewViewService
                                 .CreateProduction(doc, foundation,
                                     footprint, log);
@@ -645,6 +692,9 @@ namespace Hatco.PrecastManholeManager.Commands
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",
                 "COMMITTED: " + id +
+                (incompleteLinkCoverage ?
+                    "\nPARTIAL LINK COVERAGE - NOT FOR ISSUE" :
+                    "\nALL LINK INSTANCES AVAILABLE") +
                 "\nNew native openings: " + applied.NewOpenings +
                 "\nManaged unchanged: " + applied.ManagedUnchanged +
                 "\nManaged updated: " + applied.ManagedUpdated +
