@@ -28,6 +28,7 @@ namespace Hatco.PrecastManholeManager.UI
         public List<ManholeReviewIssue> SelectedIssues { get; private set; }
         public double MarginMm { get; private set; }
         public bool CreateViews { get; private set; }
+        public bool StatusModified { get; private set; }
 
         public ManholeReviewManagerWindow(
             IList<ManholeReviewIssue> issues, string registerPath)
@@ -107,6 +108,20 @@ namespace Hatco.PrecastManholeManager.UI
             };
             DockPanel.SetDock(footer, Dock.Bottom);
             root.Children.Add(footer);
+            var markResolved = new Button
+            {
+                Content = "Mark Selected Resolved",
+                MinWidth = 165,
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 0, 12, 0)
+            };
+            var reopen = new Button
+            {
+                Content = "Reopen Selected",
+                MinWidth = 135,
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 0, 12, 0)
+            };
             var cancel = new Button
             {
                 Content = "Close",
@@ -120,6 +135,8 @@ namespace Hatco.PrecastManholeManager.UI
                 MinWidth = 210,
                 Padding = new Thickness(8, 6, 8, 6)
             };
+            footer.Children.Add(markResolved);
+            footer.Children.Add(reopen);
             footer.Children.Add(cancel);
             footer.Children.Add(create);
             cancel.Click += (s, e) => DialogResult = false;
@@ -167,6 +184,37 @@ namespace Hatco.PrecastManholeManager.UI
                 foreach (ReviewViewListItem item in _items) item.Selected = false;
                 grid.Items.Refresh();
             };
+
+            Action<string> setStatus = status =>
+            {
+                grid.CommitEdit(DataGridEditingUnit.Cell, true);
+                grid.CommitEdit(DataGridEditingUnit.Row, true);
+                List<ReviewViewListItem> chosen = _items.Where(x =>
+                    x.Selected).ToList();
+                if (chosen.Count == 0)
+                {
+                    MessageBox.Show(this, "Select at least one row.");
+                    return;
+                }
+                if (status == "RESOLVED")
+                {
+                    MessageBoxResult confirmation = MessageBox.Show(this,
+                        "Mark " + chosen.Count + " selected issue(s) as resolved? " +
+                        "Experimental Batch All will no longer skip those foundations.",
+                        "Mark Resolved", MessageBoxButton.YesNo);
+                    if (confirmation != MessageBoxResult.Yes) return;
+                }
+                foreach (ReviewViewListItem item in chosen)
+                {
+                    item.Issue.Status = status;
+                    item.Issue.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                }
+                StatusModified = true;
+                CreateViews = false;
+                DialogResult = true;
+            };
+            markResolved.Click += (s, e) => setStatus("RESOLVED");
+            reopen.Click += (s, e) => setStatus("OPEN");
 
             create.Click += (s, e) =>
             {
