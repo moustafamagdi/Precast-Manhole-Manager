@@ -29,6 +29,20 @@ namespace Hatco.PrecastManholeManager.Services
         private const double ParallelMin = 0.985;
         private const double PerpendicularMax = 0.12;
 
+        private static readonly HashSet<string> AllowedFoundationTypes = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            "HTC_ST_PRECAST_FN_200mm_MH",
+            "HTC_ST_PRECAST_FN_300mm_MH"
+        };
+
+        private static readonly HashSet<string> AllowedWallTypes = new HashSet<string>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            "HTC_ST_PRECAST_WL_200_MH",
+            "HTC_ST_PRECAST_WL_150_MH"
+        };
+
         private readonly Document _doc;
         private readonly DiagnosticLogger _log;
 
@@ -41,6 +55,20 @@ namespace Hatco.PrecastManholeManager.Services
         public VirtualFoundationResult Analyze(Element foundation)
         {
             if (foundation == null) throw new ArgumentNullException(nameof(foundation));
+
+            string foundationType = ResolveTypeName(foundation);
+            if (!AllowedFoundationTypes.Contains(foundationType))
+            {
+                _log.Warn("Selected Foundation=" + foundation.Id.IntegerValue +
+                          " type='" + foundationType + "' is not an allowed manhole base type.");
+                return new VirtualFoundationResult
+                {
+                    Accepted = false,
+                    Reason = "Foundation type '" + foundationType +
+                             "' is not in the two configured manhole base types."
+                };
+            }
+
             BoundingBoxXYZ box = foundation.get_BoundingBox(null);
             if (box == null)
                 throw new InvalidOperationException("Foundation has no model bounding box.");
@@ -58,6 +86,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             _log.WriteHeader("EXPERIMENT: VIRTUAL FOUNDATION - READ ONLY");
             _log.Info("Foundation=" + foundation.Id.IntegerValue +
+                      " Type='" + foundationType + "'" +
                       " ActualBBoxCenterFt=" + Fmt(baseCenter));
 
             // Cut foundations can have a shifted bounding-box center; use a generous
@@ -76,6 +105,7 @@ namespace Hatco.PrecastManholeManager.Services
             _log.Info("Nearby straight wall candidates: " + candidates.Count);
             foreach (Candidate c in candidates)
                 _log.Info("CANDIDATE Wall=" + c.Wall.Id.IntegerValue +
+                          " Type='" + ResolveTypeName(c.Wall) + "'" +
                           " MidFt=" + Fmt(c.Mid) +
                           " LengthMm=" + Mm(c.Length).ToString("0.#") +
                           " HeightMm=" + Mm(c.TopZ - c.BottomZ).ToString("0.#"));
@@ -170,6 +200,7 @@ namespace Hatco.PrecastManholeManager.Services
             var lc = wall.Location as LocationCurve;
             var line = lc?.Curve as Line;
             if (line == null) return null;
+            if (!AllowedWallTypes.Contains(ResolveTypeName(wall))) return null;
             BoundingBoxXYZ b = wall.get_BoundingBox(null);
             if (b == null) return null;
             if (b.Max.X < baseBox.Min.X - margin || b.Min.X > baseBox.Max.X + margin ||
@@ -296,6 +327,12 @@ namespace Hatco.PrecastManholeManager.Services
         private static bool Parallel(Candidate a, Candidate b)
         {
             return Math.Abs(a.Direction.DotProduct(b.Direction)) >= ParallelMin;
+        }
+
+        private static string ResolveTypeName(Element element)
+        {
+            Element type = element.Document.GetElement(element.GetTypeId());
+            return (type?.Name ?? string.Empty).Trim();
         }
 
         private static XYZ Flat(XYZ p) { return new XYZ(p.X, p.Y, 0); }
