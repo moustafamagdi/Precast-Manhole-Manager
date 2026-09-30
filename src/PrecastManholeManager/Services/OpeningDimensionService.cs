@@ -46,7 +46,7 @@ namespace Hatco.PrecastManholeManager.Services
             if (ids.Count > 0) doc.Delete(ids);
         }
 
-        public static string Generate(Document doc, Element foundation, DiagnosticLogger log)
+        public static string Generate(Document doc, Element foundation, DiagnosticLogger log, Action<bool> completed = null)
         {
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D_OUT_W";
             var sections = new FilteredElementCollector(doc).OfClass(typeof(ViewSection))
@@ -113,9 +113,12 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                 }
             }
+            bool bodyComplete;
+            string bodyStatus = GenerateBody(doc, foundation, footprint, sections, type, log, out bodyComplete);
+            completed?.Invoke(failed == 0 && bodyComplete);
             return "Dimensions: " + created + " strings created; " + failed + " wall(s) need review." +
                 (diagnostics.Count == 0 ? "" : "\n" + string.Join("\n", diagnostics)) +
-                "\n" + GenerateBody(doc, foundation, footprint, sections, type, log);
+                "\n" + bodyStatus;
         }
 
         private static int CreateForWall(Document doc, Element foundation, ViewSection view,

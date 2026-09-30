@@ -166,6 +166,10 @@ namespace Hatco.PrecastManholeManager.Services
                 "HATCO - Save Internal Manhole Numbers"))
             {
                 transaction.Start();
+                var failureOptions = transaction.GetFailureHandlingOptions();
+                failureOptions.SetFailuresPreprocessor(new OpeningFailurePreprocessor(log));
+                failureOptions.SetClearAfterRollback(true);
+                transaction.SetFailureHandlingOptions(failureOptions);
                 try
                 {
                     foreach (ManholeNumberingRow row in approved.Rows)

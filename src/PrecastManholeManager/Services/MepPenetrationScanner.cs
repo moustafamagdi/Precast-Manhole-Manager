@@ -26,6 +26,11 @@ namespace Hatco.PrecastManholeManager.Services
 
         public List<PenetrationRecord> Scan(ManholeDetectionResult manhole)
         {
+            using (LinkedMepScanCache.BeginIfNeeded()) return ScanIndexed(manhole);
+        }
+
+        private List<PenetrationRecord> ScanIndexed(ManholeDetectionResult manhole)
+        {
             _log.Info("MEP SCAN SCOPE: Pipes and Ducts only; Conduits and Cable Trays excluded.");
             var records = new List<PenetrationRecord>();
             _log.WriteHeader("MEP LINK SCAN");
@@ -56,30 +61,18 @@ namespace Hatco.PrecastManholeManager.Services
                 _log.Info($"Scanning Link Id={link.Id.IntegerValue}, Name='{link.Name}', Doc='{linkDoc.Title}'");
                 _log.Info($"Transform Origin={Fmt(tr.Origin)}, BasisX={Fmt(tr.BasisX)}, BasisY={Fmt(tr.BasisY)}, BasisZ={Fmt(tr.BasisZ)}");
 
-                var filter = new ElementMulticategoryFilter(Categories);
-                var elements = new FilteredElementCollector(linkDoc)
-                    .WherePasses(filter)
-                    .WhereElementIsNotElementType()
-                    .ToElements();
+                var elements = LinkedMepScanCache.Query(link, scanMin, scanMax, _log);
 
                 _log.Info($"MEP curve candidates in link: {elements.Count}");
                 int localCandidates = 0;
 
-                foreach (Element e in elements)
+                foreach (var entry in elements)
                 {
+                    Element e = entry.Element;
                     try
                     {
-                        if (!(e.Location is LocationCurve lc) || lc.Curve == null)
-                        {
-                            _log.Warn($"Linked element {e.Id.IntegerValue} ({e.Category?.Name}) skipped: no LocationCurve.");
-                            continue;
-                        }
-
-                        Curve hostCurve = lc.Curve.CreateTransformed(tr);
+                        Curve hostCurve = entry.Curve;
                         if (hostCurve == null) continue;
-
-                        if (!CurveTouchesBox(hostCurve, scanMin, scanMax))
-                            continue;
 
                         localCandidates++;
 

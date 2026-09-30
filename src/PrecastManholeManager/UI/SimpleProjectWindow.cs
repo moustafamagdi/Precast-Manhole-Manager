@@ -11,7 +11,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, DimensionOne, SixRowLayoutSheet, ExportExcel
+        Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -80,6 +80,8 @@ namespace Hatco.PrecastManholeManager.UI
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
             Button produce = Button("Generate Selected Manhole", 210, controls);
+            Button batch = Button("Generate / Update All", 210, controls);
+            batch.Click += (sender, args) => Choose(ProjectAction.ProductionAll, false);
             Button dimensions = Button("Update All Dimensions", 215, controls);
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
@@ -329,7 +331,7 @@ namespace Hatco.PrecastManholeManager.UI
                 double.TryParse(_clearance.Text, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
-            if (!valid && (requested == ProjectAction.ProductionOne ||
+            if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
                 requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");

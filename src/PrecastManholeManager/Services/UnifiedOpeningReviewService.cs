@@ -123,6 +123,15 @@ namespace Hatco.PrecastManholeManager.Services
             DiagnosticLogger log, double clearanceMm,
             double maxVirtualGapMm, double maxApproachAngleDeg)
         {
+            using (LinkedMepScanCache.BeginIfNeeded())
+                return CollectIndexed(doc, foundation, footprint, log, clearanceMm, maxVirtualGapMm, maxApproachAngleDeg);
+        }
+
+        private static UnifiedOpeningReviewResult CollectIndexed(Document doc,
+            Element foundation, VirtualFoundationResult footprint,
+            DiagnosticLogger log, double clearanceMm,
+            double maxVirtualGapMm, double maxApproachAngleDeg)
+        {
             if (doc == null || foundation == null || footprint == null ||
                 !footprint.Accepted)
                 throw new InvalidOperationException("A validated virtual footprint is required.");

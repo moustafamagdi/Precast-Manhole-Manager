@@ -73,6 +73,14 @@ namespace Hatco.PrecastManholeManager.Services
             var ports = new FilteredElementCollector(view.Document).OfClass(typeof(Viewport))
                 .Cast<Viewport>().ToList();
             string number = "W" + wallNumber;
+            int foundationId;
+            var parts = view.Name.Split('_');
+            if (parts.Length > 2 && parts[0] == "MH" && int.TryParse(parts[1], out foundationId))
+            {
+                Element foundation = view.Document.GetElement(new ElementId(foundationId));
+                if (foundation != null && BatchSheetLayoutService.Find(view.Document, foundation) != null)
+                    number = ManholeIdentityStore.Read(foundation) + "-W" + wallNumber;
+            }
             foreach (Viewport port in ports.Where(p => p.ViewId == view.Id))
             {
                 Parameter parameter = port.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER);

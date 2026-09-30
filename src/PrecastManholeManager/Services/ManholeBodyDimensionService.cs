@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.Services
 
         private static string GenerateBody(Document doc, Element foundation,
             VirtualFoundationResult footprint, List<ViewSection> sections,
-            DimensionType type, DiagnosticLogger log)
+            DimensionType type, DiagnosticLogger log, out bool complete)
         {
             string planName = "MH_" + foundation.Id.IntegerValue + "_PROD_2D_PLAN";
             ViewPlan plan = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan))
@@ -55,6 +55,7 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                 }
             }
+            complete = errors.Count == 0;
             return "Body/base dimensions: " + created + " strings created; " + errors.Count +
                 " view(s) need review." + (errors.Count == 0 ? "" : "\n" + string.Join("\n", errors));
         }

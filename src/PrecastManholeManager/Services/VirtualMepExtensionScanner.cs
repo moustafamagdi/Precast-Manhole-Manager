@@ -59,6 +59,12 @@ namespace Hatco.PrecastManholeManager.Services
         public VirtualMepScanResult Scan(VirtualFoundationResult footprint,
             double maxGapMm, double maxDeviationDeg)
         {
+            using (LinkedMepScanCache.BeginIfNeeded()) return ScanIndexed(footprint, maxGapMm, maxDeviationDeg);
+        }
+
+        private VirtualMepScanResult ScanIndexed(VirtualFoundationResult footprint,
+            double maxGapMm, double maxDeviationDeg)
+        {
             var result = new VirtualMepScanResult();
             _log.WriteHeader("EXPERIMENT: VIRTUAL MEP EXTENSION - READ ONLY");
             _log.Info("MaxGapFromWallFaceMm=" + maxGapMm +
@@ -129,15 +135,11 @@ namespace Hatco.PrecastManholeManager.Services
 
                 result.LoadedLinks++;
                 Transform transform = link.GetTotalTransform();
-                var filter = new ElementMulticategoryFilter(categories);
-                foreach (Element e in new FilteredElementCollector(linkDoc)
-                    .WherePasses(filter).WhereElementIsNotElementType())
+                foreach (var entry in LinkedMepScanCache.Query(link,
+                    new XYZ(minX, minY, minZ), new XYZ(maxX, maxY, maxZ), _log))
                 {
-                    var location = e.Location as LocationCurve;
-                    Line localLine = location?.Curve as Line;
-                    if (localLine == null) continue;
-                    Curve transformed = localLine.CreateTransformed(transform);
-                    Line line = transformed as Line;
+                    Element e = entry.Element;
+                    Line line = entry.Curve as Line;
                     if (line == null) continue;
 
                     XYZ p0 = line.GetEndPoint(0);

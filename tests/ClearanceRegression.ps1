@@ -114,3 +114,17 @@ Assert-That (!(Test-BodyJoin 999 100 @(100,101,102,103) $true $true)) 'A wall ou
 Assert-That (!(Test-BodyJoin 100 100 @(100,101,102,103) $true $true)) 'Self references are rejected'
 Assert-That (!(Test-BodyJoin 100 101 @(100,101,102) $true $true)) 'Incomplete footprints cannot authorize local joins'
 Assert-That (!(Test-BodyJoin 100 101 @(100,101,102,102) $true $true)) 'Duplicate walls cannot authorize local joins'
+
+$layoutType = $assembly.GetType('Hatco.PrecastManholeManager.Services.BatchSheetLayoutService')
+$nextSlot = $layoutType.GetMethod('NextSlotIndex', [Reflection.BindingFlags]'NonPublic,Static')
+$page = $layoutType.GetMethod('Page', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($nextSlot.Invoke($null,[object[]]@(,[int[]]@())) -eq 0) 'First batch starts at the first row'
+Assert-That ($nextSlot.Invoke($null,[object[]]@(,[int[]]@(0,2,5))) -eq 6) 'New manholes append without filling reserved or missing earlier rows'
+Assert-That ($page.Invoke($null,[object[]]@(2)) -eq 0) 'Third manhole retains the last row of the first sheet'
+Assert-That ($page.Invoke($null,[object[]]@(3)) -eq 1) 'Fourth manhole starts the second sheet'
+$order = $layoutType.GetMethod('ManholeOrder',[Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($order.Invoke($null,[object[]]@('MH-1000')) -gt $order.Invoke($null,[object[]]@('MH-999'))) 'Sheet order remains numeric beyond MH-999'
+$overlap = $assembly.GetType('Hatco.PrecastManholeManager.Services.LinkedMepScanCache').GetMethod('Overlaps',[Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($overlap.Invoke($null,[object[]]@(-100.0,100.0,-1.0,1.0))) 'Spatial cache retains curves crossing the scan envelope with distant endpoints'
+Assert-That ($overlap.Invoke($null,[object[]]@(-10.0,-5.0,-5.0,0.0))) 'Spatial cache includes touching boundaries at negative coordinates'
+Assert-That (!$overlap.Invoke($null,[object[]]@(0.0,1.0,2.0,3.0))) 'Spatial cache rejects distant curves'

@@ -10,6 +10,17 @@ namespace Hatco.PrecastManholeManager.Services
     {
         public static string RunAll(Document doc, double clearanceMm, DiagnosticLogger log)
         {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            using (var cache = new LinkedMepScanCache())
+            {
+                string result = RunAllIndexed(doc, clearanceMm, log);
+                log.Info("CLEAN SCAN TOTAL SECONDS=" + timer.Elapsed.TotalSeconds.ToString("0.0"));
+                return result + "\nElapsed: " + timer.Elapsed.TotalMinutes.ToString("0.0") + " min.";
+            }
+        }
+
+        private static string RunAllIndexed(Document doc, double clearanceMm, DiagnosticLogger log)
+        {
             if (double.IsNaN(clearanceMm) || double.IsInfinity(clearanceMm) || clearanceMm < 0)
                 throw new InvalidOperationException("Enter a finite non-negative clearance.");
             var items = SimpleProjectScanService.LoadFast(doc);

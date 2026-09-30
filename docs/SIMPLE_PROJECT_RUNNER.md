@@ -1,5 +1,21 @@
 # Simple one-time project runner (first integration pass)
 
+## Generate / Update All: unattended run and reserved rows
+
+Use **Generate / Update All** after loading `MH_PLAN`, `MH_SEC`, `MH_3D`, Section type `Manhole Sec`, linear dimension type `HTC_DIM_1.8mm`, and an A0/A1 titleblock. The command checks these before starting. It reads only Pipes and Ducts from loaded links. It assigns missing internal IDs and runs fresh production preflight for every manhole, including previously flagged ones, without per-manhole approval dialogs.
+
+The initial confirmation shows the clearance, count and output path. A new `Logs/Batch_<timestamp>_<id>/Manhole_Batch_Results.rvt` becomes the active model; workshared models are saved as a new independent central. Cloud models must first be opened as a local detached RVT. The original model is not synchronized or overwritten. The run saves after reserving rows, every ten processed manholes or five minutes (whichever is reached at a manhole boundary), and at completion/cancellation. A save failure stops the run and is reported. Keep the computer powered and Revit open; the progress window requests that Windows not automatically sleep during the run.
+
+Each sheet has three fixed rows, each containing PLAN, W1, W2, W3, W4 at 1:25. Rows are assigned in numeric internal-ID order and persisted in foundation storage with sheet and note identities before cutting starts. Errors do not compact subsequent rows. Rerunning on the RESULTS model fills the same reserved positions; new manholes append after the existing slots. Missing reserved sheets or conflicting slot data require review. Sheet-local Detail Numbers use `MH-001-W1` etc. to avoid duplicate detail numbers on multi-manhole sheets.
+
+Previously generated views can move from their individual tool-created production sheets to reserved rows. Those old sheets and their other annotations remain. Views on other manually arranged sheets are not moved. New row placement and its geometry changes roll back together if the final view/title bounds exceed a cell. A failed rerun retains the previous committed model state. Dimensions use separate per-view transactions: failed dimensions produce **COMMITTED - DIMENSION REVIEW**, not a fully complete result. Virtual-only crossings, unresolved cuts, oversized rows, overlapping openings, and more than eight actual openings remain review cases.
+
+`RunReport.csv` is an append-only event report flushed after each manhole; it contains QUEUED, RUNNING and final statuses plus sheet/row identities. `RunSummary.txt` gives committed/review counts and the last saved item. A stopped/crashed run can leave a RUNNING event; only items through the recorded checkpoint are known to have been saved. Start subsequent runs from the latest saved result RVT to preserve reservations. **Stop after current manhole and save** is available in the progress window.
+
+Clean Scan and batch generation share a command-scoped linked-curve index: each loaded link's Pipe/Duct curves are transformed and bounded once, then filtered by local bounds before intersection tests. Actual and virtual scans reuse this index. It is disposed at the end of the command, so later runs re-read link changes. Host geometry and cut audits remain fresh. Clean Scan reports elapsed minutes; project-scale speed and unattended Revit behavior still require live validation.
+
+Validation: Release build and pure regression tests cover slot append/page boundaries, numeric sorting, spatial interval boundaries, opening dimensions, clearance decisions, and cut-scope policies. Full overnight SaveAs/checkpoint/cancellation/row-layout behavior has not been exercised by these unit checks.
+
 ## Solid-cut classification
 
 Clean Scan and production preflight now inspect each solid cutter. A cut is accepted as a preserved local body join only when the host is one of the four verified manhole walls, the cutter is another selected wall or the selected foundation, and Revit confirms both the geometry join and its cutting direction. External cutters, non-join solid cuts, inconsistent directions, and inspection failures still block production. No joins or cutters are removed by this classification.

@@ -13,7 +13,7 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     [Transaction(TransactionMode.Manual)]
     [Regeneration(RegenerationOption.Manual)]
-    public sealed class ProjectRunnerCommand : IExternalCommand
+    public sealed partial class ProjectRunnerCommand : IExternalCommand
     {
         private static double _lastClearanceMm = 50;
 
@@ -62,6 +62,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                     doc, window.ClearanceMm, log));
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
+                            else if (window.Action == ProjectAction.ProductionAll)
+                                RunUnattended(input.Application, log, window.ClearanceMm);
                             else if (window.Action == ProjectAction.ReviewOne)
                                 InspectSelected(doc, window.SelectedManhole,
                                     log, window.ClearanceMm);
@@ -374,15 +376,15 @@ namespace Hatco.PrecastManholeManager.Commands
         // First production milestone: ONE clean manhole with real,
         // confirmed ACTUAL linked-MEP crossings only. One transaction
         // group makes the physical openings + views + sheet atomic.
-        private static void GenerateProductionManhole(UIDocument uidoc,
-            SimpleManholeItem selected, DiagnosticLogger log, double clearanceMm)
+        private static string GenerateProductionManhole(UIDocument uidoc,
+            SimpleManholeItem selected, DiagnosticLogger log, double clearanceMm, bool unattended = false)
         {
             Document doc = uidoc.Document;
             Element foundation = Resolve(doc, selected);
             if (doc.IsReadOnly || doc.IsLinked)
                 throw new InvalidOperationException(
                     "Production requires an editable host RVT.");
-            if (ManholeReviewRegistry.Load(doc).Any(x =>
+            if (!unattended && ManholeReviewRegistry.Load(doc).Any(x =>
                 x.FoundationUniqueId == foundation.UniqueId &&
                 x.Status == "OPEN"))
                 throw new InvalidOperationException(
@@ -404,7 +406,8 @@ namespace Hatco.PrecastManholeManager.Commands
 
             if (double.IsNaN(clearanceMm) || double.IsInfinity(clearanceMm) || clearanceMm < 0)
                 throw new InvalidOperationException("Clearance must be a finite non-negative value.");
-            ViewSheet existingSheet = FirstProductionSheetService.FindExisting(doc, foundation);
+            var slot = BatchSheetLayoutService.Find(doc, foundation);
+            ViewSheet existingSheet = slot?.Sheet ?? FirstProductionSheetService.FindExisting(doc, foundation);
             // Preserve placed views and layout; only the opening table is refreshed on reruns.
             string prefix = "MH_" + foundation.Id.IntegerValue +
                 "_PROD_2D";
@@ -475,12 +478,13 @@ namespace Hatco.PrecastManholeManager.Commands
                 foreach (string blocker in blockers)
                     log.Warn("PRODUCTION BLOCKED Foundation=" +
                         foundation.Id.IntegerValue + " " + blocker);
+                if (unattended) throw new InvalidOperationException(string.Join("; ", blockers));
                 TaskDialog.Show("Production Precheck - " + id,
                     "No geometry was modified.\n\n" +
                     string.Join("\n\n", blockers) +
                     "\n\nOpening review CSV:\n" + csv +
                     "\n\nDetailed TXT log:\n" + log.LogPath);
-                return;
+                return "REVIEW: " + string.Join("; ", blockers);
             }
 
             List<UnifiedOpeningReviewRow> actual = review.Rows
@@ -559,6 +563,8 @@ namespace Hatco.PrecastManholeManager.Commands
                 " ClearancePerSideMm=" + clearanceMm +
                 " VirtualDeferred=" + review.VirtualCount +
                 " ReviewCsv=" + csv);
+            if (!unattended)
+            {
             var confirm = new TaskDialog("Approve first production cuts");
             confirm.MainInstruction = id + " | " + actual.Count +
                 " confirmed actual opening(s)";
@@ -588,7 +594,8 @@ namespace Hatco.PrecastManholeManager.Commands
             if (confirm.Show() != TaskDialogResult.Yes)
             {
                 log.Info("PRODUCTION CANCELLED by operator. No model edits.");
-                return;
+                return "CANCELLED";
+            }
             }
 
             CleanSyncApplyResult applied;
@@ -605,6 +612,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     using (var dimTx = new Transaction(doc, "HATCO - Refresh Opening References"))
                     {
                         dimTx.Start();
+                        ConfigureBatchFailures(dimTx, log);
                         OpeningDimensionService.RemoveOwned(doc, foundation);
                         if (dimTx.Commit() != TransactionStatus.Committed)
                             throw new InvalidOperationException("Could not prepare opening dimensions for update.");
@@ -629,9 +637,17 @@ namespace Hatco.PrecastManholeManager.Commands
                         "HATCO - First Production Draft and Sheet"))
                     {
                         tx.Start();
+                        ConfigureBatchFailures(tx, log);
                         try
                         {
-                            if (existingSheet != null)
+                            if (slot != null)
+                            {
+                                DraftSheetResult views = DraftManholeSheetService.Generate(
+                                    doc, foundation, footprint, log, forProduction: true);
+                                BatchSheetLayoutService.Place(doc, foundation, slot, views.Views, actual, log);
+                                newSheet = slot.Sheet;
+                            }
+                            else if (existingSheet != null)
                             {
                                 FirstProductionSheetService.Refresh(doc, foundation,
                                     existingSheet, actual, log);
@@ -672,12 +688,35 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
             }
             string dimensionStatus;
-            try { dimensionStatus = OpeningDimensionService.Generate(doc, foundation, log); }
+            bool dimensionsComplete = false;
+            try { dimensionStatus = OpeningDimensionService.Generate(doc, foundation, log, ok => dimensionsComplete = ok); }
             catch (Exception ex)
             {
                 log.Error("Dimension stage needs review; openings and sheet remain committed.", ex);
                 dimensionStatus = "Dimensions need review: " + ex.Message;
             }
+            if (slot != null)
+            {
+                try
+                {
+                    using (var tx = new Transaction(doc, "HATCO - Fit Batch Row After Dimensions"))
+                    {
+                        tx.Start(); ConfigureBatchFailures(tx, log);
+                        BatchSheetLayoutService.Arrange(doc, foundation, slot);
+                        if (tx.Commit() != TransactionStatus.Committed)
+                            throw new InvalidOperationException("Row layout transaction rejected.");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    if (unattended) throw new InvalidOperationException("Reserved row layout failed: " + ex.Message, ex);
+                    dimensionStatus += "\nLAYOUT REVIEW: " + ex.Message;
+                }
+            }
+            string summary = "COMMITTED: " + id + " | New=" + applied.NewOpenings +
+                " Updated=" + applied.ManagedUpdated + " Unchanged=" + applied.ManagedUnchanged +
+                " | Sheet=" + newSheet.SheetNumber + (dimensionsComplete ? "" : " | DIMENSION REVIEW") + "\n" + dimensionStatus;
+            if (unattended) return summary;
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",
                 "COMMITTED: " + id +
@@ -695,6 +734,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "Verify dimensions and elevations before issuing." +
                 "\nReview CSV: " + csv +
                 "\nSave the RVT to retain the output.");
+            return summary;
         }
 
         private static void GenerateSixRowLayoutSheet(UIDocument uidoc,
