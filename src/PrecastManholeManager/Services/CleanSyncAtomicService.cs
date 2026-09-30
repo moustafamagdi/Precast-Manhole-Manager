@@ -206,6 +206,8 @@ namespace Hatco.PrecastManholeManager.Services
                         using (var trial = new SubTransaction(doc))
                         {
                             trial.Start();
+                            ICollection<ElementId> nested =
+                                instance.GetSubComponentIds();
                             if (instance.Pinned) instance.Pinned = false;
                             ICollection<ElementId> removed = doc.Delete(
                                 instance.Id);
@@ -215,7 +217,6 @@ namespace Hatco.PrecastManholeManager.Services
                             // Family instance subcomponents may be deleted
                             // with the instance, but other project elements
                             // must not disappear.
-                            ICollection<ElementId> nested = instance.GetSubComponentIds();
                             foreach (ElementId id in nested)
                                 permitted.Add(id.IntegerValue);
                             if (removed.Any(id => !permitted.Contains(
