@@ -84,6 +84,9 @@ namespace Hatco.PrecastManholeManager.Services
                     tx.SetFailureHandlingOptions(options);
                     try
                     {
+                        ManholeViewTitleService.UpdateTitle(view,
+                            ManholeViewTitleService.Name(doc, foundation, log), number,
+                            foundation.Id.IntegerValue, log);
                         var old = new FilteredElementCollector(doc).OfClass(typeof(Dimension))
                             .Cast<Dimension>().Where(d => d.OwnerViewId == view.Id &&
                                 IsOwned(d, foundation.UniqueId)).Select(d => d.Id).ToList();

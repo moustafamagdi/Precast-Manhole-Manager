@@ -47,11 +47,12 @@ namespace Hatco.PrecastManholeManager.Services
             string oldAuto = "MH " + foundationId + " - " +
                 (wallNumber == 0 ? "PLAN" : "W" + wallNumber);
             if (existing.Length > 0 &&
-                !existing.Equals(oldAuto, StringComparison.OrdinalIgnoreCase))
+                !existing.Equals(oldAuto, StringComparison.OrdinalIgnoreCase) &&
+                !existing.Equals(manholeName + " - WALL W" + wallNumber, StringComparison.OrdinalIgnoreCase))
                 return;
             string title = manholeName + (wallNumber == 0
                 ? " - PLAN"
-                : " - WALL W" + wallNumber);
+                : " - W" + wallNumber);
             if (existing != title) p.Set(title);
         }
 
@@ -100,6 +101,8 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 string old = (titleParameter.AsString() ?? "").Trim();
                 string suffix = wallNumber == 0
+                    ? " - PLAN" : " - W" + wallNumber;
+                string legacySuffix = wallNumber == 0
                     ? " - PLAN" : " - WALL W" + wallNumber;
                 string oldNumeric = "MH " + foundation.Id.IntegerValue +
                     (wallNumber == 0
@@ -113,9 +116,13 @@ namespace Hatco.PrecastManholeManager.Services
                         StringComparison.OrdinalIgnoreCase) ||
                     old.Equals("UNNUMBERED MANHOLE" + suffix,
                         StringComparison.OrdinalIgnoreCase) ||
+                    old.Equals("UNNUMBERED MANHOLE" + legacySuffix,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    old.Equals(newInternalName + legacySuffix,
+                        StringComparison.OrdinalIgnoreCase) ||
                     (!string.IsNullOrWhiteSpace(previousAutoName) &&
-                     old.Equals(previousTitle,
-                        StringComparison.OrdinalIgnoreCase));
+                     (old.Equals(previousTitle, StringComparison.OrdinalIgnoreCase) ||
+                      old.Equals(previousAutoName + legacySuffix, StringComparison.OrdinalIgnoreCase)));
                 if (!automatic)
                 {
                     log.Info("Preserved manual sheet title: " +
