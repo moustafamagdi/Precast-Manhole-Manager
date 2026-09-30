@@ -267,13 +267,16 @@ namespace Hatco.PrecastManholeManager.Commands
                     throw;
                 }
             }
-            uiDoc.RequestViewChange(result.Sheet);
+            // Open the generated Plan to help the user find the views;
+            // Revit API view switching occurs only AFTER committing.
+            if (result.Views.Count > 0)
+                uiDoc.RequestViewChange(result.Views[0]);
             TaskDialog.Show("First Manhole Prototype",
                 result.Message +
                 "\n\nThese are preliminary model views, not " +
                 "dimensioned fabrication shop drawings." +
                 "\nNo wall geometry or openings were changed." +
-                "\nSave the RVT to keep the sheet.");
+                "\nSave the RVT to keep the five views.");
         }
 
         private static void Export(Document doc,
