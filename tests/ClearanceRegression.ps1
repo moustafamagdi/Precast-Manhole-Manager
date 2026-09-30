@@ -42,3 +42,19 @@ $record.HeightMm = 200
 $record.ClearanceMm = 25
 Assert-That ($record.CutWidthMm -eq 350 -and $record.CutHeightMm -eq 250) 'Rectangular sources add clearance to each side'
 Write-Output 'Calculation checks passed. Geometry, dialogs, rollback, and sheet refresh still require a Revit integration test.'
+
+# Only failed joins entirely inside the selected manhole may be resolved.
+$joinPolicy = $assembly.GetType('Hatco.PrecastManholeManager.Services.OpeningFailurePreprocessor').GetMethod('CanDetachJoin', [Reflection.BindingFlags]'NonPublic,Static')
+function Test-JoinScope([bool]$known, [int[]]$affected, [int[]]$allowed, [int[]]$walls) {
+    return [bool]$joinPolicy.Invoke($null, [object[]]@($known, $affected, $allowed, $walls))
+}
+$scope = [int[]]@(100, 101, 102, 103, 200)
+$walls = [int[]]@(100, 101, 102, 103)
+Assert-That (Test-JoinScope $true @(100,101) $scope $walls) 'A failed join between two selected walls can be resolved'
+Assert-That (Test-JoinScope $true @(100,200) $scope $walls) 'A failed join between selected wall and foundation can be resolved'
+Assert-That (!(Test-JoinScope $true @(100,999) $scope $walls)) 'A join involving an external element is rejected'
+Assert-That (!(Test-JoinScope $true @(100,101,999) $scope $walls)) 'Additional related elements outside the scope prevent resolution'
+Assert-That (!(Test-JoinScope $true @(100) $scope $walls)) 'An incomplete failure element list is rejected'
+Assert-That (!(Test-JoinScope $true @() $scope $walls)) 'An empty failure element list is rejected'
+Assert-That (!(Test-JoinScope $false @(100,101) $scope $walls)) 'Unknown failure kinds are not resolved as joins'
+Assert-That (!(Test-JoinScope $true @(100,101) @() @())) 'Legacy callers without an explicit scope cannot detach joins'

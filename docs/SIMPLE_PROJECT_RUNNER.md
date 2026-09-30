@@ -477,3 +477,13 @@ separate approved/revalidated output; do not mistake a partial
 preview for a complete issue. When a native opening or layout
 fails, the enclosing TransactionGroup still rolls back cuts,
 views, 3D and the partial sheet.
+
+## Clearance rerun join failure (2026-09-30, 14:25 log)
+
+The supplied run found four existing tool-managed openings and calculated the new sizes at 100 mm per side, but Revit rejected the transaction with "Can't keep elements joined." The full operation rolled back; the 50 mm openings remained.
+
+Generate now permits the Revit `DetachElements` failure resolution only for a recognized join failure whose failing AND additional related element IDs are entirely within the selected four walls and foundation, with at least two distinct affected elements including a selected wall. It does not proactively unjoin all neighboring geometry. The normal cuts confirmation states this behavior. Failure processing requests one attempt per failure/element set and asks Revit to revalidate before commit. Repeated failures, external elements, unsupported resolutions, non-cutting openings and other errors roll back the transaction. Other workflows retain no automatic join resolution unless they explicitly supply this scope.
+
+Diagnostics now record failure definition GUID, severity, failing element IDs and additional element IDs, plus any attempted join resolution. The old log omitted IDs, so a successful runtime resolution is not yet established. The next Revit run must verify geometry, updated sheet data, and any reported local join changes.
+
+Implementation references: Autodesk [failure handling](https://help.autodesk.com/cloudhelp/2024/ENU/Revit-API/files/Revit_API_Developers_Guide/Advanced_Topics/Failure_Posting_and_Handling/Revit_API_Revit_API_Developers_Guide_Advanced_Topics_Failure_Posting_and_Handling_Handling_Failures_html.html) and the installed Revit 2024 RevitAPI.xml. Release build and 17 compiled-code clearance/scope assertions pass; no live Revit transaction was run during this fix.

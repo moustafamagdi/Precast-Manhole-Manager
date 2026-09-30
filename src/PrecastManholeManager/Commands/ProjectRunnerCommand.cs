@@ -570,6 +570,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "Virtual candidates deferred: " + review.VirtualCount +
                 "." +
                 " Existing tool openings may be resized. Manual cuts/profiles/void cutters are preserved." +
+                "\nFailed joins within this manhole walls/base may be detached if required by Revit." +
                 "\nRead-only audit CSV: " + csv +
                 "\n\nContinue only on a saved test RVT copy.";
             confirm.CommonButtons = TaskDialogCommonButtons.Yes |
@@ -599,7 +600,8 @@ namespace Hatco.PrecastManholeManager.Commands
                             DeleteIsolatedInPlaceCutters = false,
                             IncludeStraightVirtual = false,
                             // Required sources are the links loaded by the operator.
-                            RequiredLinksVerified = true
+                            RequiredLinksVerified = true,
+                            ResolveManholeJoinFailures = true
                         }, log);
                     if (!applied.Committed)
                         throw new InvalidOperationException(
@@ -658,6 +660,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "\nNew native openings: " + applied.NewOpenings +
                 "\nManaged unchanged: " + applied.ManagedUnchanged +
                 "\nManaged updated: " + applied.ManagedUpdated +
+                "\nFailed local joins resolved: " + applied.JoinFailuresResolved +
                 "\nVirtual deferred: " + review.VirtualCount +
                 "\n3D: " + production3D.Name + " (MH_3D)" +
                 "\nSheet: " + newSheet.SheetNumber +

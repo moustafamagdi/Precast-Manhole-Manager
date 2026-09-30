@@ -15,6 +15,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool DeleteIsolatedInPlaceCutters { get; set; }
         public bool IncludeStraightVirtual { get; set; }
         public bool RequiredLinksVerified { get; set; }
+        public bool ResolveManholeJoinFailures { get; set; }
         public bool AllowIncompleteLinkCoverageForPreview { get; set; }
     }
 
@@ -31,6 +32,7 @@ namespace Hatco.PrecastManholeManager.Services
         public int NewOpenings { get; set; }
         public int VirtualDeferred { get; set; }
         public int ManagedStalePreserved { get; set; }
+        public int JoinFailuresResolved { get; set; }
         public override string ToString()
         {
             return (Committed ? "COMMITTED" : "NOT COMMITTED / ROLLED BACK") +
@@ -44,6 +46,7 @@ namespace Hatco.PrecastManholeManager.Services
                 "\nNew openings created: " + NewOpenings +
                 "\nVirtual/sloped deferred: " + VirtualDeferred +
                 "\nStale managed preserved: " + ManagedStalePreserved +
+                "\nFailed local joins resolved: " + JoinFailuresResolved +
                 (string.IsNullOrWhiteSpace(Error) ? "" : "\nERROR: " + Error);
         }
     }
@@ -126,7 +129,9 @@ namespace Hatco.PrecastManholeManager.Services
             using (var tx = new Transaction(doc,
                 "HATCO - Test Clean and Synchronize Manhole " + plan.FoundationId))
             {
-                var failure = new OpeningFailurePreprocessor(log);
+                var failure = new OpeningFailurePreprocessor(log,
+                    options.ResolveManholeJoinFailures ? plan.WallIds.Concat(new[] { plan.FoundationId }) : null,
+                    options.ResolveManholeJoinFailures ? plan.WallIds : null);
                 var failureOptions = tx.GetFailureHandlingOptions();
                 failureOptions.SetFailuresPreprocessor(failure);
                 failureOptions.SetClearAfterRollback(true);
@@ -395,6 +400,7 @@ namespace Hatco.PrecastManholeManager.Services
                             "Revit failed to commit safe clean/sync. " +
                             "Rollback triggered by failure preprocessor.");
 
+                    output.JoinFailuresResolved = failure.ResolvedCount;
                     output.Committed = true;
                     log.Info("ATOMIC CLEAN SYNC COMMITTED: " + output);
                 }
@@ -448,8 +454,7 @@ namespace Hatco.PrecastManholeManager.Services
             double hh = UnitUtil.MmToFt(r.CutHeightMm) / 2;
             XYZ ll = center - t * hw - XYZ.BasisZ * hh;
             XYZ ur = center + t * hw + XYZ.BasisZ * hh;
-            // No automatic UnjoinGeometry in destructive cleanup tests:
-            // any join failure rolls back the complete manhole.
+            // Join handling is scoped to reported failures at transaction commit.
             return doc.Create.NewOpening(wall, ll, ur);
         }
     }
