@@ -15,7 +15,13 @@ namespace Hatco.PrecastManholeManager.Services
         public List<List<XlsxCell>> Rows { get; } = new List<List<XlsxCell>>();
         public List<string> Merges { get; } = new List<string>();
         public Dictionary<int, double> ColumnWidths { get; } = new Dictionary<int, double>();
+        public HashSet<int> HiddenColumns { get; } = new HashSet<int>();
+        public List<XlsxDataValidation> DataValidations { get; } = new List<XlsxDataValidation>();
+        public List<int> HorizontalPageBreakRows { get; } = new List<int>();
         public int FreezeRows { get; set; }
+        public bool Hidden { get; set; }
+        public bool Landscape { get; set; }
+        public bool FitToOnePageWide { get; set; }
 
         public void AddRow(params XlsxCell[] cells)
         {
@@ -23,10 +29,17 @@ namespace Hatco.PrecastManholeManager.Services
         }
     }
 
+    internal sealed class XlsxDataValidation
+    {
+        public string SqRef { get; set; }
+        public string Formula1 { get; set; }
+    }
+
     internal sealed class XlsxCell
     {
         public object Value { get; set; }
         public int Style { get; set; }
+        public string FormulaText { get; set; }
 
         public static XlsxCell Text(string value, int style = 4)
         {
@@ -41,6 +54,16 @@ namespace Hatco.PrecastManholeManager.Services
         public static XlsxCell Integer(int value, int style = 5)
         {
             return new XlsxCell { Value = value, Style = style };
+        }
+
+        public static XlsxCell Formula(string formula, int style = 4)
+        {
+            return new XlsxCell
+            {
+                Value = string.Empty,
+                Style = style,
+                FormulaText = formula ?? string.Empty
+            };
         }
 
         public static XlsxCell Blank(int style = 0)
@@ -132,10 +155,15 @@ namespace Hatco.PrecastManholeManager.Services
                 sb.Append(i + 1);
                 sb.Append("\" r:id=\"rId");
                 sb.Append(i + 1);
-                sb.Append("\"/>");
+                sb.Append("\"");
+                if (sheets[i].Hidden)
+                    sb.Append(" state=\"hidden\"");
+                sb.Append("/>");
             }
 
-            sb.Append("</sheets></workbook>");
+            sb.Append("</sheets>");
+            sb.Append("<calcPr calcId=\"191029\" fullCalcOnLoad=\"1\" forceFullCalc=\"1\"/>");
+            sb.Append("</workbook>");
             return sb.ToString();
         }
 
@@ -206,6 +234,9 @@ namespace Hatco.PrecastManholeManager.Services
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\">");
 
+            if (sheet.FitToOnePageWide)
+                sb.Append("<sheetPr><pageSetUpPr fitToPage=\"1\"/></sheetPr>");
+
             sb.Append("<sheetViews><sheetView workbookViewId=\"0\">");
             if (sheet.FreezeRows > 0)
             {
@@ -228,7 +259,10 @@ namespace Hatco.PrecastManholeManager.Services
                     sb.Append(width.Key);
                     sb.Append("\" width=\"");
                     sb.Append(width.Value.ToString("0.##", CultureInfo.InvariantCulture));
-                    sb.Append("\" customWidth=\"1\"/>");
+                    sb.Append("\" customWidth=\"1\"");
+                    if (sheet.HiddenColumns.Contains(width.Key))
+                        sb.Append(" hidden=\"1\"");
+                    sb.Append("/>");
                 }
                 sb.Append("</cols>");
             }
@@ -248,7 +282,17 @@ namespace Hatco.PrecastManholeManager.Services
                     XlsxCell cell = row[colIndex] ?? XlsxCell.Blank();
                     string reference = ColumnName(colIndex + 1) + excelRow;
 
-                    if (cell.Value is int || cell.Value is long || cell.Value is float ||
+                    if (!string.IsNullOrWhiteSpace(cell.FormulaText))
+                    {
+                        sb.Append("<c r=\"");
+                        sb.Append(reference);
+                        sb.Append("\" s=\"");
+                        sb.Append(cell.Style);
+                        sb.Append("\"><f>");
+                        sb.Append(Xml(cell.FormulaText));
+                        sb.Append("</f><v></v></c>");
+                    }
+                    else if (cell.Value is int || cell.Value is long || cell.Value is float ||
                         cell.Value is double || cell.Value is decimal)
                     {
                         sb.Append("<c r=\"");
@@ -288,6 +332,53 @@ namespace Hatco.PrecastManholeManager.Services
                     sb.Append("\"/>");
                 }
                 sb.Append("</mergeCells>");
+            }
+
+            if (sheet.DataValidations.Count > 0)
+            {
+                sb.Append("<dataValidations count=\"");
+                sb.Append(sheet.DataValidations.Count);
+                sb.Append("\">");
+
+                foreach (XlsxDataValidation validation in sheet.DataValidations)
+                {
+                    sb.Append("<dataValidation type=\"list\" allowBlank=\"0\" showInputMessage=\"1\" showErrorMessage=\"1\" sqref=\"");
+                    sb.Append(Xml(validation.SqRef));
+                    sb.Append("\"><formula1>");
+                    sb.Append(Xml(validation.Formula1));
+                    sb.Append("</formula1></dataValidation>");
+                }
+
+                sb.Append("</dataValidations>");
+            }
+
+            if (sheet.HorizontalPageBreakRows.Count > 0)
+            {
+                sb.Append("<rowBreaks count=\"");
+                sb.Append(sheet.HorizontalPageBreakRows.Count);
+                sb.Append("\" manualBreakCount=\"");
+                sb.Append(sheet.HorizontalPageBreakRows.Count);
+                sb.Append("\">");
+
+                foreach (int row in sheet.HorizontalPageBreakRows.Distinct().OrderBy(x => x))
+                {
+                    sb.Append("<brk id=\"");
+                    sb.Append(row);
+                    sb.Append("\" min=\"0\" max=\"16383\" man=\"1\"/>");
+                }
+
+                sb.Append("</rowBreaks>");
+            }
+
+            if (sheet.Landscape || sheet.FitToOnePageWide)
+            {
+                sb.Append("<pageMargins left=\"0.25\" right=\"0.25\" top=\"0.35\" bottom=\"0.35\" header=\"0.15\" footer=\"0.15\"/>");
+                sb.Append("<pageSetup paperSize=\"9\" orientation=\"");
+                sb.Append(sheet.Landscape ? "landscape" : "portrait");
+                sb.Append("\"");
+                if (sheet.FitToOnePageWide)
+                    sb.Append(" fitToWidth=\"1\" fitToHeight=\"0\"");
+                sb.Append("/>");
             }
 
             sb.Append("</worksheet>");
