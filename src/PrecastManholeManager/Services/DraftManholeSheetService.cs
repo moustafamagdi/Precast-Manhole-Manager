@@ -104,6 +104,21 @@ namespace Hatco.PrecastManholeManager.Services
                     " ViewId=" + elevation.Id.IntegerValue);
             }
 
+            // Keep the layout order explicit: plan, W1, W2, W3, W4.
+            result.Views.Sort((a, b) =>
+            {
+                int Rank(View3D v)
+                {
+                    if (v.Name.EndsWith("_PLAN",
+                        StringComparison.Ordinal)) return 0;
+                    for (int w = 1; w <= 4; w++)
+                        if (v.Name.EndsWith("_W" + w,
+                            StringComparison.Ordinal)) return w;
+                    return 99;
+                }
+                return Rank(a).CompareTo(Rank(b));
+            });
+
             // A sheet with 5 views should be produced as one atomic result.
             // No suitable title block -> empty sheet with bounded diagnostic.
             ViewSheet sheet = new FilteredElementCollector(doc)
