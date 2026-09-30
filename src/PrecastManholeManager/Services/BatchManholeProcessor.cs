@@ -28,6 +28,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool PreviewOnly { get; set; }
         public int ProposedCuts { get; set; }
         public int ProposedTrims { get; set; }
+        public int VirtualMepCandidates { get; set; }
 
         public override string ToString()
         {
@@ -42,6 +43,7 @@ namespace Hatco.PrecastManholeManager.Services
                 " | Manual Too Small: " + ManualTooSmall +
                 "\nProposed cuts: " + ProposedCuts +
                 " | Proposed clearance trims: " + ProposedTrims +
+                "\nVirtual MEP endpoint candidates (review only): " + VirtualMepCandidates +
                 "\nOpenings Created: " + OpeningsCreated +
                 " | Updated: " + OpeningsUpdated +
                 " | Unchanged: " + OpeningsUnchanged +
@@ -105,6 +107,7 @@ namespace Hatco.PrecastManholeManager.Services
                 try
                 {
                     ManholeDetectionResult manhole;
+                    VirtualFoundationResult virtualFootprint = null;
                     if (options == null)
                     {
                         // Preserve the legacy Batch Selected route until tested separately.
@@ -112,7 +115,7 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                     else
                     {
-                        VirtualFoundationResult virtualFootprint =
+                        virtualFootprint =
                             new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
                         if (!virtualFootprint.Accepted)
                         {
@@ -132,6 +135,19 @@ namespace Hatco.PrecastManholeManager.Services
                             " skipped. Valid=" + manhole.IsValid +
                             " Warning='" + (manhole.Warning ?? string.Empty) + "'.");
                         continue;
+                    }
+
+                    if (options?.PreviewOnly == true && options.IncludeVirtualMep &&
+                        virtualFootprint != null)
+                    {
+                        VirtualMepScanResult virtualScan =
+                            new VirtualMepExtensionScanner(doc, log)
+                                .Scan(virtualFootprint, 150.0, 15.0);
+                        result.VirtualMepCandidates += virtualScan.Candidates.Count;
+                        log?.Info("BATCH VIRTUAL ENDPOINTS Foundation=" +
+                            foundation.Id.IntegerValue +
+                            " Candidates=" + virtualScan.Candidates.Count +
+                            " CSV=" + virtualScan.CsvPath);
                     }
 
                     var scanner = new MepPenetrationScanner(doc, log);
@@ -157,7 +173,7 @@ namespace Hatco.PrecastManholeManager.Services
                         audit = OpeningResetAuditService.Audit(
                             doc, manhole.Walls.Select(w => w.Wall), log);
 
-                    if (options != null && audit != null &&
+                    if (options != null && !options.PreviewOnly && audit != null &&
                         (audit.ProfileEditedWalls > 0 || audit.ProfileUnknownWalls > 0 ||
                          audit.VoidCutRelations > 0 || audit.VoidUnknownWalls > 0))
                     {
@@ -170,6 +186,10 @@ namespace Hatco.PrecastManholeManager.Services
                             "are counted and no model modifications are made.");
                         continue;
                     }
+
+                    if (options?.PreviewOnly == true && audit != null &&
+                        audit.RequiresManualReview)
+                        log?.Warn("BATCH PREVIEW ONLY: existing edited/unknown wall profile or void/manual openings found; proposals are preliminary and must not be applied automatically.");
 
                     foreach (PenetrationRecord r in penetrations)
                     {
