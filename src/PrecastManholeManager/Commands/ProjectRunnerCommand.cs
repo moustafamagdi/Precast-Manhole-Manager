@@ -313,7 +313,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         placed.Contains(v.Id.IntegerValue));
                 if (used)
                 {
-                    log.Info("SIX ROW SKIP manually placed views for foundation " +
+                    log.Info("SEVEN ROW SKIP manually placed views for foundation " +
                         item.FoundationId);
                     continue;
                 }
