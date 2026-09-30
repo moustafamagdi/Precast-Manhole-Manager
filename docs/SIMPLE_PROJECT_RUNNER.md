@@ -424,3 +424,40 @@ established from its generic screenshot; upload the matching
 timestamped `PrecastManholeManager_*.txt` plus
 `UnifiedOpeningReview_*.csv`. Avoid relaxing cleanup safety
 until actual blockers are verified.
+
+
+## Limited partial-link test — MH-001 investigation
+
+The 2026-09-30 14:06:37 live preflight showed that Foundation
+4409885 passed its four-wall audit with no edited profiles, native
+openings or void cuts. The loaded plumbing link instance 3997369
+reported four ACTUAL FIT PREVIEW openings: W1 twice at 268.3 x
+268.3 mm, W2 once at 600 x 600 mm, W3 once at 600 x 600 mm.
+Ten OTHER link instances could not be read, including some MEP
+links; their relevance is **UNKNOWN**, and the tool must not
+silently dismiss or treat them as covered.
+
+The first-one-manhole command now separates physical/legacy
+blockers (which always prevent editing) from unavailable-link
+coverage. When the only remaining blocker is unavailable links,
+it offers a **separate explicit PARTIAL TEST approval** showing
+the actual loaded source link(s) and missing link names. Clicking
+No exits with no changes. Clicking Yes proceeds to the regular
+actual-opening approval, and only then allows the existing atomic
+native-opening writer to work from the scanned ACTUAL crossings.
+Virtual candidates are still excluded. All destructive cleanup
+options remain disabled; unmatched managed openings are preserved.
+A partial-run sheet uses the separate name
+`MH_<FoundationId>_OPENINGS_PARTIAL_R01`, with the prominent
+`PARTIAL LINK COVERAGE - NOT FOR ISSUE` setout heading.
+The final dialog and TXT log repeat the coverage limitation.
+Missing links may contain additional or different penetrations.
+The produced physical openings and sheet require rechecking after
+the missing relevant links have been loaded. Never send such a
+sheet for fabrication/site execution.
+
+Once complete relevant link coverage is available, create a
+separate approved/revalidated output; do not mistake a partial
+preview for a complete issue. When a native opening or layout
+fails, the enclosing TransactionGroup still rolls back cuts,
+views, 3D and the partial sheet.
