@@ -15,6 +15,7 @@ namespace Hatco.PrecastManholeManager.Services
         public Dictionary<int, List<int>> VoidCutIds { get; } =
             new Dictionary<int, List<int>>();
         public List<int> ManualOpeningIds { get; } = new List<int>();
+        public List<int> AdoptedManualOpeningIds { get; } = new List<int>();
         public Dictionary<string, int> ManagedOpeningIds { get; } =
             new Dictionary<string, int>(StringComparer.Ordinal);
         public List<int> UnsupportedSolidCutWallIds { get; } = new List<int>();
@@ -101,6 +102,15 @@ namespace Hatco.PrecastManholeManager.Services
                 ManagedOpeningData managed;
                 if (OpeningStorageService.TryRead(opening, out managed))
                 {
+                    if (managed.AdoptedManual)
+                    {
+                        // A previously ADOPTED hand-made opening is still a
+                        // non-tool physical cut and must be re-created under
+                        // Clean & Sync, not silently preserved as tool-origin.
+                        plan.ManualOpeningIds.Add(opening.Id.IntegerValue);
+                        plan.AdoptedManualOpeningIds.Add(opening.Id.IntegerValue);
+                        continue;
+                    }
                     if (string.IsNullOrWhiteSpace(managed.SourceKey) ||
                         plan.ManagedOpeningIds.ContainsKey(managed.SourceKey))
                         plan.BlockReason = "Duplicate/missing managed opening SourceKey on selected walls.";
@@ -109,6 +119,32 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 else
                     plan.ManualOpeningIds.Add(opening.Id.IntegerValue);
+            }
+
+            // Do not delete unexplained hosted inserts (families/windows/
+            // doors or other non-native wall cuts). They require review.
+            foreach (int wallId in plan.WallIds)
+            {
+                Wall wall = doc.GetElement(new ElementId(wallId)) as Wall;
+                try
+                {
+                    HashSet<int> known = new HashSet<int>(
+                        plan.ManualOpeningIds.Concat(plan.ManagedOpeningIds.Values));
+                    foreach (ElementId id in wall.FindInserts(true, true, true, true))
+                    {
+                        if (known.Contains(id.IntegerValue)) continue;
+                        plan.BlockReason =
+                            "Unclassified hosted wall insert/cut " +
+                            id.IntegerValue + " on wall " + wallId;
+                        log.Warn("CLEAN UNSUPPORTED HOST INSERT Wall=" + wallId +
+                            " Insert=" + id.IntegerValue);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    plan.BlockReason = "Unable to inventory wall inserts on " +
+                        wallId + ": " + ex.Message;
+                }
             }
 
             if (review.VirtualScan.UnavailableLinks > 0)
@@ -121,6 +157,7 @@ namespace Hatco.PrecastManholeManager.Services
                 " Walls=" + string.Join(",", plan.WallIds) +
                 " EditedProfiles=" + plan.ProfileResetCount +
                 " ManualNativeDeleteCandidates=" + plan.ManualOpeningIds.Count +
+                " AdoptedManualAmongThem=" + plan.AdoptedManualOpeningIds.Count +
                 " ExistingManaged=" + plan.ManagedOpeningIds.Count +
                 " VoidRelations=" + plan.VoidCutCount +
                 " ProposedActual=" + review.Rows.Count(x => !x.IsVirtual) +
