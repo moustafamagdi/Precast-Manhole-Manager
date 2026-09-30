@@ -8,7 +8,7 @@ using Hatco.PrecastManholeManager.Infrastructure;
 namespace Hatco.PrecastManholeManager.Services
 {
     // Model-face references only: no detail-line proxies or overridden dimension values.
-    internal static class OpeningDimensionService
+    internal static partial class OpeningDimensionService
     {
         private static readonly Guid SchemaId = new Guid("34DFA2A7-01AC-43A2-91B2-709CAB52D53E");
         private const double ToleranceMm = 0.5;
@@ -35,11 +35,13 @@ namespace Hatco.PrecastManholeManager.Services
         public static void RemoveOwned(Document doc, Element foundation)
         {
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D_OUT_W";
-            var views = new HashSet<int>(new FilteredElementCollector(doc).OfClass(typeof(ViewSection))
-                .Cast<ViewSection>().Where(v => Enumerable.Range(1, 4).Any(n => v.Name == prefix + n))
+            var views = new HashSet<int>(new FilteredElementCollector(doc).OfClass(typeof(View))
+                .Cast<View>().Where(v => Enumerable.Range(1, 4).Any(n => v.Name == prefix + n) ||
+                    v.Name == "MH_" + foundation.Id.IntegerValue + "_PROD_2D_PLAN")
                 .Select(v => v.Id.IntegerValue));
             var ids = new FilteredElementCollector(doc).OfClass(typeof(Dimension)).Cast<Dimension>()
-                .Where(d => views.Contains(d.OwnerViewId.IntegerValue) && IsOwned(d, foundation.UniqueId))
+                .Where(d => views.Contains(d.OwnerViewId.IntegerValue) &&
+                    (IsOwned(d, foundation.UniqueId) || IsOwned(d, foundation.UniqueId, true)))
                 .Select(d => d.Id).ToList();
             if (ids.Count > 0) doc.Delete(ids);
         }
@@ -63,8 +65,8 @@ namespace Hatco.PrecastManholeManager.Services
             var wallIds = new HashSet<int>(footprint.Walls.Select(w => w.Id.IntegerValue));
             all = all.Where(x => wallIds.Contains(x.Data.HostWallId)).OrderBy(x => x.Data.WallNumber)
                 .ThenBy(x => OpeningOffset(doc, x)).ToList();
-            if (sections.Count != 4 || all.Count == 0)
-                return "Dimensions: generate the manhole's production views and openings first.";
+            if (sections.Count != 4)
+                return "Dimensions: generate the manhole's production views first.";
             var type = new FilteredElementCollector(doc).OfClass(typeof(DimensionType))
                 .Cast<DimensionType>().FirstOrDefault(x => x.StyleType == DimensionStyleType.Linear &&
                     x.Name.Equals("HTC_DIM_1.8mm", StringComparison.OrdinalIgnoreCase));
@@ -112,7 +114,8 @@ namespace Hatco.PrecastManholeManager.Services
                 }
             }
             return "Dimensions: " + created + " strings created; " + failed + " wall(s) need review." +
-                (diagnostics.Count == 0 ? "" : "\n" + string.Join("\n", diagnostics));
+                (diagnostics.Count == 0 ? "" : "\n" + string.Join("\n", diagnostics)) +
+                "\n" + GenerateBody(doc, foundation, footprint, sections, type, log);
         }
 
         private static int CreateForWall(Document doc, Element foundation, ViewSection view,
@@ -208,18 +211,20 @@ namespace Hatco.PrecastManholeManager.Services
             return new Boundary { Position = horizontal ? face.X : face.Y, Reference = face.Reference };
         }
 
-        private static void CreateString(Document doc, Element foundation, ViewSection view,
+        private static void CreateString(Document doc, Element foundation, View view,
             DimensionType type, List<Boundary> boundaries, bool horizontal, double offset,
-            DiagnosticLogger log)
+            DiagnosticLogger log, bool body = false, XYZ right = null, XYZ up = null)
         {
+            right = right ?? view.RightDirection;
+            up = up ?? view.UpDirection;
             var sorted = boundaries.OrderBy(b => b.Position).ToList();
             var distinct = new List<Boundary>();
             foreach (var b in sorted)
                 if (distinct.Count == 0 || b.Position - distinct.Last().Position > UnitUtil.MmToFt(ToleranceMm))
                     distinct.Add(b);
             if (distinct.Count < 2) throw new InvalidOperationException("Insufficient distinct dimension references.");
-            XYZ axis = horizontal ? view.RightDirection : view.UpDirection;
-            XYZ cross = horizontal ? view.UpDirection : view.RightDirection;
+            XYZ axis = horizontal ? right : up;
+            XYZ cross = horizontal ? up : right;
             XYZ p = view.Origin + axis * distinct.First().Position + cross * offset;
             XYZ q = view.Origin + axis * distinct.Last().Position + cross * offset;
             var references = new ReferenceArray();
@@ -250,11 +255,11 @@ namespace Hatco.PrecastManholeManager.Services
                     XYZ local = toCrop.OfPoint(box.Transform.OfPoint(new XYZ(x, y, z)));
                     if (local.X < crop.Min.X || local.X > crop.Max.X ||
                         local.Y < crop.Min.Y || local.Y > crop.Max.Y)
-                        throw new InvalidOperationException("Dimension extends outside the section crop. " +
-                            "Expand the section crop and retry Update Opening Dimensions.");
+                        throw new InvalidOperationException("Dimension extends outside the view crop. " +
+                            "Expand the view crop and retry Update All Dimensions.");
                 }
             }
-            Mark(dimension, foundation.UniqueId);
+            Mark(dimension, foundation.UniqueId, body);
             log.Info("ASSOCIATIVE DIMENSION Id=" + dimension.Id.IntegerValue + " View=" + view.Id.IntegerValue +
                 " Axis=" + (horizontal ? "H" : "V") + " ValuesMm=" +
                 string.Join(",", measured.Select(v => UnitUtil.FtToMm(v.Value).ToString("0.#"))));
@@ -285,16 +290,16 @@ namespace Hatco.PrecastManholeManager.Services
             return (center - axis.GetEndPoint(0)).DotProduct(axis.Direction);
         }
 
-        private static List<FaceReference> Faces(Element element, View view)
+        private static List<FaceReference> Faces(Element element, View view, XYZ right = null, XYZ up = null)
         {
             var result = new List<FaceReference>();
             var geometry = element.get_Geometry(new Options { ComputeReferences = true,
                 IncludeNonVisibleObjects = element is Opening, DetailLevel = ViewDetailLevel.Fine });
-            ReadFaces(geometry, Transform.Identity, view, result);
+            ReadFaces(geometry, Transform.Identity, view, result, right ?? view.RightDirection, up ?? view.UpDirection);
             return result;
         }
         private static void ReadFaces(GeometryElement geometry, Transform transform, View view,
-            List<FaceReference> result)
+            List<FaceReference> result, XYZ right, XYZ up)
         {
             if (geometry == null) return;
             foreach (GeometryObject item in geometry)
@@ -303,7 +308,7 @@ namespace Hatco.PrecastManholeManager.Services
                 if (instance != null)
                 {
                     // Parameterless symbol geometry retains real instance-qualified references.
-                    ReadFaces(instance.GetSymbolGeometry(), transform.Multiply(instance.Transform), view, result);
+                    ReadFaces(instance.GetSymbolGeometry(), transform.Multiply(instance.Transform), view, result, right, up);
                     continue;
                 }
                 var solid = item as Solid;
@@ -317,28 +322,28 @@ namespace Hatco.PrecastManholeManager.Services
                     if (points.Count == 0) continue;
                     result.Add(new FaceReference { Reference = face.Reference,
                         Normal = transform.OfVector(face.FaceNormal).Normalize(),
-                        X = origin.DotProduct(view.RightDirection), Y = origin.DotProduct(view.UpDirection),
-                        MinX = points.Min(v => v.DotProduct(view.RightDirection)),
-                        MaxX = points.Max(v => v.DotProduct(view.RightDirection)),
-                        MinY = points.Min(v => v.DotProduct(view.UpDirection)),
-                        MaxY = points.Max(v => v.DotProduct(view.UpDirection)) });
+                        X = origin.DotProduct(right), Y = origin.DotProduct(up),
+                        MinX = points.Min(v => v.DotProduct(right)),
+                        MaxX = points.Max(v => v.DotProduct(right)),
+                        MinY = points.Min(v => v.DotProduct(up)),
+                        MaxY = points.Max(v => v.DotProduct(up)) });
                 }
             }
         }
-        private static bool IsOwned(Dimension dimension, string foundationId)
+        private static bool IsOwned(Dimension dimension, string foundationId, bool body = false)
         {
-            Schema schema = Schema.Lookup(SchemaId);
+            Schema schema = Schema.Lookup(body ? BodySchemaId : SchemaId);
             if (schema == null) return false;
             Entity entity = dimension.GetEntity(schema);
             return entity.IsValid() && entity.Get<string>(schema.GetField("FoundationUniqueId")) == foundationId;
         }
-        private static void Mark(Dimension dimension, string foundationId)
+        private static void Mark(Dimension dimension, string foundationId, bool body = false)
         {
-            Schema schema = Schema.Lookup(SchemaId);
+            Schema schema = Schema.Lookup(body ? BodySchemaId : SchemaId);
             if (schema == null)
             {
-                var builder = new SchemaBuilder(SchemaId);
-                builder.SetSchemaName("HatcoOpeningDimension");
+                var builder = new SchemaBuilder(body ? BodySchemaId : SchemaId);
+                builder.SetSchemaName(body ? "HatcoManholeBodyDimension" : "HatcoOpeningDimension");
                 builder.SetReadAccessLevel(AccessLevel.Public);
                 builder.SetWriteAccessLevel(AccessLevel.Public);
                 builder.AddSimpleField("FoundationUniqueId", typeof(string));

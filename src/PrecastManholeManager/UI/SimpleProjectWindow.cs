@@ -80,7 +80,7 @@ namespace Hatco.PrecastManholeManager.UI
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
             Button produce = Button("Generate Selected Manhole", 210, controls);
-            Button dimensions = Button("Update Opening Dimensions", 215, controls);
+            Button dimensions = Button("Update All Dimensions", 215, controls);
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
