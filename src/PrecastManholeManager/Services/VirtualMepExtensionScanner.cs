@@ -76,6 +76,22 @@ namespace Hatco.PrecastManholeManager.Services
             int[] numbers = { 1, 2, 4, 3 };
             var numbered = ordered.Select((w, i) => new { Wall = w, Number = numbers[i] }).ToList();
 
+            // Correct the location-line plane to the actual wall-solid
+            // mid-plane, which may be offset for Finish/Core Face walls.
+            var solidPlaneOrigins = new Dictionary<int, XYZ>();
+            foreach (Wall w in ordered)
+            {
+                Line axis = ((LocationCurve)w.Location).Curve as Line;
+                if (axis == null) continue;
+                XYZ original = axis.GetEndPoint(0);
+                XYZ actual = OpeningHostPlaneService.MoveToWallSolidMidPlane(w, original);
+                solidPlaneOrigins[w.Id.IntegerValue] = actual;
+                _log.Info("HOST WALL PLANE Wall=" + w.Id.IntegerValue +
+                          " SolidOffsetMm=" + UnitUtil.FtToMm(
+                              new XYZ(actual.X - original.X,
+                                      actual.Y - original.Y, 0).GetLength()).ToString("0.#"));
+            }
+
             double scanMargin = UnitUtil.MmToFt(maxGapMm + 500);
             double minX = walls.Min(w => w.get_BoundingBox(null).Min.X) - scanMargin;
             double minY = walls.Min(w => w.get_BoundingBox(null).Min.Y) - scanMargin;
@@ -130,7 +146,9 @@ namespace Hatco.PrecastManholeManager.Services
                         Wall wall = item.Wall;
                         Line axis = ((LocationCurve)wall.Location).Curve as Line;
                         if (axis == null) continue;
-                        XYZ a = axis.GetEndPoint(0);
+                        XYZ a = solidPlaneOrigins.ContainsKey(wall.Id.IntegerValue)
+                            ? solidPlaneOrigins[wall.Id.IntegerValue]
+                            : axis.GetEndPoint(0);
                         XYZ tangent = new XYZ(axis.Direction.X, axis.Direction.Y, 0);
                         if (tangent.GetLength() < 1e-9) continue;
                         tangent = tangent.Normalize();
