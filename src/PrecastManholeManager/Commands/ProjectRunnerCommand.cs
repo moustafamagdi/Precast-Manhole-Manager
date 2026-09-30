@@ -377,8 +377,8 @@ namespace Hatco.PrecastManholeManager.Commands
                     "This manhole has an OPEN review issue. Resolve it " +
                     "before making production cuts.");
 
-            string id = ManholeViewTitleService.Name(doc, foundation, log);
-            if (id == "UNNUMBERED MANHOLE")
+            string id = (ManholeIdentityStore.Read(foundation) ?? "").Trim();
+            if (id.Length == 0)
                 throw new InvalidOperationException(
                     "Set the foundation Mark / Manhole Number first. " +
                     "Production drawings cannot use an ElementId instead.");
