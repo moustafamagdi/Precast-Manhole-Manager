@@ -22,6 +22,7 @@ namespace Hatco.PrecastManholeManager.Services
         public string SourceSize { get; set; }
         public double GapMm { get; set; }
         public double SlopePercent { get; set; }
+        public double ApproachAngleDeg { get; set; }
         public string Existing { get; set; }
         public string WallProfile { get; set; }
         public string VoidCuts { get; set; }
@@ -88,7 +89,11 @@ namespace Hatco.PrecastManholeManager.Services
             }
 
             if (IsVirtual)
+            {
                 flags.Add("VIRTUAL EXTENSION - APPROVAL REQUIRED");
+                if (Math.Abs(SlopePercent) > 0.1 || ApproachAngleDeg > 5)
+                    flags.Add("SLOPED/SKEWED SOURCE - verify projected opening envelope");
+            }
 
             Status = flags.Count == 0 ? "ACTUAL FIT PREVIEW" : "REVIEW";
             Notes = string.Join(" | ", flags);
@@ -245,15 +250,15 @@ namespace Hatco.PrecastManholeManager.Services
                 DateTime.Now.ToString("yyyyMMdd_HHmmss_fffffff",
                     CultureInfo.InvariantCulture) + ".csv");
             var sb = new StringBuilder();
-            sb.AppendLine("Detection,Wall,WallId,SourceId,Link,Service,SourceSize,Gap_mm,Slope_percent,Opening_mm,OpeningBottomFromBase,NativeOpening,WallProfile,VoidCuts,Status,ReviewReasons");
+            sb.AppendLine("Detection,Wall,WallId,SourceId,Link,Service,SourceSize,Gap_mm,ApproachDeg,Slope_percent,Opening_mm,OpeningBottomFromBase,NativeOpening,WallProfile,VoidCuts,Status,ReviewReasons");
             foreach (UnifiedOpeningReviewRow row in result.Rows)
             {
                 sb.AppendLine(string.Join(",", new[]
                 {
                     Csv(row.Detection), Csv(row.Wall), row.WallId.ToString(),
                     row.SourceId.ToString(), Csv(row.LinkName), Csv(row.Service),
-                    Csv(row.SourceSize), Num(row.GapMm), Num(row.SlopePercent),
-                    Csv(row.OpeningSize), Csv(row.VerticalReference),
+                    Csv(row.SourceSize), Num(row.GapMm), Num(row.ApproachAngleDeg),
+                    Num(row.SlopePercent), Csv(row.OpeningSize), Csv(row.VerticalReference),
                     Csv(row.Existing), Csv(row.WallProfile), Csv(row.VoidCuts),
                     Csv(row.Status), Csv(row.Notes)
                 }));
@@ -279,6 +284,7 @@ namespace Hatco.PrecastManholeManager.Services
                 SourceSize = r.Size,
                 GapMm = candidate?.GapToFaceMm ?? 0,
                 SlopePercent = candidate?.SlopePercent ?? 0,
+                ApproachAngleDeg = candidate?.DeviationDeg ?? 0,
                 Existing = r.ExistingOpeningStatus,
                 Source = r,
                 BaseTopZmm = UnitUtil.FtToMm(baseTopFt)
