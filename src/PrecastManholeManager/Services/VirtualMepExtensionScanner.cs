@@ -170,8 +170,30 @@ namespace Hatco.PrecastManholeManager.Services
                         // virtual endpoint. Log it rather than dropping silently.
                         if (d0 * d1 <= 0)
                         {
-                            hasActualCrossing = true;
-                            diagnostic.Add("W" + item.Number + ":ACTUAL_PLANE_CROSSING");
+                            // Crossing an INFINITE wall plane alone is not
+                            // proof of a wall penetration. Check the finite
+                            // segment and height at the actual intersection.
+                            double denominatorCross = d0 - d1;
+                            if (Math.Abs(denominatorCross) > 1e-9)
+                            {
+                                double tCross = d0 / denominatorCross;
+                                if (tCross >= 0 && tCross <= 1)
+                                {
+                                    XYZ cross = p0 + (p1 - p0) * tCross;
+                                    double crossAlong = (cross - a).DotProduct(tangent);
+                                    if (crossAlong >= 0 && crossAlong <= axis.Length &&
+                                        cross.Z >= box.Min.Z && cross.Z <= box.Max.Z)
+                                    {
+                                        hasActualCrossing = true;
+                                        diagnostic.Add("W" + item.Number + ":ACTUAL_WALL_CROSSING");
+                                        continue;
+                                    }
+                                }
+                            }
+                            diagnostic.Add("W" + item.Number + ":INFINITE_PLANE_ONLY");
+                            // The section crosses the infinite plane outside
+                            // this wall; its endpoint cannot project to this
+                            // wall without reversing direction.
                             continue;
                         }
 
