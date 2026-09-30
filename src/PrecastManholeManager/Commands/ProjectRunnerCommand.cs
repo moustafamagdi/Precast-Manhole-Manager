@@ -392,7 +392,7 @@ namespace Hatco.PrecastManholeManager.Commands
 
             // Explicitly avoid overwriting old manually arranged views.
             string prefix = "MH_" + foundation.Id.IntegerValue +
-                "_DRAFT_2D";
+                "_PROD_2D";
             HashSet<int> onSheet = new HashSet<int>(
                 new FilteredElementCollector(doc)
                     .OfClass(typeof(Viewport)).Cast<Viewport>()
