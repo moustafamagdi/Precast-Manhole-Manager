@@ -392,3 +392,35 @@ clicking Generate Selected Manhole. Its physical opening routine
 reads the stored tool-only ID and uses separate `_PROD_2D` views,
 so earlier manually arranged `_DRAFT_2D` views are not moved.
 This change does not itself create or approve any wall openings.
+
+
+## Production preflight diagnostics and MH_3D (2026-09-30)
+
+Previous generic error `Block=legacy cuts or links` did not
+distinguish a manually cut wall from an unrelated unloaded Revit
+link. The first production button now prints **exact blocked
+conditions** on screen AND as `PRODUCTION BLOCKED` in the TXT
+log: audit reasons, unavailable Revit link names/IDs, edited wall
+profiles, existing unmanaged native openings, unattached void
+cuts, in-place cutter IDs and unsupported solid cuts. This
+preflight remains READ ONLY. No old opening or cutting family
+is automatically deleted; a clean/test candidate may still be
+blocked pending review or verification of missing link coverage.
+
+For all cropped **Review 3D** views, the existing model's
+`MH_3D` *3D view template* is now required and assigned.
+A successful one-manhole production transaction also creates a
+separate cropped `MH_<FoundationId>_PROD_3D` review view with
+the same `MH_3D` template; this 3D view is not placed on the
+2D manufacturing sheet. If the template is missing or turns off
+the per-manhole Section Box, a clear exception is thrown and
+the transaction rolls back rather than leaving an uncropped
+whole-project 3D view. If the template controls Section Box,
+uncheck Section Box in the template's controlled-properties list
+to let the tool crop each manhole individually.
+
+**Next diagnosis:** The older error's exact reason cannot be
+established from its generic screenshot; upload the matching
+timestamped `PrecastManholeManager_*.txt` plus
+`UnifiedOpeningReview_*.csv`. Avoid relaxing cleanup safety
+until actual blockers are verified.
