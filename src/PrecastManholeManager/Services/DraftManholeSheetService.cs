@@ -136,7 +136,15 @@ namespace Hatco.PrecastManholeManager.Services
                 FamilySymbol titleBlock = new FilteredElementCollector(doc)
                     .OfCategory(BuiltInCategory.OST_TitleBlocks)
                     .OfClass(typeof(FamilySymbol))
-                    .Cast<FamilySymbol>().FirstOrDefault();
+                    .Cast<FamilySymbol>()
+                    .OrderByDescending(x =>
+                        (x.Name ?? "").IndexOf("A0",
+                            StringComparison.OrdinalIgnoreCase) >= 0 ? 3 :
+                        (x.Name ?? "").IndexOf("A1",
+                            StringComparison.OrdinalIgnoreCase) >= 0 ? 2 :
+                        (x.Name ?? "").IndexOf("A2",
+                            StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0)
+                    .FirstOrDefault();
                 sheet = ViewSheet.Create(doc, titleBlock != null
                     ? titleBlock.Id : ElementId.InvalidElementId);
                 sheet.Name = prefix;
