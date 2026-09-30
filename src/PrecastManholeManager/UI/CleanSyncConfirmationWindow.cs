@@ -13,6 +13,7 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly CheckBox _voidCuts;
         private readonly CheckBox _virtual;
         private readonly CheckBox _apply;
+        private readonly CheckBox _linksVerified;
         private readonly TextBox _confirmation;
 
         public CleanSyncApplyOptions ApplyOptions { get; private set; }
@@ -95,7 +96,15 @@ namespace Hatco.PrecastManholeManager.UI
                 Margin = new Thickness(0, 10, 0, 8)
             });
 
-            _apply = Box(root, "I am testing on a disposable RVT copy", false);
+            if (plan.UnavailableLinks > 0)
+            {
+                _linksVerified = Box(root,
+                    "I verified all REQUIRED MEP links are loaded; " +
+                    plan.UnavailableLinks + " other links remain unavailable " +
+                    "(opening data may be incomplete)",
+                    true);
+            }
+            _apply = Box(root, "I am testing on a disposable RVT copy", true);
             root.Children.Add(Line("Type CLEAN to unlock the experimental APPLY button:"));
             _confirmation = new TextBox
             {
@@ -140,6 +149,8 @@ namespace Hatco.PrecastManholeManager.UI
                     string.Equals((_confirmation.Text ?? "").Trim(),
                         "CLEAN", StringComparison.Ordinal) &&
                     _apply.IsChecked == true &&
+                    (plan.UnavailableLinks == 0 ||
+                     (_linksVerified != null && _linksVerified.IsChecked == true)) &&
                     (plan.ProfileResetCount == 0 || _profiles.IsChecked == true) &&
                     (plan.VoidCutCount == 0 || _voidCuts.IsChecked == true) &&
                     (plan.ManualOpeningIds.Count == 0 || _manual.IsChecked == true);
@@ -147,6 +158,11 @@ namespace Hatco.PrecastManholeManager.UI
             _confirmation.TextChanged += (s, e) => refresh();
             _apply.Checked += (s, e) => refresh();
             _apply.Unchecked += (s, e) => refresh();
+            if (_linksVerified != null)
+            {
+                _linksVerified.Checked += (s, e) => refresh();
+                _linksVerified.Unchecked += (s, e) => refresh();
+            }
             foreach (CheckBox cb in new[] { _profiles, _manual, _voidCuts })
             {
                 cb.Checked += (s, e) => refresh();
@@ -162,7 +178,9 @@ namespace Hatco.PrecastManholeManager.UI
                     ResetEditedProfiles = _profiles.IsChecked == true,
                     RemoveManualNative = _manual.IsChecked == true,
                     RemoveVoidCutRelations = _voidCuts.IsChecked == true,
-                    IncludeStraightVirtual = _virtual.IsChecked == true
+                    IncludeStraightVirtual = _virtual.IsChecked == true,
+                    RequiredLinksVerified = plan.UnavailableLinks == 0 ||
+                        _linksVerified?.IsChecked == true
                 };
                 DialogResult = true;
             };
