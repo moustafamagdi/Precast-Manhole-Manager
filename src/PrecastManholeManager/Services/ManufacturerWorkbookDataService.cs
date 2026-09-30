@@ -26,6 +26,7 @@ namespace Hatco.PrecastManholeManager.Services
         public string OpeningType { get; set; }
         public bool AdoptedManual { get; set; }
         public double OffsetMm { get; set; }
+        public double OpeningBottomFromBaseMm { get; set; }
         public double InvertFromBaseMm { get; set; }
         public double AbsoluteInvertMm { get; set; }
         public double CenterElevationMm { get; set; }
@@ -85,6 +86,9 @@ namespace Hatco.PrecastManholeManager.Services
                 if (sourceHeightMm <= 0)
                     sourceHeightMm = Math.Max(0, managed.CutHeightMm - (2.0 * managed.ClearanceMm));
 
+                double openingBottomAbsolute = managed.Zmm - (managed.CutHeightMm / 2.0);
+                double openingBottomFromBase = openingBottomAbsolute - manhole.BaseTopZmm;
+
                 double absoluteInvert = managed.Zmm - (sourceHeightMm / 2.0);
                 double invertFromBase = absoluteInvert - manhole.BaseTopZmm;
                 double offset = CalculateOffsetFromWallStart(
@@ -122,6 +126,7 @@ namespace Hatco.PrecastManholeManager.Services
                     OpeningType = managed.AdoptedManual ? "Adopted Manual" : "Managed",
                     AdoptedManual = managed.AdoptedManual,
                     OffsetMm = offset,
+                    OpeningBottomFromBaseMm = openingBottomFromBase,
                     InvertFromBaseMm = invertFromBase,
                     AbsoluteInvertMm = absoluteInvert,
                     CenterElevationMm = managed.Zmm,
