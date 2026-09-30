@@ -226,6 +226,36 @@ namespace Hatco.PrecastManholeManager.Services
                     return o.MaximumPoint.Y - o.MinimumPoint.Y;
                 }).ToArray();
 
+                // Guard against Revit retaining a project-wide crop
+                // despite our explicit section/crop alignment. An absurd
+                // viewport is a geometry/crop bug, not a small titleblock:
+                // bail out at the FIRST scale instead of spending minutes
+                // trying 1:400 and misleading the operator.
+                if (candidateScale == 50)
+                {
+                    double maxModelExtent = Math.Max(maxX - minX,
+                        Math.Max(maxY - minY, maxZ - minZ));
+                    double expectedPaperFt = maxModelExtent / candidateScale;
+                    double largestPaperFt = Math.Max(
+                        w.Max(), h.Max());
+                    log.Info("DRAFT CROP DIAGNOSTIC ModelMaxMm=" +
+                        UnitUtil.FtToMm(maxModelExtent).ToString("0.#") +
+                        " ExpectedPaperMaxMm=" +
+                        UnitUtil.FtToMm(expectedPaperFt).ToString("0.#") +
+                        " MeasuredPaperMaxMm=" +
+                        UnitUtil.FtToMm(largestPaperFt).ToString("0.#"));
+                    if (largestPaperFt > expectedPaperFt * 8.0)
+                        throw new InvalidOperationException(
+                            "3D viewport crop is still project-sized. " +
+                            "Largest paper view is " +
+                            UnitUtil.FtToMm(largestPaperFt).ToString("0.#") +
+                            " mm while the manhole geometry suggests about " +
+                            UnitUtil.FtToMm(expectedPaperFt).ToString("0.#") +
+                            " mm at 1:50. This is a 3D crop/orientation " +
+                            "issue, NOT a titleblock size problem; " +
+                            "all draft changes will be rolled back.");
+                }
+
                 // 3 rows: plan; W1 and W2; W3 and W4. Each row uses
                 // the tallest view in that row, with a fixed clear gap.
                 double planWidth = w[0];
