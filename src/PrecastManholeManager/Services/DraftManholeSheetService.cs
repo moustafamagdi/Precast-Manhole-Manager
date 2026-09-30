@@ -55,7 +55,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             View3D plan = GetOrCreate(doc, prefix + "_PLAN", viewType);
             Orient(plan, center + XYZ.BasisZ * UnitUtil.MmToFt(2500),
-                XYZ.BasisY, -XYZ.BasisZ, mainBox);
+                XYZ.BasisY, XYZ.BasisZ.Negate(), mainBox);
             result.Views.Add(plan);
 
             // Stable numbering: azimuth clockwise from north; W1-W4
@@ -97,7 +97,7 @@ namespace Hatco.PrecastManholeManager.Services
                     maxZ + pad);
                 Orient(elevation,
                     mid + outward * UnitUtil.MmToFt(2500),
-                    XYZ.BasisZ, -outward, wallBox);
+                    XYZ.BasisZ, outward.Negate(), wallBox);
                 result.Views.Add(elevation);
                 log.Info("DRAFT ELEVATION W" + nums[i] +
                     " WallId=" + wall.Id.IntegerValue +
@@ -145,8 +145,11 @@ namespace Hatco.PrecastManholeManager.Services
                         (x.Name ?? "").IndexOf("A2",
                             StringComparison.OrdinalIgnoreCase) >= 0 ? 1 : 0)
                     .FirstOrDefault();
-                sheet = ViewSheet.Create(doc, titleBlock != null
-                    ? titleBlock.Id : ElementId.InvalidElementId);
+                if (titleBlock == null)
+                    throw new InvalidOperationException(
+                        "No titleblock family type is loaded. " +
+                        "Load an A1/A0 titleblock before creating the draft.");
+                sheet = ViewSheet.Create(doc, titleBlock.Id);
                 sheet.Name = prefix;
             }
             result.Sheet = sheet;
