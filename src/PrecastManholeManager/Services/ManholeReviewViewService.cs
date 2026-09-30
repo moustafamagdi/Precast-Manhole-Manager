@@ -16,15 +16,16 @@ namespace Hatco.PrecastManholeManager.Services
         {
             string name = "MH_" + foundation.Id.IntegerValue +
                 "_PROD_3D";
-            bool exists = new FilteredElementCollector(doc)
+            View3D existing = new FilteredElementCollector(doc)
                 .OfClass(typeof(View3D)).Cast<View3D>()
-                .Any(v => !v.IsTemplate &&
-                    v.Name.Equals(name,
-                        StringComparison.OrdinalIgnoreCase));
-            if (exists)
-                throw new InvalidOperationException(
-                    "Production 3D already exists: " + name +
-                    ". It will not be overwritten.");
+                .FirstOrDefault(v => !v.IsTemplate &&
+                    v.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                // Model geometry updates in the existing view without resetting its layout.
+                log?.Info("PRODUCTION 3D REUSED View=" + existing.Id.IntegerValue);
+                return existing;
+            }
 
             var issue = new ManholeReviewIssue
             {

@@ -15,6 +15,8 @@ namespace Hatco.PrecastManholeManager.Commands
     [Regeneration(RegenerationOption.Manual)]
     public sealed class ProjectRunnerCommand : IExternalCommand
     {
+        private static double _lastClearanceMm = 50;
+
         public Result Execute(ExternalCommandData input,
             ref string message, ElementSet elements)
         {
@@ -35,10 +37,11 @@ namespace Hatco.PrecastManholeManager.Commands
                         SimpleProjectScanService.LoadFast(doc);
                     while (true)
                     {
-                        var window = new SimpleProjectWindow(rows);
+                        var window = new SimpleProjectWindow(rows, _lastClearanceMm);
                         if (window.ShowDialog() != true ||
                             window.Action == ProjectAction.Close)
                             return Result.Succeeded;
+                        _lastClearanceMm = window.ClearanceMm;
                         try
                         {
                             if (window.Action == ProjectAction.Scan)
@@ -58,7 +61,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                 AssignAllManholeNames(doc, log);
                             else if (window.Action == ProjectAction.ReviewOne)
                                 InspectSelected(doc, window.SelectedManhole,
-                                    log);
+                                    log, window.ClearanceMm);
                             else if (window.Action == ProjectAction.Make3D)
                                 MakeReview3D(uiDoc, window.SelectedManhole,
                                     log);
@@ -67,7 +70,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                     window.SelectedManhole, log);
                             else if (window.Action == ProjectAction.ProductionOne)
                                 GenerateProductionManhole(uiDoc,
-                                    window.SelectedManhole, log);
+                                    window.SelectedManhole, log, window.ClearanceMm);
                             else if (window.Action == ProjectAction.SixRowLayoutSheet)
                                 GenerateSixRowLayoutSheet(uiDoc,
                                     window.SheetCandidates, referenceSheet, log);
@@ -184,7 +187,7 @@ namespace Hatco.PrecastManholeManager.Commands
         }
 
         private static void InspectSelected(Document doc,
-            SimpleManholeItem row, DiagnosticLogger log)
+            SimpleManholeItem row, DiagnosticLogger log, double clearanceMm)
         {
             Element foundation = Resolve(doc, row);
             VirtualFoundationResult footprint =
@@ -202,10 +205,10 @@ namespace Hatco.PrecastManholeManager.Commands
                 return;
             }
             // Reuse the full tested scanner and unified read-only review.
-            // 50 mm clearance / 150 mm max gap / 15 degree plan angle.
+            // User-selected clearance / 150 mm max gap / 15 degree plan angle.
             UnifiedOpeningReviewResult review =
                 UnifiedOpeningReviewService.Collect(
-                    doc, foundation, footprint, log, 50, 150, 15);
+                    doc, foundation, footprint, log, clearanceMm, 150, 15);
             string csv = UnifiedOpeningReviewService.ExportCsv(review);
             bool needsAttention = review.Rows.Any(x =>
                 x.Status == "REVIEW");
@@ -363,7 +366,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // confirmed ACTUAL linked-MEP crossings only. One transaction
         // group makes the physical openings + views + sheet atomic.
         private static void GenerateProductionManhole(UIDocument uidoc,
-            SimpleManholeItem selected, DiagnosticLogger log)
+            SimpleManholeItem selected, DiagnosticLogger log, double clearanceMm)
         {
             Document doc = uidoc.Document;
             Element foundation = Resolve(doc, selected);
@@ -390,7 +393,10 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException(
                     "Foundation geometry not approved: " + footprint.Reason);
 
-            // Explicitly avoid overwriting old manually arranged views.
+            if (double.IsNaN(clearanceMm) || double.IsInfinity(clearanceMm) || clearanceMm < 0)
+                throw new InvalidOperationException("Clearance must be a finite non-negative value.");
+            ViewSheet existingSheet = FirstProductionSheetService.FindExisting(doc, foundation);
+            // Preserve placed views and layout; only the opening table is refreshed on reruns.
             string prefix = "MH_" + foundation.Id.IntegerValue +
                 "_PROD_2D";
             HashSet<int> onSheet = new HashSet<int>(
@@ -406,17 +412,16 @@ namespace Hatco.PrecastManholeManager.Commands
                      x.Name == prefix + "_OUT_W3" ||
                      x.Name == prefix + "_OUT_W4") &&
                      onSheet.Contains(x.Id.IntegerValue));
-            if (placed)
+            if (placed && existingSheet == null)
                 throw new InvalidOperationException(
                     "The production Plan/Sections already appear on a " +
                     "sheet. Existing manual layouts are protected.");
 
             log.WriteHeader("FIRST PRODUCTION MANHOLE - READ ONLY PREFLIGHT");
-            // Defaults validated by earlier unified review: 50 mm clearance,
-            // 150 mm virtual preview radius and 15-degree limit.
+            // Clearance is selected by the operator, in millimeters per side.
             UnifiedOpeningReviewResult review =
                 UnifiedOpeningReviewService.Collect(doc, foundation,
-                    footprint, log, 50, 150, 15);
+                    footprint, log, clearanceMm, 150, 15);
             string csv = UnifiedOpeningReviewService.ExportCsv(review);
             CleanSyncPlan plan = CleanSyncPlanService.Build(doc,
                 foundation.Id.IntegerValue, footprint, review, log);
@@ -428,19 +433,9 @@ namespace Hatco.PrecastManholeManager.Commands
             var blockers = new List<string>();
             if (!string.IsNullOrWhiteSpace(plan.BlockReason))
                 blockers.Add("Audit: " + plan.BlockReason);
-            bool incompleteLinkCoverage = plan.UnavailableLinks > 0;
-            string unavailableNames = string.Join("\n",
-                new FilteredElementCollector(doc)
-                    .OfClass(typeof(RevitLinkInstance))
-                    .Cast<RevitLinkInstance>()
-                    .Where(x => x.GetLinkDocument() == null)
-                    .Select(x => x.Name + " [Id=" +
-                        x.Id.IntegerValue + "]"));
-            if (incompleteLinkCoverage)
-                log.Warn("PARTIAL-LINK PRECHECK: " +
-                    plan.UnavailableLinks + " unavailable links.\n" +
-                    unavailableNames +
-                    "\nNo missing link is assumed irrelevant.");
+            // The operator selects required sources by loading those links.
+            log.Info("PRODUCTION LINK SCOPE: operator-selected loaded links. " +
+                "Unloaded links skipped=" + plan.UnavailableLinks);
             if (plan.ProfileResetCount > 0)
                 blockers.Add("Edited wall profiles (" +
                     plan.ProfileResetCount + "): " +
@@ -550,50 +545,9 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException(
                     "Duplicate actual crossing source keys. Review " + csv);
 
-            // An explicit second gate allows a limited first-model TEST
-            // from actual intersections in the loaded source links.
-            // It NEVER declares unavailable MEP/structural links
-            // irrelevant and marks the result NOT FOR ISSUE.
-            if (incompleteLinkCoverage)
-            {
-                string loadedSources = string.Join("\n",
-                    actual.Select(x => x.Source.LinkName)
-                        .Distinct(StringComparer.Ordinal));
-                var coverage = new TaskDialog(
-                    "Incomplete linked-model coverage")
-                {
-                    MainInstruction = "Create a PARTIAL TEST from " +
-                        actual.Count + " actual crossing(s)?",
-                    MainContent = "Detected from LOADED source(s):\n" +
-                        loadedSources +
-                        "\n\nUNAVAILABLE links (" +
-                        plan.UnavailableLinks + "):\n" +
-                        unavailableNames +
-                        "\n\nOther links could contain more " +
-                        "penetrations. This option creates real " +
-                        "native openings ONLY for the detected " +
-                        "sources in this saved TEST RVT. The new " +
-                        "sheet will be marked PARTIAL - NOT FOR ISSUE." +
-                        "\nNo old opening or void will be deleted." +
-                        "\n\nContinue with this deliberately " +
-                        "incomplete test?",
-                    CommonButtons = TaskDialogCommonButtons.Yes |
-                        TaskDialogCommonButtons.No,
-                    DefaultButton = TaskDialogResult.No
-                };
-                if (coverage.Show() != TaskDialogResult.Yes)
-                {
-                    log.Info("PARTIAL LINK TEST cancelled by operator.");
-                    return;
-                }
-                log.Warn("PARTIAL LINK TEST EXPLICITLY APPROVED " +
-                    "Foundation=" + foundation.Id.IntegerValue +
-                    " Count=" + actual.Count +
-                    " UnavailableLinks=" + plan.UnavailableLinks);
-            }
-
             log.Info("PRODUCTION PREFLIGHT Name=" + id +
                 " Actual=" + actual.Count +
+                " ClearancePerSideMm=" + clearanceMm +
                 " VirtualDeferred=" + review.VirtualCount +
                 " ReviewCsv=" + csv);
             var confirm = new TaskDialog("Approve first production cuts");
@@ -603,16 +557,19 @@ namespace Hatco.PrecastManholeManager.Commands
                 actual.OrderBy(x => x.Source.WallNumber)
                     .Select(x => "W" + x.Source.WallNumber +
                         " / Source " + x.Source.LinkedElementId +
-                        " / " + x.OpeningSize));
+                        " / " + x.OpeningSize +
+                        (x.Source.ExistingOpeningStatus == "MANAGED"
+                            ? " / UPDATE EXISTING" : " / CREATE")));
             confirm.MainContent =
                 "APPROVED OPENING CANDIDATES:\n" + proposed +
-                "\n\n50 mm clearance per side. These are REAL Revit cuts " +
-                "to this one manhole's four walls, followed by a new " +
-                "1:25 Plan + 4 exterior Sections sheet.\n\n" +
+                "\n\n" + clearanceMm.ToString("0.###") +
+                " mm clearance per side. These are REAL Revit cuts " +
+                "to this one manhole's four walls. " +
+                (existingSheet == null ? "Create a new 1:25 Plan + 4 Sections sheet." :
+                    "Update existing openings and the sheet table; preserve view layout.") + "\n\n" +
                 "Virtual candidates deferred: " + review.VirtualCount +
-                (incompleteLinkCoverage ?
-                    ". PARTIAL LINK COVERAGE - NOT FOR ISSUE." : ".") +
-                " No old cuts/profiles/void cutters will be removed." +
+                "." +
+                " Existing tool openings may be resized. Manual cuts/profiles/void cutters are preserved." +
                 "\nRead-only audit CSV: " + csv +
                 "\n\nContinue only on a saved test RVT copy.";
             confirm.CommonButtons = TaskDialogCommonButtons.Yes |
@@ -641,9 +598,8 @@ namespace Hatco.PrecastManholeManager.Commands
                             RemoveVoidCutRelations = false,
                             DeleteIsolatedInPlaceCutters = false,
                             IncludeStraightVirtual = false,
-                            RequiredLinksVerified = false,
-                            AllowIncompleteLinkCoverageForPreview =
-                                incompleteLinkCoverage
+                            // Required sources are the links loaded by the operator.
+                            RequiredLinksVerified = true
                         }, log);
                     if (!applied.Committed)
                         throw new InvalidOperationException(
@@ -655,13 +611,19 @@ namespace Hatco.PrecastManholeManager.Commands
                         tx.Start();
                         try
                         {
-                            DraftSheetResult views =
-                                DraftManholeSheetService.Generate(doc,
-                                    foundation, footprint, log,
-                                    forProduction: true);
-                            newSheet = FirstProductionSheetService.Build(
-                                doc, foundation, views, actual, log,
-                                incompleteLinkCoverage);
+                            if (existingSheet != null)
+                            {
+                                FirstProductionSheetService.Refresh(doc, foundation,
+                                    existingSheet, actual, log);
+                                newSheet = existingSheet;
+                            }
+                            else
+                            {
+                                DraftSheetResult views = DraftManholeSheetService.Generate(
+                                    doc, foundation, footprint, log, forProduction: true);
+                                newSheet = FirstProductionSheetService.Build(
+                                    doc, foundation, views, actual, log);
+                            }
                             production3D = ManholeReviewViewService
                                 .CreateProduction(doc, foundation,
                                     footprint, log);
@@ -692,9 +654,7 @@ namespace Hatco.PrecastManholeManager.Commands
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",
                 "COMMITTED: " + id +
-                (incompleteLinkCoverage ?
-                    "\nPARTIAL LINK COVERAGE - NOT FOR ISSUE" :
-                    "\nALL LINK INSTANCES AVAILABLE") +
+                "\nScope: loaded linked models" +
                 "\nNew native openings: " + applied.NewOpenings +
                 "\nManaged unchanged: " + applied.ManagedUnchanged +
                 "\nManaged updated: " + applied.ManagedUpdated +

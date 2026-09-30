@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -21,6 +22,8 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly List<SimpleManholeItem> _all;
         private readonly DataGrid _grid;
         private readonly TextBox _filter;
+        private readonly TextBox _clearance;
+        public double ClearanceMm { get; private set; }
         private readonly TextBlock _counts;
         private readonly CheckBox _onlyReview;
         public ProjectAction Action { get; private set; } = ProjectAction.Close;
@@ -29,8 +32,9 @@ namespace Hatco.PrecastManholeManager.UI
         public List<SimpleManholeItem> SheetCandidates { get; private set; } =
             new List<SimpleManholeItem>();
 
-        public SimpleProjectWindow(List<SimpleManholeItem> items)
+        public SimpleProjectWindow(List<SimpleManholeItem> items, double clearanceMm = 50)
         {
+            ClearanceMm = clearanceMm;
             _all = items ?? new List<SimpleManholeItem>();
             Title = "HATCO | Precast Manhole Manager";
             Width = 1080;
@@ -96,6 +100,17 @@ namespace Hatco.PrecastManholeManager.UI
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 10)
             });
+
+            var openingSettings = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
+            top.Children.Add(openingSettings);
+            openingSettings.Children.Add(new TextBlock {
+                Text = "Clearance per side (mm):", VerticalAlignment = VerticalAlignment.Center });
+            _clearance = new TextBox { Width = 85, Margin = new Thickness(8, 0, 12, 0),
+                Text = clearanceMm.ToString("0.###", CultureInfo.CurrentCulture) };
+            openingSettings.Children.Add(_clearance);
+            openingSettings.Children.Add(new TextBlock {
+                Text = "Generate also updates existing tool openings and their sheet.",
+                VerticalAlignment = VerticalAlignment.Center });
 
             var search = new WrapPanel
             {
@@ -302,6 +317,20 @@ namespace Hatco.PrecastManholeManager.UI
                     "Manufacturer Excel", MessageBoxButton.YesNo) !=
                     MessageBoxResult.Yes) return;
             }
+            double clearance;
+            bool valid = (double.TryParse(_clearance.Text, NumberStyles.Float,
+                CultureInfo.CurrentCulture, out clearance) ||
+                double.TryParse(_clearance.Text, NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out clearance)) &&
+                !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
+            if (!valid && (requested == ProjectAction.ProductionOne ||
+                requested == ProjectAction.ReviewOne))
+            {
+                MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");
+                _clearance.Focus();
+                return;
+            }
+            if (valid) ClearanceMm = clearance;
             Action = requested;
             DialogResult = true;
         }

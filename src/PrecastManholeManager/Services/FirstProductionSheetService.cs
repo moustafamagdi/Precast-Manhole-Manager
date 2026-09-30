@@ -10,12 +10,12 @@ namespace Hatco.PrecastManholeManager.Services
     {
         internal static ViewSheet Build(Document doc, Element foundation,
             DraftSheetResult draft, IList<UnifiedOpeningReviewRow> actual,
-            DiagnosticLogger log, bool partialLinkCoverage = false)
+            DiagnosticLogger log)
         {
             if (draft.Views.Count != 5)
                 throw new InvalidOperationException("Five views required for production.");
             string name = "MH_" + foundation.Id.IntegerValue +
-                (partialLinkCoverage ? "_OPENINGS_PARTIAL_R01" : "_OPENINGS_R01");
+                "_OPENINGS_R01";
             if (new FilteredElementCollector(doc).OfClass(typeof(ViewSheet))
                 .Cast<ViewSheet>().Any(x => x.Name == name))
                 throw new InvalidOperationException(
@@ -135,13 +135,73 @@ namespace Hatco.PrecastManholeManager.Services
             if (noteType == null)
                 throw new InvalidOperationException(
                     "Load a Revit text type for the opening schedule.");
+            string schedule = ScheduleText(doc, foundation, actual, log);
+            double noteWidth = content - UnitUtil.MmToFt(12);
+            var textOptions = new TextNoteOptions(noteType.Id);
+            TextNote note = TextNote.Create(doc, sheet.Id,
+                new XYZ(left + UnitUtil.MmToFt(5),
+                    rowBottom - UnitUtil.MmToFt(28), 0),
+                noteWidth, schedule, textOptions);
+            doc.Regenerate();
+            BoundingBoxXYZ noteBounds = note.get_BoundingBox(sheet);
+            if (noteBounds == null ||
+                noteBounds.Min.X < left ||
+                noteBounds.Max.X > right ||
+                noteBounds.Max.Y > rowBottom - UnitUtil.MmToFt(5) ||
+                noteBounds.Min.Y < b + UnitUtil.MmToFt(16))
+                throw new InvalidOperationException(
+                    "Opening setout text overflows this sheet. " +
+                    "Change the text type/titleblock before issuing.");
+            log.Info("PRODUCTION SHEET " + sheet.Id.IntegerValue +
+                " Scope=OPERATOR SELECTED LOADED LINKS" +
+                " Openings=" + actual.Count + " Layout=1 PLAN + 4 EXT SECTIONS");
+            return sheet;
+        }
+
+        internal static ViewSheet FindExisting(Document doc, Element foundation)
+        {
+            string prefix = "MH_" + foundation.Id.IntegerValue;
+            var matches = new FilteredElementCollector(doc).OfClass(typeof(ViewSheet))
+                .Cast<ViewSheet>().Where(x => x.Name == prefix + "_OPENINGS_R01" ||
+                    x.Name == prefix + "_OPENINGS_PARTIAL_R01").ToList();
+            if (matches.Count > 1)
+                throw new InvalidOperationException("Multiple production sheets found for this manhole.");
+            return matches.SingleOrDefault();
+        }
+
+        internal static void Refresh(Document doc, Element foundation, ViewSheet sheet,
+            IList<UnifiedOpeningReviewRow> actual, DiagnosticLogger log)
+        {
+            // Reuse the existing annotation and viewports, including manual positions.
+            var notes = new FilteredElementCollector(doc, sheet.Id).OfClass(typeof(TextNote))
+                .Cast<TextNote>().Where(n => n.Text.Contains("MEP SOURCE") &&
+                    n.Text.Contains("BOTTOM ABOVE BASE (mm)") &&
+                    (n.Text.Contains("OPENING SETOUT") || n.Text.Contains("PARTIAL LINK COVERAGE")))
+                .ToList();
+            if (notes.Count != 1)
+                throw new InvalidOperationException("Cannot uniquely identify the existing opening table. " +
+                    "Restore the tool's table before updating; no changes will be committed.");
+            TextNote note = notes[0];
+            note.Text = ScheduleText(doc, foundation, actual, log);
+            doc.Regenerate();
+            BoundingBoxXYZ bounds = note.get_BoundingBox(sheet);
+            if (bounds == null || bounds.Min.X < sheet.Outline.Min.U ||
+                bounds.Max.X > sheet.Outline.Max.U || bounds.Min.Y < sheet.Outline.Min.V ||
+                bounds.Max.Y > sheet.Outline.Max.V)
+                throw new InvalidOperationException("Updated opening table exceeds sheet bounds.");
+            sheet.Name = "MH_" + foundation.Id.IntegerValue + "_OPENINGS_R01";
+            log.Info("PRODUCTION SHEET UPDATED " + sheet.Id.IntegerValue +
+                " Openings=" + actual.Count + " Existing layout preserved.");
+        }
+
+        private static string ScheduleText(Document doc, Element foundation,
+            IList<UnifiedOpeningReviewRow> actual, DiagnosticLogger log)
+        {
             string manholeName = ManholeViewTitleService.Name(
                 doc, foundation, log);
             var lines = new List<string>
             {
-                manholeName + (partialLinkCoverage
-                    ? " | PARTIAL LINK COVERAGE - NOT FOR ISSUE"
-                    : " | OPENING SETOUT - PRELIMINARY / VERIFY"),
+                manholeName + " | OPENING SETOUT - PRELIMINARY / VERIFY",
                 "WALL     MEP SOURCE       CLEAR OPENING (mm)    " +
                 "OFFSET FROM WALL START (mm)     BOTTOM ABOVE BASE (mm)"
             };
@@ -166,27 +226,7 @@ namespace Hatco.PrecastManholeManager.Services
             }
             if (sequence == 1)
                 lines.Add("NO APPROVED ACTUAL PENETRATIONS FOUND.");
-            string schedule = string.Join(Environment.NewLine, lines);
-            double noteWidth = content - UnitUtil.MmToFt(12);
-            var textOptions = new TextNoteOptions(noteType.Id);
-            TextNote note = TextNote.Create(doc, sheet.Id,
-                new XYZ(left + UnitUtil.MmToFt(5),
-                    rowBottom - UnitUtil.MmToFt(28), 0),
-                noteWidth, schedule, textOptions);
-            doc.Regenerate();
-            BoundingBoxXYZ noteBounds = note.get_BoundingBox(sheet);
-            if (noteBounds == null ||
-                noteBounds.Min.X < left ||
-                noteBounds.Max.X > right ||
-                noteBounds.Max.Y > rowBottom - UnitUtil.MmToFt(5) ||
-                noteBounds.Min.Y < b + UnitUtil.MmToFt(16))
-                throw new InvalidOperationException(
-                    "Opening setout text overflows this sheet. " +
-                    "Change the text type/titleblock before issuing.");
-            log.Info("PRODUCTION SHEET " + sheet.Id.IntegerValue +
-                " Coverage=" + (partialLinkCoverage ? "PARTIAL NOT FOR ISSUE" : "ALL LINKS AVAILABLE") +
-                " Openings=" + actual.Count + " Layout=1 PLAN + 4 EXT SECTIONS");
-            return sheet;
+            return string.Join(Environment.NewLine, lines);
         }
     }
 }

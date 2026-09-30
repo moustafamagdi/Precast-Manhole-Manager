@@ -373,7 +373,9 @@ namespace Hatco.PrecastManholeManager.Services
                             " MANAGED Opening=" + opening.Id.IntegerValue +
                             " Key=" + record.SourceKey +
                             " Size=" + record.CutWidthMm.ToString("0.#") +
-                            "x" + record.CutHeightMm.ToString("0.#") + "mm");
+                            "x" + record.CutHeightMm.ToString("0.#") + "mm" +
+                            " ClearancePerSideMm=" + record.ClearanceMm +
+                            (oldData != null ? " PreviousClearanceMm=" + oldData.ClearanceMm : ""));
                         doc.Regenerate();
                     }
 
@@ -416,8 +418,9 @@ namespace Hatco.PrecastManholeManager.Services
 
         private static bool Matches(ManagedOpeningData data, PenetrationRecord r)
         {
-            const double tol = 1.0;
-            return data.HostWallId == r.HostWallId &&
+            const double tol = 0.001;
+            return Math.Abs(data.ClearanceMm - r.ClearanceMm) <= tol &&
+                data.HostWallId == r.HostWallId &&
                 Math.Abs(data.Xmm - r.Xmm) <= tol &&
                 Math.Abs(data.Ymm - r.Ymm) <= tol &&
                 Math.Abs(data.Zmm - r.Zmm) <= tol &&
