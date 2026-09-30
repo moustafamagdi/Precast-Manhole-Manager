@@ -1,0 +1,289 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Autodesk.Revit.DB;
+using Hatco.PrecastManholeManager.Infrastructure;
+
+namespace Hatco.PrecastManholeManager.Services
+{
+    internal sealed class VirtualMepCandidate
+    {
+        public int LinkInstanceId { get; set; }
+        public string LinkName { get; set; }
+        public int SourceElementId { get; set; }
+        public string SourceUniqueId { get; set; }
+        public string Category { get; set; }
+        public int WallId { get; set; }
+        public int WallNumber { get; set; }
+        public int Endpoint { get; set; }
+        public XYZ ProjectedHit { get; set; }
+        public double GapToFaceMm { get; set; }
+        public double ReachToAxisMm { get; set; }
+        public double DeviationDeg { get; set; }
+        public string Status { get; set; }
+        public string Reason { get; set; }
+    }
+
+    internal sealed class VirtualMepScanResult
+    {
+        public List<VirtualMepCandidate> Candidates { get; } =
+            new List<VirtualMepCandidate>();
+        public int LoadedLinks { get; set; }
+        public int UnavailableLinks { get; set; }
+        public int NearbyMep { get; set; }
+        public string CsvPath { get; set; }
+    }
+
+    // Experimental diagnostic only. It extends LINE endpoints mathematically;
+    // no edits are made to linked MEP elements, host walls or openings.
+    internal sealed class VirtualMepExtensionScanner
+    {
+        private readonly Document _doc;
+        private readonly DiagnosticLogger _log;
+
+        public VirtualMepExtensionScanner(Document doc, DiagnosticLogger log)
+        {
+            _doc = doc;
+            _log = log;
+        }
+
+        public VirtualMepScanResult Scan(VirtualFoundationResult footprint,
+            double maxGapMm, double maxDeviationDeg)
+        {
+            var result = new VirtualMepScanResult();
+            _log.WriteHeader("EXPERIMENT: VIRTUAL MEP EXTENSION - READ ONLY");
+            _log.Info("MaxGapFromWallFaceMm=" + maxGapMm +
+                      " MaxDeviationDeg=" + maxDeviationDeg);
+
+            if (footprint == null || !footprint.Accepted)
+                throw new InvalidOperationException(
+                    "Run and validate Virtual Foundation before scanning virtual MEP.");
+
+            List<Wall> walls = footprint.Walls;
+            XYZ center = footprint.VirtualCenter;
+
+            // Same stable azimuth convention as the existing W1..W4 scanner.
+            var ordered = walls.OrderBy(w =>
+            {
+                Line line = ((LocationCurve)w.Location).Curve as Line;
+                XYZ mid = (line.GetEndPoint(0) + line.GetEndPoint(1)) * 0.5;
+                double angle = Math.Atan2(mid.X - center.X, mid.Y - center.Y);
+                return angle < 0 ? angle + 2 * Math.PI : angle;
+            }).ToList();
+            int[] numbers = { 1, 2, 4, 3 };
+            var numbered = ordered.Select((w, i) => new { Wall = w, Number = numbers[i] }).ToList();
+
+            double scanMargin = UnitUtil.MmToFt(maxGapMm + 500);
+            double minX = walls.Min(w => w.get_BoundingBox(null).Min.X) - scanMargin;
+            double minY = walls.Min(w => w.get_BoundingBox(null).Min.Y) - scanMargin;
+            double minZ = walls.Min(w => w.get_BoundingBox(null).Min.Z) - scanMargin;
+            double maxX = walls.Max(w => w.get_BoundingBox(null).Max.X) + scanMargin;
+            double maxY = walls.Max(w => w.get_BoundingBox(null).Max.Y) + scanMargin;
+            double maxZ = walls.Max(w => w.get_BoundingBox(null).Max.Z) + scanMargin;
+
+            BuiltInCategory[] categories =
+            {
+                BuiltInCategory.OST_PipeCurves,
+                BuiltInCategory.OST_DuctCurves
+            };
+            double minNormalAlignment = Math.Cos(maxDeviationDeg * Math.PI / 180.0);
+            var all = new List<VirtualMepCandidate>();
+
+            foreach (RevitLinkInstance link in new FilteredElementCollector(_doc)
+                .OfClass(typeof(RevitLinkInstance)).Cast<RevitLinkInstance>())
+            {
+                Document linkDoc = link.GetLinkDocument();
+                if (linkDoc == null)
+                {
+                    result.UnavailableLinks++;
+                    _log.Warn("Virtual scanner unavailable link " + link.Id.IntegerValue +
+                              " '" + link.Name + "'.");
+                    continue;
+                }
+
+                result.LoadedLinks++;
+                Transform transform = link.GetTotalTransform();
+                var filter = new ElementMulticategoryFilter(categories);
+                foreach (Element e in new FilteredElementCollector(linkDoc)
+                    .WherePasses(filter).WhereElementIsNotElementType())
+                {
+                    var location = e.Location as LocationCurve;
+                    Line localLine = location?.Curve as Line;
+                    if (localLine == null) continue;
+                    Curve transformed = localLine.CreateTransformed(transform);
+                    Line line = transformed as Line;
+                    if (line == null) continue;
+
+                    XYZ p0 = line.GetEndPoint(0);
+                    XYZ p1 = line.GetEndPoint(1);
+                    // Avoid full-model endpoint processing when both endpoints are distant.
+                    if (!NearEnvelope(p0, minX, minY, minZ, maxX, maxY, maxZ) &&
+                        !NearEnvelope(p1, minX, minY, minZ, maxX, maxY, maxZ))
+                        continue;
+
+                    result.NearbyMep++;
+                    foreach (var item in numbered)
+                    {
+                        Wall wall = item.Wall;
+                        Line axis = ((LocationCurve)wall.Location).Curve as Line;
+                        if (axis == null) continue;
+                        XYZ a = axis.GetEndPoint(0);
+                        XYZ tangent = new XYZ(axis.Direction.X, axis.Direction.Y, 0);
+                        if (tangent.GetLength() < 1e-9) continue;
+                        tangent = tangent.Normalize();
+                        XYZ normal = new XYZ(-tangent.Y, tangent.X, 0);
+                        BoundingBoxXYZ box = wall.get_BoundingBox(null);
+                        if (box == null) continue;
+
+                        double d0 = (p0 - a).DotProduct(normal);
+                        double d1 = (p1 - a).DotProduct(normal);
+                        // Already crossed the host axis: handled by actual scanner,
+                        // even when the wall itself has holes/profile edits.
+                        if (d0 * d1 <= 0) continue;
+
+                        for (int endpoint = 0; endpoint < 2; endpoint++)
+                        {
+                            XYZ tip = endpoint == 0 ? p0 : p1;
+                            XYZ other = endpoint == 0 ? p1 : p0;
+                            XYZ extension = tip - other;
+                            if (extension.GetLength() < 1e-9) continue;
+                            extension = extension.Normalize();
+
+                            double signed = (tip - a).DotProduct(normal);
+                            double inward = -Math.Sign(signed) *
+                                extension.DotProduct(normal);
+                            if (inward < minNormalAlignment) continue;
+
+                            double faceGapFt = Math.Abs(signed) - wall.Width * 0.5;
+                            // Tip is already within wall thickness: actual-wall/void
+                            // geometry needs separate inspection, not virtual extension.
+                            if (faceGapFt < -UnitUtil.MmToFt(5)) continue;
+                            double gapMm = UnitUtil.FtToMm(Math.Max(0, faceGapFt));
+                            if (gapMm > maxGapMm) continue;
+
+                            double denominator = extension.DotProduct(normal);
+                            if (Math.Abs(denominator) < 1e-8) continue;
+                            double reachFt = -signed / denominator;
+                            if (reachFt <= 0) continue;
+                            XYZ hit = tip + extension * reachFt;
+                            double along = (hit - a).DotProduct(tangent);
+                            if (along < 0 || along > axis.Length) continue;
+                            if (hit.Z < box.Min.Z || hit.Z > box.Max.Z) continue;
+
+                            double deviation = Math.Acos(Math.Min(1,
+                                Math.Max(-1, inward))) * 180.0 / Math.PI;
+                            all.Add(new VirtualMepCandidate
+                            {
+                                LinkInstanceId = link.Id.IntegerValue,
+                                LinkName = link.Name,
+                                SourceElementId = e.Id.IntegerValue,
+                                SourceUniqueId = e.UniqueId,
+                                Category = e.Category?.Name ?? string.Empty,
+                                WallId = wall.Id.IntegerValue,
+                                WallNumber = item.Number,
+                                Endpoint = endpoint,
+                                ProjectedHit = hit,
+                                GapToFaceMm = gapMm,
+                                ReachToAxisMm = UnitUtil.FtToMm(reachFt),
+                                DeviationDeg = deviation,
+                                Status = "REVIEW",
+                                Reason = "Virtual endpoint extension: approval required before any cut."
+                            });
+                        }
+                    }
+                }
+            }
+
+            foreach (var group in all.GroupBy(x =>
+                x.LinkInstanceId + "|" + x.SourceUniqueId + "|" + x.Endpoint))
+            {
+                List<VirtualMepCandidate> ranked = group.OrderBy(x => x.GapToFaceMm)
+                    .ThenBy(x => x.ReachToAxisMm).ToList();
+                VirtualMepCandidate best = ranked[0];
+                if (ranked.Count > 1 &&
+                    ranked[1].GapToFaceMm - best.GapToFaceMm <= 25)
+                {
+                    foreach (VirtualMepCandidate candidate in ranked)
+                    {
+                        candidate.Status = "AMBIGUOUS REVIEW";
+                        candidate.Reason = "Several eligible nearby walls: manual confirmation required.";
+                        result.Candidates.Add(candidate);
+                    }
+                }
+                else
+                {
+                    result.Candidates.Add(best);
+                }
+            }
+
+            foreach (VirtualMepCandidate c in result.Candidates
+                .OrderBy(x => x.WallNumber).ThenBy(x => x.GapToFaceMm))
+                _log.Warn("VIRTUAL MEP " + c.Status +
+                          " Link=" + c.LinkInstanceId +
+                          " Source=" + c.SourceElementId +
+                          " Wall=W" + c.WallNumber + "(" + c.WallId + ")" +
+                          " GapFaceMm=" + F(c.GapToFaceMm) +
+                          " ReachAxisMm=" + F(c.ReachToAxisMm) +
+                          " DirectionDeg=" + F(c.DeviationDeg) +
+                          " HitFt=" + c.ProjectedHit + " " + c.Reason);
+
+            result.CsvPath = WriteCsv(result.Candidates);
+            _log.Info("Virtual candidates=" + result.Candidates.Count +
+                      " LoadedLinks=" + result.LoadedLinks +
+                      " UnavailableLinks=" + result.UnavailableLinks +
+                      " NearbyMEP=" + result.NearbyMep +
+                      " CSV=" + result.CsvPath);
+            _log.Info("No linked elements, walls or openings were changed.");
+            return result;
+        }
+
+        private static bool NearEnvelope(XYZ p, double x0, double y0,
+            double z0, double x1, double y1, double z1)
+        {
+            return p.X >= x0 && p.X <= x1 &&
+                   p.Y >= y0 && p.Y <= y1 &&
+                   p.Z >= z0 && p.Z <= z1;
+        }
+
+        private static string WriteCsv(IEnumerable<VirtualMepCandidate> records)
+        {
+            string folder = OutputPathService.GetLogsFolder();
+            string path = Path.Combine(folder,
+                "VirtualMepCandidates_" + DateTime.Now.ToString(
+                    "yyyyMMdd_HHmmss", CultureInfo.InvariantCulture) + ".csv");
+            var csv = new StringBuilder();
+            csv.AppendLine("Status,Link,LinkId,ElementId,UniqueId,Category,Wall,WallId,Endpoint,GapToFace_mm,ReachToAxis_mm,Deviation_deg,HitX_mm,HitY_mm,HitZ_mm,Reason");
+            foreach (VirtualMepCandidate r in records)
+            {
+                csv.AppendLine(string.Join(",", new[]
+                {
+                    Escape(r.Status), Escape(r.LinkName),
+                    r.LinkInstanceId.ToString(), r.SourceElementId.ToString(),
+                    Escape(r.SourceUniqueId), Escape(r.Category),
+                    "W" + r.WallNumber, r.WallId.ToString(),
+                    r.Endpoint.ToString(), F(r.GapToFaceMm), F(r.ReachToAxisMm),
+                    F(r.DeviationDeg), F(UnitUtil.FtToMm(r.ProjectedHit.X)),
+                    F(UnitUtil.FtToMm(r.ProjectedHit.Y)),
+                    F(UnitUtil.FtToMm(r.ProjectedHit.Z)), Escape(r.Reason)
+                }));
+            }
+            File.WriteAllText(path, csv.ToString(), new UTF8Encoding(true));
+            return path;
+        }
+
+        private static string F(double n)
+        {
+            return n.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        private static string Escape(string text)
+        {
+            char quote = (char)34;
+            return quote + (text ?? string.Empty)
+                .Replace(quote.ToString(), new string(quote, 2)) + quote;
+        }
+    }
+}
