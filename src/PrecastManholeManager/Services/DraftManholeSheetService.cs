@@ -168,66 +168,159 @@ namespace Hatco.PrecastManholeManager.Services
                     "Sheet/titleblock too small or invalid. " +
                     "Choose an A1/A0 titleblock before generating the draft.");
 
-            // Plan across top half, four elevations in a 2x2 grid below.
-            XYZ[] positions =
+            // Create viewports once; measure their ACTUAL Revit box size
+            // after regeneration, then choose a sheet-fitting view scale.
+            // We deliberately exclude titleblock geometry and viewport labels
+            // (GetBoxOutline reports the real view box, not the label).
+            bool wasExisting = sheet.GetAllViewports().Count == 5;
+            if (wasExisting)
             {
-                new XYZ(left + width * 0.5, bottom + height * 0.75, 0),
-                new XYZ(left + width * 0.27, bottom + height * 0.43, 0),
-                new XYZ(left + width * 0.73, bottom + height * 0.43, 0),
-                new XYZ(left + width * 0.27, bottom + height * 0.16, 0),
-                new XYZ(left + width * 0.73, bottom + height * 0.16, 0)
-            };
+                result.Message = "Existing five-view draft sheet retained: " +
+                    sheet.SheetNumber + " / " + sheet.Name +
+                    ". Existing manual viewport positions were not changed.";
+                log.Info("DRAFT EXISTING SHEET PRESERVED " + sheet.Id.IntegerValue);
+                return result;
+            }
 
-            for (int i = 0; i < result.Views.Count; i++)
+            double edge = UnitUtil.MmToFt(12);
+            double gap = UnitUtil.MmToFt(8);
+            double usableWidth = width - 2 * edge;
+            double usableHeight = height - 2 * edge;
+            if (usableWidth <= 0 || usableHeight <= 0)
+                throw new InvalidOperationException("Sheet printable area is invalid.");
+
+            // All five placeable viewports are created near the middle
+            // initially. Revit box outlines determine final placement.
+            XYZ provisional = new XYZ(
+                left + width * 0.5, bottom + height * 0.5, 0);
+            var ports = new List<Viewport>();
+            foreach (View3D view in result.Views)
             {
-                View3D view = result.Views[i];
-                // One-off prototype; never auto-remove manually placed views.
                 if (!Viewport.CanAddViewToSheet(doc, sheet.Id, view.Id))
+                    throw new InvalidOperationException(
+                        "Cannot place " + view.Name +
+                        " on the draft sheet. It may already be placed elsewhere.");
+                ports.Add(Viewport.Create(doc, sheet.Id, view.Id, provisional));
+            }
+
+            // 1:50 remains the preferred scale; if too large, reduce
+            // automatically in familiar architectural increments.
+            int[] scales = { 50, 75, 100, 125, 150, 200, 250, 300, 400 };
+            bool fitted = false;
+            string measurements = "";
+            int fittedScale = 0;
+            foreach (int candidateScale in scales)
+            {
+                foreach (View3D view in result.Views)
+                    view.Scale = candidateScale;
+                doc.Regenerate();
+
+                double[] w = ports.Select(p =>
                 {
-                    if (sheet.GetAllViewports().Any(vp =>
-                        ((Viewport)doc.GetElement(vp)).ViewId.IntegerValue ==
-                        view.Id.IntegerValue))
-                        continue;
-                    throw new InvalidOperationException(
-                        "Cannot place orthographic view on draft sheet: " +
-                        view.Name);
+                    Outline o = p.GetBoxOutline();
+                    return o.MaximumPoint.X - o.MinimumPoint.X;
+                }).ToArray();
+                double[] h = ports.Select(p =>
+                {
+                    Outline o = p.GetBoxOutline();
+                    return o.MaximumPoint.Y - o.MinimumPoint.Y;
+                }).ToArray();
+
+                // 3 rows: plan; W1 and W2; W3 and W4. Each row uses
+                // the tallest view in that row, with a fixed clear gap.
+                double planWidth = w[0];
+                double topWidth = w[1] + w[2] + gap;
+                double bottomWidth = w[3] + w[4] + gap;
+                double topRowHeight = Math.Max(h[1], h[2]);
+                double bottomRowHeight = Math.Max(h[3], h[4]);
+                double requiredWidth = Math.Max(planWidth,
+                    Math.Max(topWidth, bottomWidth));
+                double requiredHeight = h[0] + topRowHeight +
+                    bottomRowHeight + 2 * gap;
+
+                measurements = "Scale=1:" + candidateScale +
+                    " AvailableSheetMm=" +
+                    UnitUtil.FtToMm(usableWidth).ToString("0.#") + "x" +
+                    UnitUtil.FtToMm(usableHeight).ToString("0.#") +
+                    " RequiredMm=" +
+                    UnitUtil.FtToMm(requiredWidth).ToString("0.#") + "x" +
+                    UnitUtil.FtToMm(requiredHeight).ToString("0.#");
+                log.Info("DRAFT SHEET FIT " + measurements);
+
+                if (requiredWidth > usableWidth ||
+                    requiredHeight > usableHeight)
+                    continue;
+
+                // Center the entire 3-row group on the sheet. Each
+                // viewport is centered vertically within its row.
+                double yStart = bottom + edge +
+                    (usableHeight - requiredHeight) * 0.5;
+                double[] centersY = {
+                    yStart + bottomRowHeight + gap + topRowHeight +
+                        gap + h[0] / 2,
+                    yStart + bottomRowHeight + gap + topRowHeight / 2,
+                    yStart + bottomRowHeight + gap + topRowHeight / 2,
+                    yStart + bottomRowHeight / 2,
+                    yStart + bottomRowHeight / 2
+                };
+                double centerX = left + width * 0.5;
+                double[] centersX = {
+                    centerX,
+                    centerX - (w[2] + gap) * 0.5,
+                    centerX + (w[1] + gap) * 0.5,
+                    centerX - (w[4] + gap) * 0.5,
+                    centerX + (w[3] + gap) * 0.5
+                };
+                for (int i = 0; i < ports.Count; i++)
+                    ports[i].SetBoxCenter(new XYZ(
+                        centersX[i], centersY[i], 0));
+                doc.Regenerate();
+
+                // Verify ACTUAL outlines after setting position (3D
+                // camera crop can regenerate viewport extents).
+                var boxes = ports.Select(p => p.GetBoxOutline()).ToList();
+                bool inside = boxes.All(o =>
+                    o.MinimumPoint.X >= left + edge - 1e-5 &&
+                    o.MaximumPoint.X <= right - edge + 1e-5 &&
+                    o.MinimumPoint.Y >= bottom + edge - 1e-5 &&
+                    o.MaximumPoint.Y <= top - edge + 1e-5);
+                bool overlap = false;
+                for (int i = 0; i < boxes.Count; i++)
+                    for (int j = i + 1; j < boxes.Count; j++)
+                    {
+                        Outline x = boxes[i], y = boxes[j];
+                        bool touches =
+                            x.MinimumPoint.X < y.MaximumPoint.X + gap &&
+                            x.MaximumPoint.X + gap > y.MinimumPoint.X &&
+                            x.MinimumPoint.Y < y.MaximumPoint.Y + gap &&
+                            x.MaximumPoint.Y + gap > y.MinimumPoint.Y;
+                        if (touches) overlap = true;
+                    }
+
+                if (!inside || overlap)
+                {
+                    log.Warn("DRAFT SHEET FIT after positioning: " +
+                        "inside=" + inside + " overlap=" + overlap +
+                        " at 1:" + candidateScale);
+                    continue;
                 }
-                Viewport.Create(doc, sheet.Id, view.Id, positions[i]);
+
+                fitted = true;
+                fittedScale = candidateScale;
+                break;
             }
 
-            // Check that viewports fit their assigned cells. Fail as a
-            // whole instead of silently producing overlapping fabrication
-            // sheets. User may enlarge titleblock or use a larger scale.
-            doc.Regenerate();
-            double margin = UnitUtil.MmToFt(5);
-            var outlines = sheet.GetAllViewports().Select(id =>
-                ((Viewport)doc.GetElement(id)).GetBoxOutline()).ToList();
-            foreach (Outline o in outlines)
-            {
-                if (o.MinimumPoint.X < left + margin ||
-                    o.MaximumPoint.X > right - margin ||
-                    o.MinimumPoint.Y < bottom + margin ||
-                    o.MaximumPoint.Y > top - margin)
-                    throw new InvalidOperationException(
-                        "Draft views exceed sheet boundaries. " +
-                        "Use a larger titleblock; transaction rolled back.");
-            }
-            for (int i = 0; i < outlines.Count; i++)
-            for (int j = i + 1; j < outlines.Count; j++)
-            {
-                var a = outlines[i]; var b = outlines[j];
-                bool overlap = a.MinimumPoint.X < b.MaximumPoint.X + margin &&
-                    a.MaximumPoint.X + margin > b.MinimumPoint.X &&
-                    a.MinimumPoint.Y < b.MaximumPoint.Y + margin &&
-                    a.MaximumPoint.Y + margin > b.MinimumPoint.Y;
-                if (overlap)
-                    throw new InvalidOperationException(
-                        "Draft viewports overlap. Enlarge the sheet or " +
-                        "adjust scale before making fabrication sheets.");
-            }
+            if (!fitted)
+                throw new InvalidOperationException(
+                    "Could not fit five viewports on selected titleblock " +
+                    "at scales 1:50 to 1:400. Last measurement: " +
+                    measurements + ". Nothing was changed.");
 
-            result.Message = "Draft Plan + W1-W4 created and laid out on " +
-                sheet.SheetNumber + " / " + sheet.Name;
+            log.Info("DRAFT SHEET AUTO-LAYOUT OK at scale 1:" +
+                fittedScale + " Sheet=" + sheet.SheetNumber);
+            result.Message = "Draft Plan + W1-W4 created and laid out at 1:" +
+                fittedScale + " on " + sheet.SheetNumber + " / " +
+                sheet.Name;
             log.Info("DRAFT SHEET COMPLETE Sheet=" +
                 sheet.Id.IntegerValue + " Number=" + sheet.SheetNumber +
                 " Views=" + string.Join(",", result.Views.Select(v =>
