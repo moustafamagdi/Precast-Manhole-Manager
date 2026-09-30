@@ -38,6 +38,12 @@ namespace Hatco.PrecastManholeManager.Models
         // Source sizes/clearance remain unchanged for audit.
         public double CutWidthOverrideMm { get; set; }
         public double CutHeightOverrideMm { get; set; }
+        public double? FittedCenterXmm { get; set; }
+        public double? FittedCenterYmm { get; set; }
+        public double? FittedCenterZmm { get; set; }
+        public double EffectiveOpeningXmm => FittedCenterXmm ?? Xmm;
+        public double EffectiveOpeningYmm => FittedCenterYmm ?? Ymm;
+        public double EffectiveOpeningZmm => FittedCenterZmm ?? Zmm;
 
         public int ExistingOpeningId { get; set; }
         public double ExistingOpeningWidthMm { get; set; }
