@@ -11,7 +11,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, NumberAll, ReviewOne, Make3D, DraftSheet, ProductionOne, DimensionOne, SixRowLayoutSheet, ExportExcel
+        Close, Scan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, DimensionOne, SixRowLayoutSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -75,6 +75,7 @@ namespace Hatco.PrecastManholeManager.UI
             Button scan = Button("1   Scan Project", 155, controls);
             Button number = Button("Assign Internal MH IDs", 175, controls);
             Button review = Button("2   Review Selected", 170, controls);
+            Button recheck = Button("Recheck Selected", 155, controls);
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
             Button produce = Button("Generate Selected Manhole", 210, controls);
@@ -169,6 +170,7 @@ namespace Hatco.PrecastManholeManager.UI
 
             scan.Click += (s, e) => Choose(ProjectAction.Scan, false);
             number.Click += (s, e) => Choose(ProjectAction.NumberAll, false);
+            recheck.Click += (s, e) => Choose(ProjectAction.RecheckOne, true);
             review.Click += (s, e) => Choose(ProjectAction.ReviewOne, true);
             view.Click += (s, e) => Choose(ProjectAction.Make3D, true);
             draft.Click += (s, e) =>
@@ -326,7 +328,7 @@ namespace Hatco.PrecastManholeManager.UI
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
             if (!valid && (requested == ProjectAction.ProductionOne ||
-                requested == ProjectAction.ReviewOne))
+                requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");
                 _clearance.Focus();

@@ -84,3 +84,19 @@ Assert-That (!(Test-DimensionSegments @(1,0) @(1))) 'Unordered reference coordin
 Assert-That (!(Test-DimensionSegments @(0,0) @(0))) 'Coincident references cannot masquerade as a valid dimension'
 Assert-That (!(Test-DimensionSegments @(0,1) @([double]::NaN))) 'Non-finite measured values are rejected'
 Assert-That (!(Test-DimensionSegments @(0,[double]::PositiveInfinity) @(1))) 'Non-finite model coordinates are rejected'
+
+$planType = $assembly.GetType('Hatco.PrecastManholeManager.Services.CleanSyncPlan')
+$plan = [Activator]::CreateInstance($planType, $true)
+$blockers = $assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeRecheckService').GetMethod('PhysicalBlockers', [Reflection.BindingFlags]'NonPublic,Static')
+$plan.UnavailableLinks = 10
+$plan.ManagedOpeningIds.Add('source', 123)
+Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 0) 'Recheck accepts managed openings and ignores unloaded links'
+$plan.Profiles.Add(1, 'EDITED PROFILE')
+Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 1) 'An edited profile keeps the manhole in review'
+$plan.Profiles[1] = 'NO EDITED SKETCH'
+Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 0) 'Resetting the profile removes its blocker'
+$plan.ManualOpeningIds.Add(99)
+Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 1) 'Manual native openings still require review'
+$plan.ManualOpeningIds.Clear()
+$plan.BlockReason = 'Cannot verify wall audit'
+Assert-That ($blockers.Invoke($null, [object[]]@($plan)).Count -eq 1) 'An inconclusive audit prevents resolving review'

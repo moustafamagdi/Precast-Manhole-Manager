@@ -62,6 +62,9 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.ReviewOne)
                                 InspectSelected(doc, window.SelectedManhole,
                                     log, window.ClearanceMm);
+                            else if (window.Action == ProjectAction.RecheckOne)
+                                TaskDialog.Show("Recheck Selected", ManholeRecheckService.Run(
+                                    doc, Resolve(doc, window.SelectedManhole), window.ClearanceMm, log));
                             else if (window.Action == ProjectAction.Make3D)
                                 MakeReview3D(uiDoc, window.SelectedManhole,
                                     log);
