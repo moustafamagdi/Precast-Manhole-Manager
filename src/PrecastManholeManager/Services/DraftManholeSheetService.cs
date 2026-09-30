@@ -374,6 +374,51 @@ namespace Hatco.PrecastManholeManager.Services
             v.SetOrientation(new ViewOrientation3D(eye, up, forward));
             v.IsSectionBoxActive = true;
             v.SetSectionBox(section);
+            // Revit maintains a separate view-aligned CropBox whose
+            // initial size can reflect the ENTIRE project. A small
+            // SectionBox does NOT automatically shrink the sheet viewport.
+            // Convert all EIGHT world-space section-box corners into the
+            // current crop-box (view-local) coordinate system.
+            v.CropBoxActive = true;
+            v.CropBoxVisible = false;
+            BoundingBoxXYZ current = v.CropBox;
+            if (current == null)
+                throw new InvalidOperationException(
+                    "Revit did not expose a CropBox for " + v.Name);
+
+            Transform inverse = current.Transform.Inverse;
+            Transform source = section.Transform;
+            double loX = double.MaxValue, loY = double.MaxValue;
+            double loZ = double.MaxValue;
+            double hiX = double.MinValue, hiY = double.MinValue;
+            double hiZ = double.MinValue;
+            double[] xs = { section.Min.X, section.Max.X };
+            double[] ys = { section.Min.Y, section.Max.Y };
+            double[] zs = { section.Min.Z, section.Max.Z };
+            foreach (double x in xs)
+            foreach (double y in ys)
+            foreach (double z in zs)
+            {
+                XYZ projected = inverse.OfPoint(
+                    source.OfPoint(new XYZ(x, y, z)));
+                loX = Math.Min(loX, projected.X);
+                loY = Math.Min(loY, projected.Y);
+                loZ = Math.Min(loZ, projected.Z);
+                hiX = Math.Max(hiX, projected.X);
+                hiY = Math.Max(hiY, projected.Y);
+                hiZ = Math.Max(hiZ, projected.Z);
+            }
+
+            // 30 mm paper-independent MODEL padding is already present
+            // in the section envelope. This extra 20 mm prevents touching.
+            double extra = UnitUtil.MmToFt(20);
+            current.Min = new XYZ(loX - extra, loY - extra,
+                loZ - extra);
+            current.Max = new XYZ(hiX + extra, hiY + extra,
+                hiZ + extra);
+            // The CropBox setter ignores the supplied Transform and
+            // keeps Revit's view orientation. Preserve current.Transform.
+            v.CropBox = current;
         }
     }
 }
