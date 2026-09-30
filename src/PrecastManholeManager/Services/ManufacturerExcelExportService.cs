@@ -175,30 +175,26 @@ namespace Hatco.PrecastManholeManager.Services
 
             for (int i = 0; i < maxOpenings; i++)
             {
-                int excelRow = firstOpeningRow + i;
-                string nth = "ROWS($A$" + firstOpeningRow + ":A" + excelRow + ")";
-                string match =
-                    "AGGREGATE(15,6,(ROW('DATA_OPENINGS'!$A$2:$A$" + dataLastRow +
-                    ")-ROW('DATA_OPENINGS'!$A$2)+1)/('DATA_OPENINGS'!$A$2:$A$" + dataLastRow +
-                    "=$B$3)," + nth + ")";
+                int sequence = i + 1;
+                string lookupKey = "$B$3&\"|" + sequence + "\"";
 
                 sheet.AddRow(
                     XlsxCell.Formula(
-                        "IFERROR(INDEX('DATA_OPENINGS'!$B$2:$B$" + dataLastRow + "," + match + "),\"\")"),
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,3,FALSE),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(INDEX('DATA_OPENINGS'!$C$2:$C$" + dataLastRow + "," + match + "),\"\")"),
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,4,FALSE),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(TEXT(INDEX('DATA_OPENINGS'!$D$2:$D$" + dataLastRow + "," + match + "),\"0\")&\" x \"&TEXT(INDEX('DATA_OPENINGS'!$E$2:$E$" + dataLastRow + "," + match + "),\"0\"),\"\")"),
+                        "IFERROR(TEXT(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,5,FALSE),\"0\")&\" x \"&TEXT(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,6,FALSE),\"0\"),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(INDEX('DATA_OPENINGS'!$F$2:$F$" + dataLastRow + "," + match + "),\"\")",
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,7,FALSE),\"\")",
                         5),
                     XlsxCell.Formula(
-                        "IFERROR(INDEX('DATA_OPENINGS'!$G$2:$G$" + dataLastRow + "," + match + "),\"\")",
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,8,FALSE),\"\")",
                         5),
                     XlsxCell.Formula(
-                        "IFERROR(INDEX('DATA_OPENINGS'!$H$2:$H$" + dataLastRow + "," + match + ")&IF(INDEX('DATA_OPENINGS'!$I$2:$I$" + dataLastRow + "," + match + ")<>\"\",\" / \"&INDEX('DATA_OPENINGS'!$I$2:$I$" + dataLastRow + "," + match + "),\"\"),\"\")"),
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,9,FALSE)&IF(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,10,FALSE)<>\"\",\" / \"&VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,10,FALSE),\"\"),\"\")"),
                     XlsxCell.Formula(
-                        "IFERROR(INDEX('DATA_OPENINGS'!$J$2:$J$" + dataLastRow + "," + match + "),\"\")"));
+                        "IFERROR(VLOOKUP(" + lookupKey + ",'DATA_OPENINGS'!$A:$L,11,FALSE),\"\")"));
             }
 
             for (int i = 0; i < data.Manholes.Count; i++)
@@ -364,6 +360,7 @@ namespace Hatco.PrecastManholeManager.Services
             };
 
             sheet.AddRow(
+                XlsxCell.Text("LookupKey"),
                 XlsxCell.Text("Manhole"),
                 XlsxCell.Text("Wall"),
                 XlsxCell.Text("Opening"),
@@ -376,20 +373,38 @@ namespace Hatco.PrecastManholeManager.Services
                 XlsxCell.Text("Type"),
                 XlsxCell.Text("Status"));
 
-            foreach (ManufacturerOpeningRow r in data.Openings)
+            foreach (IGrouping<string, ManufacturerOpeningRow> group in data.Openings
+                         .GroupBy(x => x.ManholeNumber ?? string.Empty)
+                         .OrderBy(g => NaturalManholeNumber(g.Key))
+                         .ThenBy(g => g.Key))
             {
-                sheet.AddRow(
-                    XlsxCell.Text(r.ManholeNumber),
-                    XlsxCell.Text("W" + r.WallNumber),
-                    XlsxCell.Text(r.OpeningNumber),
-                    XlsxCell.Number(r.OpeningWidthMm),
-                    XlsxCell.Number(r.OpeningHeightMm),
-                    XlsxCell.Number(r.OffsetMm),
-                    XlsxCell.Number(r.InvertFromBaseMm),
-                    XlsxCell.Text(r.ServiceCategory),
-                    XlsxCell.Text(r.SystemName),
-                    XlsxCell.Text(r.OpeningType),
-                    XlsxCell.Text(r.Status));
+                int sequence = 1;
+
+                foreach (ManufacturerOpeningRow r in group
+                             .OrderBy(x => x.WallNumber)
+                             .ThenBy(x => x.OpeningNumber ?? string.Empty))
+                {
+                    string lookupKey =
+                        (r.ManholeNumber ?? string.Empty) +
+                        "|" +
+                        sequence.ToString(CultureInfo.InvariantCulture);
+
+                    sheet.AddRow(
+                        XlsxCell.Text(lookupKey),
+                        XlsxCell.Text(r.ManholeNumber),
+                        XlsxCell.Text("W" + r.WallNumber),
+                        XlsxCell.Text(r.OpeningNumber),
+                        XlsxCell.Number(r.OpeningWidthMm),
+                        XlsxCell.Number(r.OpeningHeightMm),
+                        XlsxCell.Number(r.OffsetMm),
+                        XlsxCell.Number(r.InvertFromBaseMm),
+                        XlsxCell.Text(r.ServiceCategory),
+                        XlsxCell.Text(r.SystemName),
+                        XlsxCell.Text(r.OpeningType),
+                        XlsxCell.Text(r.Status));
+
+                    sequence++;
+                }
             }
 
             return sheet;
