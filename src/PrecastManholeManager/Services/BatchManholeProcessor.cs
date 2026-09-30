@@ -11,6 +11,7 @@ namespace Hatco.PrecastManholeManager.Services
     internal sealed class BatchManholeResult
     {
         public int Selected { get; set; }
+        public int Isolated { get; set; }
         public int Valid { get; set; }
         public int NeedsReview { get; set; }
         public int Failed { get; set; }
@@ -38,6 +39,7 @@ namespace Hatco.PrecastManholeManager.Services
                 "Foundations: " + Selected +
                 " | Valid: " + Valid +
                 " | Review: " + NeedsReview +
+                " | Previously isolated: " + Isolated +
                 " | Failed: " + Failed +
                 "\nPenetrations: " + Penetrations +
                 " | Manual OK: " + ManualSufficient +
@@ -99,6 +101,30 @@ namespace Hatco.PrecastManholeManager.Services
 
             int nextNumber = ResolveNextNumber(usedNumbers);
 
+            // Only the experimental Batch All path honors the isolated
+            // queue. Legacy Batch Selected remains independent.
+            HashSet<string> isolated = new HashSet<string>(
+                StringComparer.Ordinal);
+            if (options != null)
+            {
+                try
+                {
+                    foreach (ManholeReviewIssue issue in
+                        ManholeReviewRegistry.Load(doc))
+                        if (issue.Status == "OPEN")
+                            isolated.Add(issue.FoundationUniqueId);
+                    log?.Info("Previously isolated manholes to skip: " +
+                        isolated.Count);
+                }
+                catch (Exception ex)
+                {
+                    // A broken/unavailable register must never permit an
+                    // experimental write to silently bypass isolation.
+                    throw new InvalidOperationException(
+                        "Cannot read isolated manhole review register.", ex);
+                }
+            }
+
             log?.WriteHeader("BATCH MANHOLE PROCESSING");
             log?.Info("Foundations queued: " + result.Selected);
 
@@ -108,6 +134,16 @@ namespace Hatco.PrecastManholeManager.Services
 
                 try
                 {
+                    if (options != null && isolated.Contains(
+                        foundation.UniqueId))
+                    {
+                        result.Isolated++;
+                        log?.Warn("BATCH ISOLATED SKIP Foundation=" +
+                            foundation.Id.IntegerValue +
+                            " -- use Review Queue / 3D to inspect.");
+                        continue;
+                    }
+
                     ManholeDetectionResult manhole;
                     VirtualFoundationResult virtualFootprint = null;
                     if (options == null)
@@ -122,6 +158,9 @@ namespace Hatco.PrecastManholeManager.Services
                         if (!virtualFootprint.Accepted)
                         {
                             result.NeedsReview++;
+                            ManholeReviewRegistry.Upsert(doc, foundation,
+                                "Virtual footprint: " + virtualFootprint.Reason,
+                                null, "GEOMETRY", log);
                             log?.Warn("BATCH VIRTUAL REVIEW Foundation=" + foundation.Id.IntegerValue +
                                       " Reason=" + virtualFootprint.Reason);
                             continue;
@@ -132,6 +171,12 @@ namespace Hatco.PrecastManholeManager.Services
                     if (!manhole.IsValid || !string.IsNullOrWhiteSpace(manhole.Warning))
                     {
                         result.NeedsReview++;
+                        if (options != null)
+                            ManholeReviewRegistry.Upsert(doc, foundation,
+                                "Detection: " + (manhole.Warning ??
+                                    "invalid wall footprint"),
+                                manhole.Walls.Select(x => x.Wall.Id.IntegerValue),
+                                "GEOMETRY", log);
                         log?.Warn(
                             "Foundation " + foundation.Id.IntegerValue +
                             " skipped. Valid=" + manhole.IsValid +
@@ -191,7 +236,18 @@ namespace Hatco.PrecastManholeManager.Services
 
                     if (options?.PreviewOnly == true && audit != null &&
                         audit.RequiresManualReview)
-                        log?.Warn("BATCH PREVIEW ONLY: existing edited/unknown wall profile or void/manual openings found; proposals are preliminary and must not be applied automatically.");
+                    {
+                        ManholeReviewRegistry.Upsert(doc, foundation,
+                            "Existing cuts require review: EditedProfiles=" +
+                                audit.ProfileEditedWalls +
+                                " UnknownProfiles=" + audit.ProfileUnknownWalls +
+                                " VoidRelations=" + audit.VoidCutRelations +
+                                " UnknownVoids=" + audit.VoidUnknownWalls +
+                                " ManualNative=" + audit.NativeUnmanaged,
+                            manhole.Walls.Select(w => w.Wall.Id.IntegerValue),
+                            "REQUIRES CLEANUP", log);
+                        log?.Warn("BATCH PREVIEW ONLY: existing manual cuts on this manhole registered for isolated review. Other manholes continue.");
+                    }
 
                     foreach (PenetrationRecord r in penetrations)
                     {
@@ -341,6 +397,20 @@ namespace Hatco.PrecastManholeManager.Services
                 catch (Exception ex)
                 {
                     result.Failed++;
+                    if (options != null)
+                    {
+                        try
+                        {
+                            ManholeReviewRegistry.Upsert(doc, foundation,
+                                "Batch error: " + ex.Message, null,
+                                "ERROR", log);
+                        }
+                        catch (Exception registrationError)
+                        {
+                            log?.Error("Unable to record isolated batch issue.",
+                                registrationError);
+                        }
+                    }
                     log?.Error("Batch failed for Foundation " + foundation.Id.IntegerValue, ex);
                 }
             }
