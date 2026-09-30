@@ -153,7 +153,7 @@ namespace Hatco.PrecastManholeManager.Services
                     FoundationId = el.Id.IntegerValue,
                     UniqueId = el.UniqueId,
                     TypeName = doc.GetElement(el.GetTypeId()).Name,
-                    State = flagged ? "REVIEW" : "NOT SCANNED / NO ISSUE",
+                    State = flagged ? "REVIEW" : "NO ISSUE RECORDED",
                     Problem = flagged ? issue.Reason : "",
                     ViewName = found ? issue.ViewName : ""
                 });
