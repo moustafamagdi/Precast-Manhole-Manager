@@ -115,7 +115,8 @@ namespace Hatco.PrecastManholeManager.Services
     {
         public static UnifiedOpeningReviewResult Collect(Document doc,
             Element foundation, VirtualFoundationResult footprint,
-            DiagnosticLogger log)
+            DiagnosticLogger log, double clearanceMm,
+            double maxVirtualGapMm, double maxApproachAngleDeg)
         {
             if (doc == null || foundation == null || footprint == null ||
                 !footprint.Accepted)
@@ -132,7 +133,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             VirtualMepScanResult virtualScan =
                 new VirtualMepExtensionScanner(doc, log)
-                    .Scan(footprint, 150.0, 15.0);
+                    .Scan(footprint, maxVirtualGapMm, maxApproachAngleDeg);
             result.VirtualScan = virtualScan;
 
             var seenActual = new HashSet<string>(StringComparer.Ordinal);
@@ -211,7 +212,7 @@ namespace Hatco.PrecastManholeManager.Services
             foreach (UnifiedOpeningReviewRow row in all)
             {
                 row.Existing = row.Source.ExistingOpeningStatus;
-                row.Evaluate(doc, 50, result.Audit);
+                row.Evaluate(doc, clearanceMm, result.Audit);
             }
 
             result.Rows.AddRange(all.OrderBy(x => x.Wall)
@@ -222,6 +223,9 @@ namespace Hatco.PrecastManholeManager.Services
             log.WriteHeader("UNIFIED OPENING REVIEW SUMMARY");
             log.Info("Actual=" + result.ActualCount +
                 " Virtual=" + result.VirtualCount +
+                " ClearancePerSideMm=" + clearanceMm +
+                " MaxVirtualGapMm=" + maxVirtualGapMm +
+                " MaxApproachAngleDeg=" + maxApproachAngleDeg +
                 " DuplicateRowsSkipped=" + result.DuplicatesSkipped +
                 " ReviewRows=" + result.Rows.Count(r => r.Status == "REVIEW") +
                 " NO MODEL CHANGES");
