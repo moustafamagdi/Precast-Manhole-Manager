@@ -29,6 +29,7 @@ namespace Hatco.PrecastManholeManager.Services
             public ManagedOpeningData Data;
             public double Left, Right, Bottom, Top;
             public string Code;
+            public List<FaceReference> Faces;
         }
 
         // Caller owns the transaction, so a failed production update restores these annotations.
@@ -138,9 +139,13 @@ namespace Hatco.PrecastManholeManager.Services
                 row.Right = Math.Max(p.DotProduct(view.RightDirection), q.DotProduct(view.RightDirection));
                 row.Bottom = Math.Min(p.DotProduct(view.UpDirection), q.DotProduct(view.UpDirection));
                 row.Top = Math.Max(p.DotProduct(view.UpDirection), q.DotProduct(view.UpDirection));
+                // Native opening void surfaces expose references that host-wall reveal faces may omit.
+                row.Faces = Faces(row.Element, view);
+                log.Info("OPENING DIMENSION REFERENCES Opening=" + row.Element.Id.IntegerValue +
+                    " Wall=" + wall.Id.IntegerValue + " PlanarReferences=" + row.Faces.Count);
                 double midY = (row.Bottom + row.Top) / 2;
-                chain.Add(Find(faces, view.RightDirection, true, row.Left, midY));
-                chain.Add(Find(faces, view.RightDirection, true, row.Right, midY));
+                chain.Add(Find(row.Faces, view.RightDirection, true, row.Left, midY));
+                chain.Add(Find(row.Faces, view.RightDirection, true, row.Right, midY));
             }
             // A single horizontal chain avoids stacking overlapping wall-origin dimensions.
             double wallBottom = faces.Min(f => f.MinY);
@@ -154,8 +159,8 @@ namespace Hatco.PrecastManholeManager.Services
                     .DotProduct(view.UpDirection);
                 var vertical = new List<Boundary> {
                     Find(foundationFaces, view.UpDirection, false, baseY, centerX),
-                    Find(faces, view.UpDirection, false, row.Bottom, centerX),
-                    Find(faces, view.UpDirection, false, row.Top, centerX)
+                    Find(row.Faces, view.UpDirection, false, row.Bottom, centerX),
+                    Find(row.Faces, view.UpDirection, false, row.Top, centerX)
                 };
                 // The reference line is beside each opening, inside the existing crop padding.
                 CreateString(doc, foundation, view, type, vertical, false,
@@ -263,7 +268,7 @@ namespace Hatco.PrecastManholeManager.Services
         {
             var result = new List<FaceReference>();
             var geometry = element.get_Geometry(new Options { ComputeReferences = true,
-                IncludeNonVisibleObjects = false, DetailLevel = ViewDetailLevel.Fine });
+                IncludeNonVisibleObjects = element is Opening, DetailLevel = ViewDetailLevel.Fine });
             ReadFaces(geometry, Transform.Identity, view, result);
             return result;
         }

@@ -517,3 +517,11 @@ Current scope: actual rectangular native openings on straight walls, existing ex
 Validation: Release build against Revit 2024 passes. 32 compiled-code assertions cover previous changes and dimensional segment validation, including wrong/missing/null/non-finite measurements. Live face-reference creation, dimension visibility, rotated views, labels, crop fit, and reruns need Revit testing. For the supplied four-opening case the expected successful output is 3 horizontal and 4 vertical dimension strings (W4 has no opening), provided all references and crop checks pass.
 
 Revit test sequence: Pull/Rebuild; select MH-001; run Update Opening Dimensions; inspect W1/W2/W3 on the existing sheet and the TXT log; rerun and check no duplicate strings; then Generate at a changed clearance and verify both real geometry and measured dimensions update. Native opening replacement can still affect manually attached tags/dimensions, as documented above.
+
+## Native opening reference correction (14:47 / 14:48 logs)
+
+Both supplied logs reported missing model face references on the walls with openings. A live read-only Revit inspection confirmed the cause: the wall's reveal faces at the exact opening boundary coordinates had null Face.Reference, while the corresponding native Opening's solid returned valid planar surface references. For W2 opening 5434723, its left/right planes matched section coordinates 548.0307 and 1148.0307 mm, a 600 mm opening.
+
+Dimension generation now obtains each opening's left/right/bottom/top references from that Opening's geometry with ComputeReferences and IncludeNonVisibleObjects enabled. Wall endpoints remain attached to wall geometry, and the base reference remains attached to the foundation. No synthetic geometry or hand-constructed reference strings are introduced. Logs include each opening ID, host wall and planar-reference count.
+
+Release build and the 32 existing compiled-code regression assertions pass. The live read-only geometry inspection above succeeded. A direct NewDimension dry-run request timed out/canceled without a returned result, so successful dimension creation is not yet verified; retry through Update Opening Dimensions after Pull/Rebuild.
