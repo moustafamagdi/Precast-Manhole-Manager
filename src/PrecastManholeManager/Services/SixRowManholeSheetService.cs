@@ -186,6 +186,9 @@ namespace Hatco.PrecastManholeManager.Services
                     {
                         Element foundation = ready[slot].Item1;
                         VirtualFoundationResult footprint = ready[slot].Item2;
+                        // Compact successfully committed rows upward: a
+                        // rejected first manhole must not waste row 1.
+                        int rowIndex = output.PlacedManholes;
                         using (var sub = new SubTransaction(doc))
                         {
                             sub.Start();
@@ -215,7 +218,7 @@ namespace Hatco.PrecastManholeManager.Services
                                 }
 
                                 double cy = bottom + sheetH -
-                                    paperTop - rowH * (slot + 0.5);
+                                    paperTop - rowH * (rowIndex + 0.5);
                                 var ports = new List<Viewport>();
                                 for (int col = 0; col < 5; col++)
                                 {
@@ -242,7 +245,7 @@ namespace Hatco.PrecastManholeManager.Services
                                         outline.MinimumPoint.Y;
                                     log.Info("6MH VIEW Foundation=" +
                                         foundation.Id.IntegerValue +
-                                        " Slot=" + (slot + 1) +
+                                        " Slot=" + (rowIndex + 1) +
                                         " Name=" + views.Views[col].Name +
                                         " PaperMm=" +
                                         UnitUtil.FtToMm(ww).ToString("0.#") +
