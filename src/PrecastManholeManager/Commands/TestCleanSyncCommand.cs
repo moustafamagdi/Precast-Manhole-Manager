@@ -62,6 +62,25 @@ namespace Hatco.PrecastManholeManager.Commands
                         doc, foundation.Id.IntegerValue, footprint, review, log);
                     string planCsv = UnifiedOpeningReviewService.ExportCsv(review);
                     log.Info("Cleanup preview review CSV: " + planCsv);
+                    if (!string.IsNullOrWhiteSpace(plan.BlockReason) ||
+                        plan.InPlaceCutterCount > 0)
+                    {
+                        try
+                        {
+                            ManholeReviewRegistry.Upsert(doc, foundation,
+                                !string.IsNullOrWhiteSpace(plan.BlockReason)
+                                    ? plan.BlockReason
+                                    : "In-place cutter(s): " + string.Join(",",
+                                        plan.InPlaceCutterWallIds.Keys) +
+                                      "; cleanup requires verification",
+                                plan.WallIds, "CLEANUP REVIEW", log);
+                        }
+                        catch (Exception registryError)
+                        {
+                            log.Warn("Issue register unavailable: " +
+                                registryError.Message);
+                        }
+                    }
 
                     var confirmation = new CleanSyncConfirmationWindow(
                         plan, review, log.LogPath);
@@ -88,6 +107,17 @@ namespace Hatco.PrecastManholeManager.Commands
 
                     if (!result.Committed)
                     {
+                        try
+                        {
+                            ManholeReviewRegistry.Upsert(doc, foundation,
+                                result.Error ?? "Cleanup rolled back",
+                                plan.WallIds, "BLOCKED", log);
+                        }
+                        catch (Exception registryError)
+                        {
+                            log.Warn("Issue register unavailable: " +
+                                registryError.Message);
+                        }
                         message = result.Error ?? "Cleanup transaction rolled back.";
                         return Result.Failed;
                     }
