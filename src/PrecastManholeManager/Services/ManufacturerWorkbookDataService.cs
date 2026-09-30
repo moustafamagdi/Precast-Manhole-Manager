@@ -94,13 +94,28 @@ namespace Hatco.PrecastManholeManager.Services
                     managed.Ymm,
                     managed.Zmm);
 
+                string currentManholeNumber = manhole.ManholeNumber ?? link.ManholeNumber ?? string.Empty;
+                string openingNumber = link.OpeningNumber ?? string.Empty;
+                string currentOpeningCode =
+                    currentManholeNumber +
+                    "-W" + link.WallNumber +
+                    "-" + openingNumber;
+
+                if (!string.Equals(link.ManholeNumber, currentManholeNumber, StringComparison.OrdinalIgnoreCase))
+                {
+                    log?.Warn(
+                        "Opening " + opening.Id.IntegerValue +
+                        " has stale stored ManholeNumber='" + (link.ManholeNumber ?? string.Empty) +
+                        "'. Export uses current carrier number='" + currentManholeNumber + "'.");
+                }
+
                 data.Openings.Add(new ManufacturerOpeningRow
                 {
-                    ManholeNumber = link.ManholeNumber,
+                    ManholeNumber = currentManholeNumber,
                     FoundationId = link.FoundationId,
                     WallNumber = link.WallNumber,
-                    OpeningNumber = link.OpeningNumber,
-                    OpeningCode = link.OpeningCode,
+                    OpeningNumber = openingNumber,
+                    OpeningCode = currentOpeningCode,
                     OpeningElementId = opening.Id.IntegerValue,
                     OpeningWidthMm = managed.CutWidthMm,
                     OpeningHeightMm = managed.CutHeightMm,
