@@ -261,7 +261,7 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException(
                     "Draft view must be orthographic: " + name);
             v.Scale = 50; // first physical prototype, change manually if needed
-            v.DisplayStyle = DisplayStyle.HiddenLine;
+            v.DisplayStyle = DisplayStyle.HLR;
             return v;
         }
 
