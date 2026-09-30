@@ -7,6 +7,41 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal static class ManholeReviewViewService
     {
+        // Production 3D is deliberately separate from Review 3D,
+        // including its name and registry. It uses the same cropped
+        // geometry and mandatory MH_3D visibility template.
+        public static View3D CreateProduction(Document doc,
+            Element foundation, VirtualFoundationResult footprint,
+            DiagnosticLogger log)
+        {
+            string name = "MH_" + foundation.Id.IntegerValue +
+                "_PROD_3D";
+            bool exists = new FilteredElementCollector(doc)
+                .OfClass(typeof(View3D)).Cast<View3D>()
+                .Any(v => !v.IsTemplate &&
+                    v.Name.Equals(name,
+                        StringComparison.OrdinalIgnoreCase));
+            if (exists)
+                throw new InvalidOperationException(
+                    "Production 3D already exists: " + name +
+                    ". It will not be overwritten.");
+
+            var issue = new ManholeReviewIssue
+            {
+                FoundationId = foundation.Id.IntegerValue,
+                FoundationUniqueId = foundation.UniqueId,
+                Status = "RESOLVED",
+                Severity = "VIEW ONLY",
+                Reason = "Production 3D visualization"
+            };
+            View3D view = CreateOrUpdate(doc,
+                foundation, footprint, issue, 350, log);
+            view.Name = name;
+            log?.Info("PRODUCTION 3D View=" + view.Id.IntegerValue +
+                " Name=" + name + " Template=MH_3D");
+            return view;
+        }
+
         public static View3D CreateOrUpdate(Document doc,
             Element foundation, VirtualFoundationResult footprint,
             ManholeReviewIssue issue, double marginMm, DiagnosticLogger log)
