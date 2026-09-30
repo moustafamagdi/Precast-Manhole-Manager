@@ -270,10 +270,10 @@ namespace Hatco.PrecastManholeManager.Commands
             uiDoc.RequestViewChange(result.Sheet);
             TaskDialog.Show("First Manhole Prototype",
                 result.Message +
-                "\\n\\nThese are preliminary model views, not " +
+                "\n\nThese are preliminary model views, not " +
                 "dimensioned fabrication shop drawings." +
-                "\\nNo wall geometry or openings were changed." +
-                "\\nSave the RVT to keep the sheet.");
+                "\nNo wall geometry or openings were changed." +
+                "\nSave the RVT to keep the sheet.");
         }
 
         private static void Export(Document doc,
