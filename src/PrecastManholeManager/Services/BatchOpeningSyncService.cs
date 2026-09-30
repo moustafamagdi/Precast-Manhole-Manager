@@ -188,9 +188,9 @@ namespace Hatco.PrecastManholeManager.Services
             tangent = new XYZ(tangent.X, tangent.Y, 0.0).Normalize();
 
             XYZ center = new XYZ(
-                UnitUtil.MmToFt(record.Xmm),
-                UnitUtil.MmToFt(record.Ymm),
-                UnitUtil.MmToFt(record.Zmm));
+                UnitUtil.MmToFt(record.EffectiveOpeningXmm),
+                UnitUtil.MmToFt(record.EffectiveOpeningYmm),
+                UnitUtil.MmToFt(record.EffectiveOpeningZmm));
 
             center = OpeningHostPlaneService.MoveToWallSolidMidPlane(wall, center);
 
