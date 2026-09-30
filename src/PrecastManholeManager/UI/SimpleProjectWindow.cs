@@ -10,7 +10,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, ReviewOne, Make3D, ExportExcel
+        Close, Scan, ReviewOne, Make3D, DraftSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -68,15 +68,18 @@ namespace Hatco.PrecastManholeManager.UI
             top.Children.Add(controls);
             Button scan = Button("1   Scan Project", 155, controls);
             Button review = Button("2   Review Selected", 170, controls);
-            Button view = Button("Create / Open 3D", 160, controls);
-            Button export = Button("3   Export Excel", 150, controls);
+            Button view = Button("Review 3D", 125, controls);
+            Button draft = Button("3   Draft Sheet", 160, controls);
+            Button export = Button("Export Existing Excel", 177, controls);
 
             top.Children.Add(new TextBlock
             {
                 Text = "Scan finds the manholes and isolates problem cases. " +
                     "Review Selected performs the detailed MEP/opening inspection " +
                     "without modifying the model. 3D creates a cropped Revit " +
-                    "view. Excel exports only previously SAVED manhole data.",
+                    "view. Draft Sheet creates a prototype Plan + 4 wall-facing " +
+                    "orthographic views on one sheet for a selected READY manhole. " +
+                    "Excel uses only previously SAVED fabrication data.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 10)
             });
@@ -137,6 +140,33 @@ namespace Hatco.PrecastManholeManager.UI
             scan.Click += (s, e) => Choose(ProjectAction.Scan, false);
             review.Click += (s, e) => Choose(ProjectAction.ReviewOne, true);
             view.Click += (s, e) => Choose(ProjectAction.Make3D, true);
+            draft.Click += (s, e) =>
+            {
+                SimpleManholeItem row = _grid.SelectedItem as SimpleManholeItem;
+                if (row == null)
+                {
+                    MessageBox.Show(this, "Select one manhole first.");
+                    return;
+                }
+                if (row.State == "REVIEW")
+                {
+                    MessageBox.Show(this,
+                        "This manhole is isolated for review. Choose " +
+                        "a manhole with no recorded issues for the " +
+                        "first draft prototype.");
+                    return;
+                }
+                if (MessageBox.Show(this,
+                    "Generate a DRAFT Plan + W1-W4 as orthographic views " +
+                    "and attempt to place them on one sheet? This does " +
+                    "NOT clean old cuts, create openings or issue " +
+                    "shop drawings. Use a test RVT copy with an A1/A0 " +
+                    "title block.",
+                    "First Manhole Prototype",
+                    MessageBoxButton.YesNo) != MessageBoxResult.Yes)
+                    return;
+                Choose(ProjectAction.DraftSheet, true);
+            };
             export.Click += (s, e) => Choose(ProjectAction.ExportExcel, false);
             _grid.MouseDoubleClick += (s, e) =>
             {
