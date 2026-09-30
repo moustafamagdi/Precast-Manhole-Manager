@@ -157,14 +157,17 @@ namespace Hatco.PrecastManholeManager.Services
                         audit = OpeningResetAuditService.Audit(
                             doc, manhole.Walls.Select(w => w.Wall), log);
 
-                    if (options != null && !options.PreviewOnly && audit != null &&
+                    if (options != null && audit != null &&
                         (audit.ProfileEditedWalls > 0 || audit.ProfileUnknownWalls > 0 ||
                          audit.VoidCutRelations > 0 || audit.VoidUnknownWalls > 0))
                     {
+                        result.Penetrations += penetrations.Count;
                         result.NeedsReview++;
-                        log?.Warn("BATCH SKIPPED Foundation=" + foundation.Id.IntegerValue +
+                        log?.Warn("BATCH MANHOLE REVIEW Foundation=" +
+                            foundation.Id.IntegerValue +
                             " has edited/unknown wall profiles or void cuts. " +
-                            "No reset or new openings attempted. Review audit log.");
+                            "Detected MEP intersections are logged, but no cut proposals " +
+                            "are counted and no model modifications are made.");
                         continue;
                     }
 
