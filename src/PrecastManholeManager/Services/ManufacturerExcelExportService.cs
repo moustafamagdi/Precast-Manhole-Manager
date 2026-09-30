@@ -130,13 +130,15 @@ namespace Hatco.PrecastManholeManager.Services
                 XlsxCell.Blank(7));
 
             sheet.AddRow(
-                XlsxCell.Text("Opening Position", 6),
+                XlsxCell.Text("Horizontal Reference", 6),
                 XlsxCell.Text("Offset = opening C/L from wall reference edge", 7),
-                XlsxCell.Text("Vertical Position", 6),
-                XlsxCell.Text("Invert = bottom of service from base top", 7));
+                XlsxCell.Blank(7),
+                XlsxCell.Text("Vertical Reference", 6),
+                XlsxCell.Text("Invert = bottom of service from base top", 7),
+                XlsxCell.Blank(7),
+                XlsxCell.Blank(7));
             sheet.Merges.Add("B7:C7");
-            sheet.Merges.Add("D7:E7");
-            sheet.Merges.Add("F7:G7");
+            sheet.Merges.Add("E7:G7");
 
             sheet.AddRow(XlsxCell.Text(
                 "For fabrication use the opening schedule below. Revit IDs and internal model references are intentionally excluded.",
