@@ -441,14 +441,14 @@ namespace Hatco.PrecastManholeManager.Commands
             var confirm = new TaskDialog("Approve first production cuts");
             confirm.MainInstruction = id + " | " + actual.Count +
                 " confirmed actual opening(s)";
-            string proposed = string.Join("\\n",
+            string proposed = string.Join("\n",
                 actual.OrderBy(x => x.Source.WallNumber)
                     .Select(x => "W" + x.Source.WallNumber +
                         " / Source " + x.Source.LinkedElementId +
                         " / " + x.OpeningSize));
             confirm.MainContent =
-                "APPROVED OPENING CANDIDATES:\\n" + proposed +
-                "\\n\\n50 mm clearance per side. These are REAL Revit cuts " +
+                "APPROVED OPENING CANDIDATES:\n" + proposed +
+                "\n\n50 mm clearance per side. These are REAL Revit cuts " +
                 "to this one manhole's four walls, followed by a new " +
                 "1:25 Plan + 4 exterior Sections sheet.\n\n" +
                 "Virtual candidates deferred: " + review.VirtualCount +
