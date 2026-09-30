@@ -565,7 +565,8 @@ namespace Hatco.PrecastManholeManager.Commands
                         {
                             DraftSheetResult views =
                                 DraftManholeSheetService.Generate(doc,
-                                    foundation, footprint, log);
+                                    foundation, footprint, log,
+                                    forProduction: true);
                             newSheet = FirstProductionSheetService.Build(
                                 doc, foundation, views, actual, log);
                             if (tx.Commit() != TransactionStatus.Committed)
