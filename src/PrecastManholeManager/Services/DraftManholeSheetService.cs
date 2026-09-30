@@ -163,21 +163,26 @@ namespace Hatco.PrecastManholeManager.Services
                         "Cannot determine outside wall direction.");
                 outward = outward.Normalize();
 
-                string name = prefix + "_W" + wallNumber;
+                // A NEW exterior-facing section name prevents silently
+                // reusing a previously placed inward-facing section.
+                string name = prefix + "_OUT_W" + wallNumber;
                 bool alreadyExists = new FilteredElementCollector(doc)
                     .OfClass(typeof(ViewSection)).Cast<ViewSection>()
                     .Any(v => !v.IsTemplate && v.Name == name);
                 ViewSection elevation = GetOrCreateSection(doc, name,
                     sectionType, w.Axis, w.Mid, outward,
-                    minZ - pad, maxZ + pad, pad);
+                    w.Wall.Width, minZ - pad, maxZ + pad, pad);
                 if (!alreadyExists)
                 {
                     elevation.Scale = 25;
                     elevation.ViewTemplateId = sectionTemplate.Id;
                 }
                 elevations[wallNumber] = elevation;
-                log.Info("2D DRAFT SECTION W" + wallNumber +
+                log.Info("2D DRAFT EXTERIOR SECTION W" + wallNumber +
                     " WallId=" + w.Wall.Id.IntegerValue +
+                    " DirectionInward=" + outward.Negate() +
+                    " WallThicknessMm=" +
+                        UnitUtil.FtToMm(w.Wall.Width).ToString("0.#") +
                     " ViewId=" + elevation.Id.IntegerValue);
             }
             for (int n = 1; n <= 4; n++)
@@ -268,7 +273,8 @@ namespace Hatco.PrecastManholeManager.Services
         private static ViewSection GetOrCreateSection(Document doc,
             string name, ViewFamilyType sectionType,
             Line axis, XYZ midpoint, XYZ outward,
-            double bottomZ, double topZ, double pad)
+            double wallThicknessFt, double bottomZ, double topZ,
+            double pad)
         {
             View existing = new FilteredElementCollector(doc)
                 .OfClass(typeof(View)).Cast<View>()
@@ -282,32 +288,41 @@ namespace Hatco.PrecastManholeManager.Services
                 return reuse;
             }
 
-            // Transform of a section: BasisX points RIGHT on paper;
-            // BasisY points UP; BasisZ points OUT toward the viewer.
+            // OUTSIDE LOOKING IN:
+            // Autodesk ViewSection.CreateSection uses BasisZ as the
+            // ACTUAL LOOKING direction (not toward the viewer).
+            // 'outward' points from manhole center toward this wall.
+            // Thus viewDirection = -outward points from the observer
+            // outside the manhole onto its EXTERNAL wall face.
             XYZ up = XYZ.BasisZ;
-            XYZ viewOut = outward.Normalize();
-            XYZ right = up.CrossProduct(viewOut).Normalize();
-            if (right.GetLength() < 1e-9)
-                throw new InvalidOperationException("Invalid section axes.");
+            XYZ viewDirection = outward.Normalize().Negate();
+            XYZ right = up.CrossProduct(viewDirection).Normalize();
             Transform frame = Transform.Identity;
-            frame.Origin = new XYZ(midpoint.X, midpoint.Y,
-                (bottomZ + topZ) * 0.5);
+            // Place the cutting plane 40mm OUTSIDE the external face,
+            // not at the center of the wall. The view then looks IN.
+            double standOff = UnitUtil.MmToFt(40);
+            double extensionInside = UnitUtil.MmToFt(60);
+            XYZ outerFacePoint = new XYZ(midpoint.X, midpoint.Y,
+                (bottomZ + topZ) * 0.5) +
+                outward.Normalize() * (wallThicknessFt * 0.5);
+            frame.Origin = outerFacePoint +
+                outward.Normalize() * standOff;
             frame.BasisX = right;
             frame.BasisY = up;
-            frame.BasisZ = viewOut;
+            frame.BasisZ = viewDirection;
 
-            // Tight section with small depth toward the manhole.
-            // Depth behind the front wall is intentionally limited to
-            // avoid capturing the opposite wall through an opening.
+            // Positive view depth runs from the EXTERIOR camera plane
+            // into the wall, and stops shortly behind its inner face.
+            // This ensures the rear/opposite wall cannot cover the
+            // external facade when a manhole is small.
             double halfW = axis.Length * 0.5 + pad;
             double halfH = (topZ - bottomZ) * 0.5;
             var sectionBox = new BoundingBoxXYZ
             {
                 Transform = frame,
-                Min = new XYZ(-halfW, -halfH,
-                    -UnitUtil.MmToFt(350)),
+                Min = new XYZ(-halfW, -halfH, 0),
                 Max = new XYZ(halfW, halfH,
-                    UnitUtil.MmToFt(200))
+                    standOff + wallThicknessFt + extensionInside)
             };
             ViewSection section = ViewSection.CreateSection(doc,
                 sectionType.Id, sectionBox);
