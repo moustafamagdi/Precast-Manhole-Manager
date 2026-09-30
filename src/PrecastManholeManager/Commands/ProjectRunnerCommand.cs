@@ -21,6 +21,9 @@ namespace Hatco.PrecastManholeManager.Commands
             UIDocument uiDoc = input.Application.ActiveUIDocument;
             Document doc = uiDoc?.Document;
             if (doc == null) return Result.Failed;
+            // Capture the user-formatted sample sheet at launch; modal
+            // dialogs and view switches must not replace this reference.
+            ViewSheet referenceSheet = uiDoc.ActiveView as ViewSheet;
             using (var log = new DiagnosticLogger())
             {
                 try
@@ -60,6 +63,9 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.DraftSheet)
                                 GenerateDraftSheet(uiDoc,
                                     window.SelectedManhole, log);
+                            else if (window.Action == ProjectAction.SixRowSheet)
+                                GenerateSixRowSheet(uiDoc,
+                                    window.SheetCandidates, referenceSheet, log);
                             else if (window.Action == ProjectAction.ExportExcel)
                                 Export(doc, log);
 
@@ -277,6 +283,68 @@ namespace Hatco.PrecastManholeManager.Commands
                 "dimensioned fabrication shop drawings." +
                 "\nNo wall geometry or openings were changed." +
                 "\nSave the RVT to keep the five views.");
+        }
+
+        private static void GenerateSixRowSheet(UIDocument uidoc,
+            IList<SimpleManholeItem> candidates, ViewSheet sample,
+            DiagnosticLogger log)
+        {
+            Document doc = uidoc.Document;
+            // Never pull an already placed manual view onto a new sheet.
+            HashSet<int> placed = new HashSet<int>(
+                new FilteredElementCollector(doc)
+                    .OfClass(typeof(Viewport)).Cast<Viewport>()
+                    .Select(p => p.ViewId.IntegerValue));
+            var list = new List<Element>();
+            foreach (SimpleManholeItem item in candidates)
+            {
+                if (list.Count == 6) break;
+                Element foundation = Resolve(doc, item);
+                string prefix = "MH_" +
+                    item.FoundationId + "_DRAFT_2D";
+                bool used = new FilteredElementCollector(doc)
+                    .OfClass(typeof(View)).Cast<View>()
+                    .Any(v => !v.IsTemplate &&
+                        (v.Name == prefix + "_PLAN" ||
+                         v.Name == prefix + "_W1" ||
+                         v.Name == prefix + "_W2" ||
+                         v.Name == prefix + "_W3" ||
+                         v.Name == prefix + "_W4") &&
+                        placed.Contains(v.Id.IntegerValue));
+                if (used)
+                {
+                    log.Info("SIX ROW SKIP manually placed views for foundation " +
+                        item.FoundationId);
+                    continue;
+                }
+                list.Add(foundation);
+            }
+            if (list.Count == 0)
+            {
+                TaskDialog.Show("Six-Row Test Sheet",
+                    "No unplaced eligible manholes found. " +
+                    "Your manually arranged views were preserved.");
+                return;
+            }
+            SixRowSheetResult result =
+                SixRowManholeSheetService.Generate(
+                    doc, list, sample, log);
+            if (result.Sheet != null)
+                uidoc.RequestViewChange(result.Sheet);
+            TaskDialog.Show("Six-Row Test Sheet",
+                "New sheet: " + (result.Sheet != null ?
+                    result.Sheet.SheetNumber + " / " +
+                    result.Sheet.Name : "NONE") +
+                "\nRows placed: " + result.PlacedManholes +
+                "\nRows skipped: " + result.SkippedManholes +
+                "\nManhole IDs: " + string.Join(",",
+                    result.PlacedIds) +
+                "\n\n" +
+                (result.Problems.Count == 0 ? "No row problems." :
+                    "Skipped reasons:\n" +
+                    string.Join("\n", result.Problems.Take(6))) +
+                "\n\nLog: " + log.LogPath +
+                "\nSave the RVT after checking the layout.");
         }
 
         private static void Export(Document doc,
