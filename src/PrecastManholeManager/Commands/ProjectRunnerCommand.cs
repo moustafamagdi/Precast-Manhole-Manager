@@ -71,6 +71,9 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.ProductionOne)
                                 GenerateProductionManhole(uiDoc,
                                     window.SelectedManhole, log, window.ClearanceMm);
+                            else if (window.Action == ProjectAction.DimensionOne)
+                                TaskDialog.Show("Opening Dimensions", OpeningDimensionService.Generate(
+                                    doc, Resolve(doc, window.SelectedManhole), log));
                             else if (window.Action == ProjectAction.SixRowLayoutSheet)
                                 GenerateSixRowLayoutSheet(uiDoc,
                                     window.SheetCandidates, referenceSheet, log);
@@ -591,6 +594,15 @@ namespace Hatco.PrecastManholeManager.Commands
                 group.Start();
                 try
                 {
+                    // Old face references may disappear when native openings are resized.
+                    // Remove only our annotations inside the same rollback group as the cuts.
+                    using (var dimTx = new Transaction(doc, "HATCO - Refresh Opening References"))
+                    {
+                        dimTx.Start();
+                        OpeningDimensionService.RemoveOwned(doc, foundation);
+                        if (dimTx.Commit() != TransactionStatus.Committed)
+                            throw new InvalidOperationException("Could not prepare opening dimensions for update.");
+                    }
                     applied = CleanSyncAtomicService.Apply(doc, plan,
                         new CleanSyncApplyOptions
                         {
@@ -653,6 +665,13 @@ namespace Hatco.PrecastManholeManager.Commands
                     throw;
                 }
             }
+            string dimensionStatus;
+            try { dimensionStatus = OpeningDimensionService.Generate(doc, foundation, log); }
+            catch (Exception ex)
+            {
+                log.Error("Dimension stage needs review; openings and sheet remain committed.", ex);
+                dimensionStatus = "Dimensions need review: " + ex.Message;
+            }
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",
                 "COMMITTED: " + id +
@@ -665,6 +684,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "\n3D: " + production3D.Name + " (MH_3D)" +
                 "\nSheet: " + newSheet.SheetNumber +
                 " / " + newSheet.Name +
+                "\n" + dimensionStatus +
                 "\nPreliminary opening setout is shown on the sheet. " +
                 "Verify dimensions and elevations before issuing." +
                 "\nReview CSV: " + csv +

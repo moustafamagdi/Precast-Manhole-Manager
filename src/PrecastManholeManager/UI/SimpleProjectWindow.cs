@@ -11,7 +11,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, NumberAll, ReviewOne, Make3D, DraftSheet, ProductionOne, SixRowLayoutSheet, ExportExcel
+        Close, Scan, NumberAll, ReviewOne, Make3D, DraftSheet, ProductionOne, DimensionOne, SixRowLayoutSheet, ExportExcel
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -78,6 +78,7 @@ namespace Hatco.PrecastManholeManager.UI
             Button view = Button("Review 3D", 125, controls);
             Button draft = Button("Create 2D Views", 150, controls);
             Button produce = Button("Generate Selected Manhole", 210, controls);
+            Button dimensions = Button("Update Opening Dimensions", 215, controls);
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
@@ -216,6 +217,7 @@ namespace Hatco.PrecastManholeManager.UI
                 // dialog before any physical Revit wall changes.
                 Choose(ProjectAction.ProductionOne, true);
             };
+            dimensions.Click += (sender, args) => Choose(ProjectAction.DimensionOne, true);
             six.Click += (sender, args) =>
             {
                 // Test ONE sheet only. The view-generation engine validates

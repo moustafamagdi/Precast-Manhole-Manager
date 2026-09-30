@@ -497,3 +497,23 @@ New tables carry Extensible Storage with the foundation UniqueId. Refresh finds 
 If no table is found, Generate recreates it in the standard lower sheet area, checking overlap against existing notes, viewports and viewport labels, and checking sheet bounds. A conflicting recovery area still aborts atomically with a specific message. The log now includes sheet ID, note IDs, text and match counts. Layout and existing text-note types are retained when updating a found table.
 
 Release build and 23 calculation/scope/text-recognition assertions pass. Creation, recovery placement and Extensible Storage persistence require the next Revit run. The 50 mm run does not validate the earlier join-resolution fix at 100 mm.
+
+## Associative opening dimensions (next production milestone)
+
+The user's 14:39 log confirms a successful live update of four openings from 75 to 50 mm per side, refresh of the same sheet table, and reuse of the production 3D. No claim is made that the earlier 100 mm join failure was reproduced in that run.
+
+**Update Opening Dimensions** is now available for an already generated manhole. It reads actual managed native openings and adds model-associated dimensions in the existing `_PROD_2D_OUT_W1..W4` sections without changing clearance or opening geometry. **Generate Selected Manhole** also refreshes dimensions after committing the openings and sheet.
+
+For each wall with openings:
+- One horizontal chain references actual wall end planes and opening left/right reveal faces, showing edge offsets, widths and intermediate spacings.
+- One vertical chain per opening references the foundation top, opening bottom and opening top. Its last segment is labelled O01, O02, etc., following wall-number/wall-axis-offset ordering as in the sheet table.
+- References come from original Revit geometry with ComputeReferences enabled. No proxy detail lines, numeric text overrides or inferred reference strings are used. Revit's measured segment values must agree with face positions within 0.5 mm.
+- The first available linear dimension type is used. Its office units/style are preserved. Sections must be vertical and display Dimensions. Dimensions extending outside the current section crop are rejected with a message to enlarge the crop; no existing crop or viewport layout is changed.
+
+Dimensions carry a foundation ownership marker. Rerunning replaces only these tool-owned dimensions; manual dimensions are not selected for cleanup. Before resizing openings, tool-owned dimensions are removed inside the production transaction group so a failed geometry update restores them. Annotation generation then runs in separate per-wall transactions: a reference/crop/dimension failure leaves the completed geometry and sheet in place and reports the affected wall for review. The user can retry only annotation creation with the new button.
+
+Current scope: actual rectangular native openings on straight walls, existing exterior sections, planar model references. Rotated walls use section-local coordinates. Missing references and unsupported geometry are reported without placeholder dimensions. The sheet remains preliminary pending visual engineering review. Closely spaced openings can require manual text adjustment; automatic annotation collision arrangement is not included in this milestone.
+
+Validation: Release build against Revit 2024 passes. 32 compiled-code assertions cover previous changes and dimensional segment validation, including wrong/missing/null/non-finite measurements. Live face-reference creation, dimension visibility, rotated views, labels, crop fit, and reruns need Revit testing. For the supplied four-opening case the expected successful output is 3 horizontal and 4 vertical dimension strings (W4 has no opening), provided all references and crop checks pass.
+
+Revit test sequence: Pull/Rebuild; select MH-001; run Update Opening Dimensions; inspect W1/W2/W3 on the existing sheet and the TXT log; rerun and check no duplicate strings; then Generate at a changed clearance and verify both real geometry and measured dimensions update. Native opening replacement can still affect manually attached tags/dimensions, as documented above.

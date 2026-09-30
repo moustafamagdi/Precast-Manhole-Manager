@@ -70,3 +70,17 @@ Assert-That (Test-TableText ($header.Replace(' ', [string][char]0x00A0).ToLowerI
 Assert-That (Test-TableText ($header.Replace('OPENING SETOUT - PRELIMINARY / VERIFY', 'PARTIAL LINK COVERAGE - NOT FOR ISSUE'))) 'Old partial-link tables can be migrated'
 Assert-That (!(Test-TableText 'General note: check MEP SOURCE and BOTTOM ABOVE BASE (mm)')) 'Unrelated manual notes are not treated as opening tables'
 Assert-That (!(Test-TableText '')) 'Empty notes are not treated as opening tables'
+
+$dimensionCheck = $assembly.GetType('Hatco.PrecastManholeManager.Services.OpeningDimensionService').GetMethod('SegmentsMatch', [Reflection.BindingFlags]'NonPublic,Static')
+function Test-DimensionSegments([double[]]$coordinates, [Nullable[double][]]$measured) {
+    return [bool]$dimensionCheck.Invoke($null, [object[]]@($coordinates, $measured))
+}
+Assert-That (Test-DimensionSegments @(0,1,3) @(1,2)) 'Associated chain segments match the model face spacing'
+Assert-That (Test-DimensionSegments @(-100,-99,-97) @(1,2)) 'Negative project coordinates preserve segment lengths'
+Assert-That (!(Test-DimensionSegments @(0,1,3) @(1,1.5))) 'Incorrect reference measurements are rejected'
+Assert-That (!(Test-DimensionSegments @(0,1,3) @(3))) 'A missing dimension segment is rejected'
+Assert-That (!(Test-DimensionSegments @(0,1) @($null))) 'Unresolved dimension values are rejected'
+Assert-That (!(Test-DimensionSegments @(1,0) @(1))) 'Unordered reference coordinates are rejected'
+Assert-That (!(Test-DimensionSegments @(0,0) @(0))) 'Coincident references cannot masquerade as a valid dimension'
+Assert-That (!(Test-DimensionSegments @(0,1) @([double]::NaN))) 'Non-finite measured values are rejected'
+Assert-That (!(Test-DimensionSegments @(0,[double]::PositiveInfinity) @(1))) 'Non-finite model coordinates are rejected'
