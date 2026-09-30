@@ -86,16 +86,34 @@ namespace Hatco.PrecastManholeManager.Services
                 if (sourceHeightMm <= 0)
                     sourceHeightMm = Math.Max(0, managed.CutHeightMm - (2.0 * managed.ClearanceMm));
 
-                double openingBottomAbsolute = managed.Zmm - (managed.CutHeightMm / 2.0);
-                double openingBottomFromBase = openingBottomAbsolute - manhole.BaseTopZmm;
+                // Actual native opening may have an asymmetric clearance trim.
+                // Its fabrication position must come from the cut boundary,
+                // while service invert continues to use the original MEP center.
+                double openingCenterXmm = managed.Xmm;
+                double openingCenterYmm = managed.Ymm;
+                double openingBottomAbsolute =
+                    managed.Zmm - (managed.CutHeightMm / 2.0);
+
+                if (opening.IsRectBoundary && opening.BoundaryRect != null &&
+                    opening.BoundaryRect.Count >= 2)
+                {
+                    XYZ p0 = opening.BoundaryRect[0];
+                    XYZ p1 = opening.BoundaryRect[1];
+                    openingCenterXmm = UnitUtil.FtToMm((p0.X + p1.X) * 0.5);
+                    openingCenterYmm = UnitUtil.FtToMm((p0.Y + p1.Y) * 0.5);
+                    openingBottomAbsolute = UnitUtil.FtToMm(
+                        Math.Min(p0.Z, p1.Z));
+                }
+                double openingBottomFromBase =
+                    openingBottomAbsolute - manhole.BaseTopZmm;
 
                 double absoluteInvert = managed.Zmm - (sourceHeightMm / 2.0);
                 double invertFromBase = absoluteInvert - manhole.BaseTopZmm;
                 double offset = CalculateOffsetFromWallStart(
                     doc,
                     managed.HostWallId,
-                    managed.Xmm,
-                    managed.Ymm,
+                    openingCenterXmm,
+                    openingCenterYmm,
                     managed.Zmm);
 
                 string currentManholeNumber = manhole.ManholeNumber ?? link.ManholeNumber ?? string.Empty;
