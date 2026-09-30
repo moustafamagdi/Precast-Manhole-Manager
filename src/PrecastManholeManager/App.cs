@@ -89,6 +89,17 @@ namespace Hatco.PrecastManholeManager
                         ToolTip = "Read-only short pipe/duct endpoint extension and existing wall-opening inventory. Creates no openings."
                     });
 
+                AddButton(
+                    panel,
+                    new PushButtonData(
+                        "UnifiedOpeningReview",
+                        "Review\nOpenings",
+                        assemblyPath,
+                        typeof(Commands.UnifiedOpeningReviewCommand).FullName)
+                    {
+                        ToolTip = "Experimental read-only: combine actual and virtual penetrations with opening/profile/void audit, fit checks and unified CSV."
+                    });
+
                 return Result.Succeeded;
             }
             catch
