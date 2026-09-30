@@ -143,7 +143,11 @@ namespace Hatco.PrecastManholeManager.Services
                 8));
             sheet.Merges.Add("A8:G8");
 
-            sheet.AddRow(XlsxCell.Blank());
+            sheet.AddRow(XlsxCell.Text(
+                "PDF report: open PRINT REPORT then use File > Export > Create PDF/XPS. Each manhole is separated by a page break.",
+                8));
+            sheet.Merges.Add("A9:G9");
+
             sheet.AddRow(XlsxCell.Blank());
 
             sheet.AddRow(XlsxCell.Text("OPENING SCHEDULE", 3));
