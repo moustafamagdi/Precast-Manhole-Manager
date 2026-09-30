@@ -144,10 +144,11 @@ namespace Hatco.PrecastManholeManager.UI
                 HeadersVisibility = DataGridHeadersVisibility.Column
             };
             root.Children.Add(_grid);
-            AddColumn("Foundation", "FoundationId", 108);
+            AddColumn("Foundation", "FoundationId", 100);
+            AddColumn("Manhole Name", "ManholeName", 152);
             AddColumn("Status", "State", 155);
-            AddColumn("Type", "TypeName", 235);
-            AddColumn("Reason / what needs review", "Problem", 395);
+            AddColumn("Type", "TypeName", 204);
+            AddColumn("Reason / what needs review", "Problem", 330);
             AddColumn("3D view", "ViewName", 185);
 
             scan.Click += (s, e) => Choose(ProjectAction.Scan, false);
