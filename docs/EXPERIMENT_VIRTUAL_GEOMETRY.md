@@ -172,3 +172,30 @@ The read-only `Test Virtual MEP + Audit` command now outputs both:
 The approach deviation is measured in the **horizontal XY plane** separately from the duct's reported 3D slope. A line crossing an infinite wall plane is counted as an actual crossing only when its intersection is inside the finite wall length **and** vertical range. This test remains read-only and does not create missing candidates by relaxing safety rules.
 
 For the next user test, repeat on the same manhole and share both CSV files + TXT log to identify the third duct's exact ElementId and classification. Validate the 10 unavailable Revit links if the expected third duct is absent from the nearby list.
+
+
+## Stage D — Unified Opening Review (first implementation, read-only)
+
+Command: **Hatco > Precast Tools > Review Openings**. This is deliberately separate from the existing `Scan Manhole`, `Batch Selected` and `Batch All` commands.
+
+1. Select an approved manhole foundation.
+2. Enter a **clearance per side**, virtual endpoint maximum face gap and maximum *horizontal* approach angle.
+3. The experimental detector reconstructs the manhole perimeter from four validated walls, then collects:
+   - **Actual** linked MEP wall-plane crossings (existing scanner)
+   - **Virtual** linked straight Pipe/Duct endpoint projections, including `INSIDE WALL`
+   - Native managed/manual Revit `Opening` matches
+   - Wall edited-profile status and accessible unattached-void cut counts (per wall)
+4. Review the modeless **READ ONLY** table: detection type, W1–W4, source ElementId, MEP size, gap, slope, proposed rectangular opening, proposed opening-bottom from base, native opening status, wall profile, void count and all review reasons.
+5. The command produces an initial `UnifiedOpeningReview_*.csv` in `Desktop\Precast Manhole Manager\Logs`. The modeless window has an additional **Export Unified Review CSV** button; its event is pure file I/O and doesn't access the Revit API.
+
+All virtual penetrations are **REVIEW**, and edited/unknown profiles or uncertain void-cut states always flag the relevant wall. Neither the existence nor the dimensions of a profile-cut or in-place void opening can be inferred reliably from the current audit. Zero reported unattached void relations **does not imply** the absence of other cut geometries.
+
+The actual crossings from Cable Tray and Conduit are still displayed through the legacy scanner where available, while endpoint extension currently targets only straight linked Pipes and Ducts. Skewed / sloped duct projection geometry and legacy edited profiles require visual validation before any write stage.
+
+The scan and export do **not** delete profiles, remove in-place void cutting families, unjoin elements, create openings, or save carriers. Manual approval control and write/reset functionality will be considered only after real-model review of combined results.
+
+### Test on the known 3-duct manhole
+
+Use cropped foundation `5144998`. With 50 mm clearance, 150 mm face gap, and 15° horizontal approach angle, expect two external virtual duct candidates plus one `INSIDE WALL` candidate (unless any is also reported as an actual crossing, in which case the duplicate virtual row is suppressed). The audit should continue identifying the three edited profiles. Compare the proposed opening width/height and bottom-from-base with your model and share the generated unified CSV/TXT and a screenshot.
+
+Do **not** test destructive resetting against the live project.
