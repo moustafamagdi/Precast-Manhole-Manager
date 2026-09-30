@@ -15,6 +15,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool DeleteIsolatedInPlaceCutters { get; set; }
         public bool IncludeStraightVirtual { get; set; }
         public bool RequiredLinksVerified { get; set; }
+        public bool AllowIncompleteLinkCoverageForPreview { get; set; }
     }
 
     internal sealed class CleanSyncApplyResult
@@ -63,7 +64,8 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException("Cleanup blocked: " + plan.BlockReason);
             if (plan.UnsupportedSolidCutWallIds.Count != 0)
                 throw new InvalidOperationException("Unclassified solid cuts exist.");
-            if (plan.UnavailableLinks > 0 && !options.RequiredLinksVerified)
+            if (plan.UnavailableLinks > 0 && !options.RequiredLinksVerified &&
+                !options.AllowIncompleteLinkCoverageForPreview)
                 throw new InvalidOperationException(
                     "Required link coverage was not acknowledged: " +
                     plan.UnavailableLinks + " Revit links unavailable.");
@@ -111,6 +113,11 @@ namespace Hatco.PrecastManholeManager.Services
             }
 
             log.WriteHeader("ATOMIC CLEAN AND SYNC - SINGLE MANHOLE");
+            if (plan.UnavailableLinks > 0 &&
+                options.AllowIncompleteLinkCoverageForPreview)
+                log.Warn("PARTIAL LINK TEST: " + plan.UnavailableLinks +
+                    " links unavailable. Created openings will be " +
+                    "PRELIMINARY - NOT FOR ISSUE.");
             log.Warn("Only perform this command on a disposable RVT test copy.");
             log.Info("Foundation=" + plan.FoundationId +
                 " Desired=" + selected.Count +
