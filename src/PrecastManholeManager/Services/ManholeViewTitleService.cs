@@ -12,6 +12,8 @@ namespace Hatco.PrecastManholeManager.Services
                 doc, foundation.UniqueId, foundation.Id.IntegerValue);
             string name = (saved?.ManholeNumber ?? "").Trim();
             if (string.IsNullOrWhiteSpace(name))
+                name = (ManholeIdentityStore.Read(foundation) ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(name))
                 name = (foundation.get_Parameter(BuiltInParameter.ALL_MODEL_MARK)?.AsString() ?? "").Trim();
             if (string.IsNullOrWhiteSpace(name))
             {
