@@ -10,7 +10,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal sealed class ReviewViewListItem
     {
-        public bool Selected { get; set; } = true;
+        public bool Selected { get; set; } = false;
         public ManholeReviewIssue Issue { get; set; }
         public int FoundationId => Issue.FoundationId;
         public string Severity => Issue.Severity;
