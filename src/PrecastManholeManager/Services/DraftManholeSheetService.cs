@@ -8,7 +8,6 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal sealed class DraftSheetResult
     {
-        public ViewSheet Sheet { get; set; }
         public List<View> Views { get; } = new List<View>();
         public string Message { get; set; }
     }
@@ -65,9 +64,16 @@ namespace Hatco.PrecastManholeManager.Services
             if (level == null)
                 throw new InvalidOperationException("No Level found for draft Floor Plan.");
 
-            ViewPlan plan = GetOrCreatePlan(doc, prefix + "_PLAN", planType, level);
-            ConfigurePlan(plan, minX - pad, minY - pad, maxX + pad,
-                maxY + pad, minZ - pad, maxZ + pad, centerZ);
+            string planName = prefix + "_PLAN";
+            bool existingPlan = new FilteredElementCollector(doc)
+                .OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
+                .Any(v => !v.IsTemplate && v.Name == planName);
+            ViewPlan plan = GetOrCreatePlan(doc, planName, planType, level);
+            // Never overwrite the user's scale/crop once views have been
+            // generated: subsequent clicks must be idempotent.
+            if (!existingPlan)
+                ConfigurePlan(plan, minX - pad, minY - pad, maxX + pad,
+                    maxY + pad, minZ - pad, maxZ + pad, centerZ);
             result.Views.Add(plan);
             log.Info("2D DRAFT PLAN ViewId=" + plan.Id.IntegerValue +
                 " Level=" + level.Name + " CropWmm=" +
@@ -114,166 +120,19 @@ namespace Hatco.PrecastManholeManager.Services
             for (int n = 1; n <= 4; n++)
                 result.Views.Add(elevations[n]);
 
-            ViewSheet sheet = new FilteredElementCollector(doc)
-                .OfClass(typeof(ViewSheet)).Cast<ViewSheet>()
-                .FirstOrDefault(s => s.Name == prefix);
-
-            if (sheet != null)
-            {
-                // Reusing five-view sheets is safe. Never reset positions
-                // on a sheet a person has already laid out manually.
-                HashSet<int> expected = new HashSet<int>(result.Views
-                    .Select(v => v.Id.IntegerValue));
-                HashSet<int> existing = new HashSet<int>(
-                    sheet.GetAllViewports().Select(id =>
-                        (doc.GetElement(id) as Viewport)?.ViewId.IntegerValue ?? -1));
-                if (!expected.SetEquals(existing))
-                    throw new InvalidOperationException(
-                        "The existing 2D draft sheet was changed manually. " +
-                        "Preserve it and review its viewports: " + prefix);
-                result.Sheet = sheet;
-                result.Message = "Existing 2D Draft sheet preserved: " +
-                    sheet.SheetNumber + " / " + sheet.Name;
-                return result;
-            }
-
-            FamilySymbol titleBlock = new FilteredElementCollector(doc)
-                .OfCategory(BuiltInCategory.OST_TitleBlocks)
-                .OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>()
-                .OrderByDescending(x =>
-                    (x.Name ?? "").IndexOf("A0",
-                        StringComparison.OrdinalIgnoreCase) >= 0 ? 3 :
-                    (x.Name ?? "").IndexOf("A1",
-                        StringComparison.OrdinalIgnoreCase) >= 0 ? 2 : 0)
-                .FirstOrDefault();
-            if (titleBlock == null)
-                throw new InvalidOperationException(
-                    "Load an A0 or A1 titleblock before generating a draft.");
-
-            sheet = ViewSheet.Create(doc, titleBlock.Id);
-            sheet.Name = prefix;
-            result.Sheet = sheet;
-            doc.Regenerate();
-
-            double left = sheet.Outline.Min.U;
-            double bottom = sheet.Outline.Min.V;
-            double width = sheet.Outline.Max.U - left;
-            double height = sheet.Outline.Max.V - bottom;
-            if (width < UnitUtil.MmToFt(500) ||
-                height < UnitUtil.MmToFt(350))
-                throw new InvalidOperationException(
-                    "Selected sheet is too small for the five-view draft.");
-
-            var ports = new List<Viewport>();
-            XYZ initial = new XYZ(left + width * 0.5,
-                bottom + height * 0.5, 0);
-            foreach (View view in result.Views)
-            {
-                if (!Viewport.CanAddViewToSheet(doc, sheet.Id, view.Id))
-                    throw new InvalidOperationException(
-                        "Cannot place view " + view.Name +
-                        " (it may already be on another sheet).");
-                ports.Add(Viewport.Create(doc, sheet.Id, view.Id, initial));
-            }
-
-            // Use real 2D crop extents measured by Revit. This avoids
-            // the whole-project camera crop that broke the old 3D draft.
-            int[] scales = { 25, 50, 75, 100, 125, 150, 200 };
-            double edge = UnitUtil.MmToFt(22);
-            double gap = UnitUtil.MmToFt(12);
-            double usableW = width - 2 * edge;
-            double usableH = height - 2 * edge;
-            int fittedScale = 0;
-            string lastMeasurement = "";
-
-            foreach (int scale in scales)
-            {
-                foreach (View view in result.Views)
-                    view.Scale = scale;
-                doc.Regenerate();
-                double[] w = ports.Select(p =>
-                {
-                    Outline o = p.GetBoxOutline();
-                    return o.MaximumPoint.X - o.MinimumPoint.X;
-                }).ToArray();
-                double[] h = ports.Select(p =>
-                {
-                    Outline o = p.GetBoxOutline();
-                    return o.MaximumPoint.Y - o.MinimumPoint.Y;
-                }).ToArray();
-
-                double row2 = Math.Max(h[1], h[2]);
-                double row3 = Math.Max(h[3], h[4]);
-                double needW = Math.Max(w[0], Math.Max(
-                    w[1] + w[2] + gap, w[3] + w[4] + gap));
-                double needH = h[0] + row2 + row3 + 2 * gap;
-                lastMeasurement = "1:" + scale +
-                    " Required=" + UnitUtil.FtToMm(needW).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(needH).ToString("0.#") +
-                    " mm Available=" + UnitUtil.FtToMm(usableW).ToString("0.#") +
-                    "x" + UnitUtil.FtToMm(usableH).ToString("0.#") + " mm";
-                log.Info("2D DRAFT FIT " + lastMeasurement);
-                if (needW > usableW || needH > usableH) continue;
-
-                double y = bottom + edge + (usableH - needH) * 0.5;
-                double cx = left + width * 0.5;
-                double[] cy = {
-                    y + row3 + gap + row2 + gap + h[0] * 0.5,
-                    y + row3 + gap + row2 * 0.5,
-                    y + row3 + gap + row2 * 0.5,
-                    y + row3 * 0.5,
-                    y + row3 * 0.5
-                };
-                double[] xx = {
-                    cx,
-                    cx - (w[2] + gap) * 0.5,
-                    cx + (w[1] + gap) * 0.5,
-                    cx - (w[4] + gap) * 0.5,
-                    cx + (w[3] + gap) * 0.5
-                };
-                for (int i = 0; i < ports.Count; i++)
-                    ports[i].SetBoxCenter(new XYZ(xx[i], cy[i], 0));
-                doc.Regenerate();
-
-                var boxes = ports.Select(p => p.GetBoxOutline()).ToList();
-                bool within = boxes.All(o =>
-                    o.MinimumPoint.X >= left + edge - 1e-5 &&
-                    o.MaximumPoint.X <= left + width - edge + 1e-5 &&
-                    o.MinimumPoint.Y >= bottom + edge - 1e-5 &&
-                    o.MaximumPoint.Y <= bottom + height - edge + 1e-5);
-                bool overlap = false;
-                for (int i = 0; i < boxes.Count; i++)
-                for (int j = i + 1; j < boxes.Count; j++)
-                {
-                    Outline a = boxes[i], b = boxes[j];
-                    if (a.MinimumPoint.X < b.MaximumPoint.X + gap &&
-                        a.MaximumPoint.X + gap > b.MinimumPoint.X &&
-                        a.MinimumPoint.Y < b.MaximumPoint.Y + gap &&
-                        a.MaximumPoint.Y + gap > b.MinimumPoint.Y)
-                        overlap = true;
-                }
-
-                if (within && !overlap)
-                {
-                    fittedScale = scale;
-                    break;
-                }
-                log.Warn("2D DRAFT layout rejected at 1:" + scale +
-                    " Within=" + within + " Overlap=" + overlap);
-            }
-
-            if (fittedScale == 0)
-                throw new InvalidOperationException(
-                    "Five 2D views could not fit this sheet. " +
-                    lastMeasurement + ". The draft transaction was rolled back.");
-
-            result.Message = "2D Plan + 4 true Sections placed at 1:" +
-                fittedScale + " on " + sheet.SheetNumber +
-                " / " + sheet.Name;
-            log.Info("2D DRAFT SUCCESS SheetId=" +
-                sheet.Id.IntegerValue + " Views=" +
-                string.Join(",", result.Views.Select(x => x.Id.IntegerValue)) +
-                " Scale=1:" + fittedScale);
+            // DELIBERATE MANUAL SHEET WORKFLOW:
+            // Do not create a sheet, viewport or apply automatic layout.
+            // Revit will retain the five real, tightly cropped 2D views
+            // when the caller commits its single transaction.
+            result.Message = "Created/found PLAN and four Sections W1-W4 for " +
+                "Foundation " + foundation.Id.IntegerValue +
+                ". No sheet or viewport was created. " +
+                "Create your preferred sheet, place the views from the " +
+                "Project Browser, and set the layout/scale yourself.";
+            log.Info("2D MANUAL LAYOUT READY Foundation=" +
+                foundation.Id.IntegerValue + " Views=" +
+                string.Join(",", result.Views.Select(x =>
+                    x.Name + ":" + x.Id.IntegerValue)));
             return result;
         }
 
