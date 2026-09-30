@@ -46,7 +46,7 @@ namespace Hatco.PrecastManholeManager.Services
                 return;
             string title = manholeName + (wallNumber == 0
                 ? " - PLAN"
-                : " - WALL W" + wallNumber + " (EXTERNAL ELEVATION)");
+                : " - WALL W" + wallNumber);
             if (existing != title) p.Set(title);
         }
     }
