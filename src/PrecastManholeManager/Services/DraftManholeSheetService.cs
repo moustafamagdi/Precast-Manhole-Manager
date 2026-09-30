@@ -29,6 +29,8 @@ namespace Hatco.PrecastManholeManager.Services
             const double paddingMm = 180;
             double pad = UnitUtil.MmToFt(paddingMm);
             var result = new DraftSheetResult();
+            string manholeName = ManholeViewTitleService.Name(
+                doc, foundation, log);
             string prefix = "MH_" + foundation.Id.IntegerValue + "_DRAFT_2D";
             BoundingBoxXYZ baseBox = foundation.get_BoundingBox(null);
             List<BoundingBoxXYZ> wallBoxes = footprint.Walls
@@ -129,6 +131,8 @@ namespace Hatco.PrecastManholeManager.Services
                         "than changing the approved 1:25 scale.");
                 }
             }
+            ManholeViewTitleService.UpdateTitle(plan,
+                manholeName, 0, foundation.Id.IntegerValue, log);
             result.Views.Add(plan);
             log.Info("2D DRAFT PLAN ViewId=" + plan.Id.IntegerValue +
                 " Level=" + level.Name + " CropWmm=" +
@@ -177,6 +181,9 @@ namespace Hatco.PrecastManholeManager.Services
                     elevation.Scale = 25;
                     elevation.ViewTemplateId = sectionTemplate.Id;
                 }
+                ManholeViewTitleService.UpdateTitle(elevation,
+                    manholeName, wallNumber,
+                    foundation.Id.IntegerValue, log);
                 elevations[wallNumber] = elevation;
                 log.Info("2D DRAFT EXTERIOR SECTION W" + wallNumber +
                     " WallId=" + w.Wall.Id.IntegerValue +
