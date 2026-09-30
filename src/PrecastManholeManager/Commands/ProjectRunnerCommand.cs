@@ -386,6 +386,46 @@ namespace Hatco.PrecastManholeManager.Commands
                         "Opening fit failed W" + row.Source.WallNumber +
                         ": " + reason + ". Review " + csv);
             }
+            // A pair of individually valid openings can still overlap.
+            // Refuse uncertain compound cuts in this first milestone.
+            for (int i = 0; i < actual.Count; i++)
+            for (int j = i + 1; j < actual.Count; j++)
+            {
+                var a = actual[i].Source;
+                var c = actual[j].Source;
+                if (a.HostWallId != c.HostWallId) continue;
+                Wall wall = doc.GetElement(new ElementId(a.HostWallId))
+                    as Wall;
+                Line line = (wall?.Location as LocationCurve)?.Curve
+                    as Line;
+                if (line == null)
+                    throw new InvalidOperationException(
+                        "Cannot validate spacing between wall openings.");
+                XYZ direction = line.Direction;
+                XYZ p1 = new XYZ(a.EffectiveOpeningXmm,
+                    a.EffectiveOpeningYmm, a.EffectiveOpeningZmm);
+                XYZ p2 = new XYZ(c.EffectiveOpeningXmm,
+                    c.EffectiveOpeningYmm, c.EffectiveOpeningZmm);
+                double along = Math.Abs((p1 - p2).DotProduct(direction));
+                double vertical = Math.Abs(
+                    a.EffectiveOpeningZmm - c.EffectiveOpeningZmm);
+                if (along <
+                        (a.CutWidthMm + c.CutWidthMm) * 0.5 + 5 &&
+                    vertical <
+                        (a.CutHeightMm + c.CutHeightMm) * 0.5 + 5)
+                    throw new InvalidOperationException(
+                        "Two proposed openings overlap on W" +
+                        a.WallNumber + ". Compound cuts need " +
+                        "manual engineering review: " +
+                        a.LinkedElementId + " / " +
+                        c.LinkedElementId + ". See " + csv);
+            }
+            if (actual.Count > 8)
+                throw new InvalidOperationException(
+                    "First production milestone supports up to eight " +
+                    "actual openings on one manhole so all setout rows " +
+                    "remain readable on the sheet. See " + csv);
+
             // Never let virtual extensions enter the write plan during
             // the first production rollout; they remain in CSV for review.
             plan.ProposedRows.RemoveAll(x => x.IsVirtual);
@@ -401,8 +441,14 @@ namespace Hatco.PrecastManholeManager.Commands
             var confirm = new TaskDialog("Approve first production cuts");
             confirm.MainInstruction = id + " | " + actual.Count +
                 " confirmed actual opening(s)";
+            string proposed = string.Join("\\n",
+                actual.OrderBy(x => x.Source.WallNumber)
+                    .Select(x => "W" + x.Source.WallNumber +
+                        " / Source " + x.Source.LinkedElementId +
+                        " / " + x.OpeningSize));
             confirm.MainContent =
-                "50 mm clearance per side. These are REAL Revit cuts " +
+                "APPROVED OPENING CANDIDATES:\\n" + proposed +
+                "\\n\\n50 mm clearance per side. These are REAL Revit cuts " +
                 "to this one manhole's four walls, followed by a new " +
                 "1:25 Plan + 4 exterior Sections sheet.\n\n" +
                 "Virtual candidates deferred: " + review.VirtualCount +
