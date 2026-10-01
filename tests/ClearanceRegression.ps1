@@ -376,3 +376,18 @@ Assert-That (!$slab.Invoke($null,[object[]]@(1100.0,1000.0,0.65,200.0))) 'Infini
 Assert-That (!$slab.Invoke($null,[object[]]@(80.0,1000.0,0.65,200.0))) 'Partial source slab coverage is left for review instead of extrapolating the pipe'
 Assert-That (!$slab.Invoke($null,[object[]]@(500.0,1000.0,0.0,200.0))) 'Parallel pipe cannot supply a projected adjacent wall cut'
 Assert-That (!$slab.Invoke($null,[object[]]@([double]::NaN,1000.0,0.65,200.0))) 'Invalid source station cannot authorize a corner cut'
+
+# Physical opening coverage resolves overlap even for older individual cuts.
+$coversPair=$compound.GetMethod('CoversPair',[Reflection.BindingFlags]'NonPublic,Static')
+function Test-PairCoverage($cuts,$a,$b) {
+    $typed=[Array]::CreateInstance($penetrationType,$cuts.Count)
+    for($i=0;$i -lt $cuts.Count;$i++){ $typed.SetValue($cuts[$i],$i) }
+    return $coversPair.Invoke($null,[object[]]@($typed,$a,$b,1.0,0.0))
+}
+$pa=New-Cut 'pair-a' 0 0
+$pb=New-Cut 'pair-b' 150 0
+Assert-That (Test-PairCoverage @((New-Cut 'old-a' 0 0),(New-Cut 'old-b' 150 0)) $pa $pb) 'Already executed individual cuts resolve their overlap review'
+Assert-That (Test-PairCoverage @((New-Cut 'old-combined' 75 0 350 200)) $pa $pb) 'A physical combined cut resolves overlap without relying on member metadata'
+Assert-That (!(Test-PairCoverage @((New-Cut 'old-a' 0 0)) $pa $pb)) 'A missing second cut still requires overlap review'
+Assert-That (!(Test-PairCoverage @((New-Cut 'small' 75 0 300 200)) $pa $pb)) 'An undersized combined cut does not resolve overlap'
+Assert-That (!(Test-PairCoverage @((New-Cut 'wrong-wall' 75 0 350 200 101)) $pa $pb)) 'Coverage on another wall cannot resolve overlap'

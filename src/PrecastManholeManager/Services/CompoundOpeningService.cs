@@ -94,16 +94,15 @@ namespace Hatco.PrecastManholeManager.Services
 
         internal static bool ExistingCutCoversPair(Document doc, CleanSyncPlan plan, PenetrationRecord a, PenetrationRecord b, XYZ direction)
         {
+            var verifiedCuts = new List<PenetrationRecord>();
             foreach (int id in plan.ManagedOpeningIds.Values)
             {
                 var opening = doc.GetElement(new ElementId(id)) as Opening;
                 if (opening == null || opening.Host?.Id.IntegerValue != a.HostWallId || !opening.IsRectBoundary) continue;
                 ManagedOpeningData data;
                 if (!OpeningStorageService.TryRead(opening, out data) || data.AdoptedManual || data.HostWallId != a.HostWallId) continue;
-                string[] members;
-                try { members = ReadMembers(opening, data.SourceKey); }
-                catch { continue; }
-                if (!members.Contains(a.SourceKey) || !members.Contains(b.SourceKey)) continue;
+                // Review is based on the current physical coverage, including older
+                // individual cuts. Member metadata still governs replacement elsewhere.
                 var corners = opening.BoundaryRect;
                 if (corners.Count != 2) continue;
                 var center = (corners[0] + corners[1]) / 2;
@@ -115,10 +114,16 @@ namespace Hatco.PrecastManholeManager.Services
                     CutWidthOverrideMm = UnitUtil.FtToMm(Math.Abs(delta.DotProduct(direction))),
                     CutHeightOverrideMm = UnitUtil.FtToMm(Math.Abs(delta.Z)) };
                 string why;
-                if (Contains(actual, a, direction.X, direction.Y) && Contains(actual, b, direction.X, direction.Y) &&
-                    OpeningFitValidationService.TryValidate(doc, actual, out why)) return true;
+                if (OpeningFitValidationService.TryValidate(doc, actual, out why)) verifiedCuts.Add(actual);
             }
-            return false;
+            return CoversPair(verifiedCuts, a, b, direction.X, direction.Y);
+        }
+
+        internal static bool CoversPair(IEnumerable<PenetrationRecord> cuts, PenetrationRecord a, PenetrationRecord b, double dx, double dy)
+        {
+            if (a.HostWallId != b.HostWallId) return false;
+            var physical = cuts.ToList();
+            return physical.Any(c => Contains(c, a, dx, dy)) && physical.Any(c => Contains(c, b, dx, dy));
         }
 
         private static PenetrationRecord Union(PenetrationRecord a, PenetrationRecord b, double dx, double dy)
