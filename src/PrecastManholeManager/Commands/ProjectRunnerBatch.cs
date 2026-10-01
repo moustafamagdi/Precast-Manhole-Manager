@@ -21,6 +21,8 @@ namespace Hatco.PrecastManholeManager.Commands
             var doc = uidoc.Document;
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModelInCloud || doc.IsModifiable)
                 throw new InvalidOperationException("Run on an editable local RVT. For a cloud model, open a local detached copy first.");
+            if (string.IsNullOrWhiteSpace(doc.PathName) || doc.IsDetached)
+                throw new InvalidOperationException("Save the current model to its intended RVT path before running. The tool saves in place and does not create another RVT.");
             if (double.IsNaN(clearance) || double.IsInfinity(clearance) || clearance < 0)
                 throw new InvalidOperationException("Invalid clearance.");
             var templates = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
@@ -45,26 +47,22 @@ namespace Hatco.PrecastManholeManager.Commands
             foreach (var row in numbering.Rows)
                 BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
             string folder = Path.Combine(Path.GetDirectoryName(log.LogPath), "Batch_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0,6));
-            string output = Path.Combine(folder, "Manhole_Batch_Results.rvt");
+            string output = doc.PathName;
             var ask = new TaskDialog("Generate / Update All") {
                 MainInstruction = "Run " + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
                     "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
                     "Stage 1 prepares and saves body views on sheets for all identifiable manholes. Stage 2 attempts openings; failed cuts retain the prepared views for manual completion.\n" +
                     "Missing internal IDs will be assigned. Repaired issues are checked again. Virtual-only crossings remain deferred.\n" +
-                    "A separate RVT copy will become the active document. Saves occur every 10 manholes or 5 minutes and at completion. No synchronization to the original central model.\n" +
-                    (doc.IsWorkshared ? "The output is a NEW independent central model.\n" : "") +
-                    "Output: " + output + "\n\nStart now, then leave Revit open. Stop is available between manholes.",
+                    "Changes are saved IN THE CURRENT RVT every 10 manholes or 5 minutes and at completion. No new RVT is created.\n" +
+                    (doc.IsWorkshared ? "Uses Save only; Synchronize with Central is not performed.\n" : "") +
+                    "Current RVT: " + output + "\n\nStart now, then leave Revit open. Stop is available between manholes.",
                 CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
                 DefaultButton = TaskDialogResult.No };
             if (ask.Show() != TaskDialogResult.Yes) return;
             Directory.CreateDirectory(folder);
-            using (var options = new SaveAsOptions { OverwriteExistingFile = false, MaximumBackups = 2 })
-            {
-                if (doc.IsWorkshared)
-                    options.SetWorksharingOptions(new WorksharingSaveAsOptions { SaveAsCentral = true });
-                doc.SaveAs(output, options);
-            }
+            doc.Save(new SaveOptions());
+            log.Info("BATCH SAVE IN PLACE: " + output);
             string report = Path.Combine(folder, "RunReport.csv");
             string summaryPath = Path.Combine(folder, "RunSummary.txt");
             int processed = 0, committed = 0, review = 0, dimensionReview = 0, savedThrough = 0;
