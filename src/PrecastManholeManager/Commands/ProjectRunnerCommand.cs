@@ -62,6 +62,11 @@ namespace Hatco.PrecastManholeManager.Commands
                                     doc, window.ClearanceMm, log));
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
+                            else if (window.Action == ProjectAction.SheetsAll)
+                            {
+                                RunUnattended(input.Application, log, window.ClearanceMm, sheetsOnly: true);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.ProductionAll)
                             {
                                 RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration);
@@ -103,6 +108,8 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.DraftSheet)
                                 GenerateDraftSheet(uiDoc,
                                     window.SelectedManhole, log);
+                            else if (window.Action == ProjectAction.SheetOnly)
+                                PrepareSelectedSheet(uiDoc, window.SelectedManhole, log);
                             else if (window.Action == ProjectAction.ProductionOne)
                                 GenerateProductionManhole(uiDoc,
                                     window.SelectedManhole, log, window.ClearanceMm);
@@ -334,15 +341,6 @@ namespace Hatco.PrecastManholeManager.Commands
         {
             Document doc = uiDoc.Document;
             Element foundation = Resolve(doc, selected);
-            // Never turn unresolved issues into a fabrication document.
-            ManholeReviewIssue existing = ManholeReviewRegistry.Load(doc)
-                .FirstOrDefault(x => x.FoundationUniqueId ==
-                    foundation.UniqueId && x.Status == "OPEN");
-            if (existing != null)
-                throw new InvalidOperationException(
-                    "Manhole is isolated: " + existing.Reason +
-                    ". Select a clean prototype first.");
-
             VirtualFoundationResult footprint =
                 new VirtualFoundationRecoveryService(doc, log)
                     .Analyze(foundation);
@@ -353,22 +351,6 @@ namespace Hatco.PrecastManholeManager.Commands
                     null, "GEOMETRY", log);
                 throw new InvalidOperationException(
                     "Four-wall footprint needs review: " + footprint.Reason);
-            }
-
-            OpeningResetAuditResult audit =
-                OpeningResetAuditService.Audit(doc, footprint.Walls, log);
-            if (audit.RequiresManualReview)
-            {
-                ManholeReviewRegistry.Upsert(doc, foundation,
-                    "Draft blocked by existing wall cuts: " +
-                    audit.ProfileEditedWalls + " edited profiles; " +
-                    audit.NativeUnmanaged + " manual openings; " +
-                    audit.VoidCutRelations + " void cut relations.",
-                    footprint.Walls.Select(w => w.Id.IntegerValue),
-                    "REQUIRES CLEANUP", log);
-                throw new InvalidOperationException(
-                    "Selected manhole has old/manual cuts. Choose " +
-                    "a cleaner prototype from the project list.");
             }
 
             // Draft geometry only. Never modify foundations, wall sketches,

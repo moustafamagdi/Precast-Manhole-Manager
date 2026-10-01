@@ -20,6 +20,14 @@ namespace Hatco.PrecastManholeManager.Services
         internal const int RowsPerSheet = 6;
         private static readonly Guid Id = new Guid("EE82A896-0A1D-4D53-A813-85940C28287B");
         private static readonly Guid LegacyThreeRowId = new Guid("C2CA9C23-70BC-493C-9C2D-32701CB0A046");
+        internal static void ForgetCopiedReservation(Element foundation)
+        {
+            foreach (var id in new[] { Id, LegacyThreeRowId })
+            {
+                var schema = Schema.Lookup(id);
+                if (schema != null) foundation.DeleteEntity(schema);
+            }
+        }
         private static Schema Storage()
         {
             var schema = Schema.Lookup(Id);
@@ -54,7 +62,8 @@ namespace Hatco.PrecastManholeManager.Services
             return name != null && name.StartsWith("MH-",StringComparison.OrdinalIgnoreCase) &&
                 int.TryParse(name.Substring(3),out n) ? n : int.MaxValue;
         }
-        internal static void Reserve(Document doc, IList<Element> foundations, FamilySymbol titleblock, DiagnosticLogger log)
+        internal static void Reserve(Document doc, IList<Element> foundations, FamilySymbol titleblock, DiagnosticLogger log,
+            ISet<string> reserveOnly = null)
         {
             var schema = Storage();
             var occupied = new HashSet<int>();
@@ -79,6 +88,7 @@ namespace Hatco.PrecastManholeManager.Services
             foreach (Element foundation in foundations)
             {
                 BatchSheetSlot slot;
+                if (reserveOnly != null && !reserveOnly.Contains(foundation.UniqueId)) continue;
                 existing.TryGetValue(foundation.UniqueId, out slot);
                 if (slot?.Note != null)
                 {

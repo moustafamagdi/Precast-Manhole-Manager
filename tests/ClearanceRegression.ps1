@@ -209,3 +209,30 @@ Assert-That (!$lowerMethod.Invoke($null,[object[]]@(1100.0,1550.0,1000.0,2000.0)
 $baseOffset = $repairType.GetMethod('BaseOffset', [Reflection.BindingFlags]'NonPublic,Static')
 Assert-That ([Math]::Abs($baseOffset.Invoke($null,[object[]]@(583846.824,585600.0)) + 1753.176) -lt 0.00001) 'Base offset uses the target and level in the same project coordinate frame'
 Assert-That ($baseOffset.Invoke($null,[object[]]@(-150.0,200.0)) -eq -350) 'Base offset handles levels and targets on opposite sides of project zero'
+
+# Copied foundations retain legacy names; allocation must preserve originals
+# and reserve every existing number before assigning duplicates/new bases.
+$planType = $assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeNumberingPlan')
+$rowType = $assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeNumberingRow')
+$numberPlan = [Activator]::CreateInstance($planType, $true)
+foreach ($pair in @(@(30,'MH-148'), @(10,'MH-148'), @(40,''), @(20,'MH-001'), @(50,'mh-148'))) {
+    $row = [Activator]::CreateInstance($rowType, $true)
+    $row.FoundationId = $pair[0]
+    $row.PreviousName = $pair[1]
+    $numberPlan.Rows.Add($row)
+}
+$allocator = $assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeNumberingService').GetMethod('AllocateNames', [Reflection.BindingFlags]'NonPublic,Static')
+[void]$allocator.Invoke($null, @($numberPlan))
+$original = $numberPlan.Rows | Where-Object FoundationId -eq 10
+$copy = $numberPlan.Rows | Where-Object FoundationId -eq 30
+$newBase = $numberPlan.Rows | Where-Object FoundationId -eq 40
+Assert-That ($original.ProposedName -eq 'MH-148' -and !$original.NewNumber) 'Earliest legacy foundation retains its internal identity regardless of input order'
+Assert-That ($copy.ProposedName -eq 'MH-002' -and $copy.NewNumber) 'Copied name gets a fresh number without taking an existing number'
+Assert-That ($newBase.ProposedName -eq 'MH-003') 'Unnumbered bases and copies share one collision-free allocation'
+Assert-That (@($numberPlan.Rows.ProposedName | Sort-Object -Unique).Count -eq 5) 'Case-insensitive duplicates are resolved to unique names'
+$firstAllocation = $numberPlan.Rows.ProposedName -join '|'
+[void]$allocator.Invoke($null, @($numberPlan))
+Assert-That (($numberPlan.Rows.ProposedName -join '|') -eq $firstAllocation) 'Repeating the same numbering preview is deterministic'
+foreach ($row in $numberPlan.Rows) { $row.PreviousName = $row.ProposedName }
+[void]$allocator.Invoke($null, @($numberPlan))
+Assert-That ($numberPlan.NewlyNumbered -eq 0) 'Already repaired identities stay unchanged on subsequent runs'

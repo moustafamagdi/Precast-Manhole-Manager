@@ -30,7 +30,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     "before making production cuts.");
 
             string id = (ManholeIdentityStore.Read(foundation) ?? "").Trim();
-            if (id.Length == 0)
+            if (id.Length == 0 && !existingOnly)
                 throw new InvalidOperationException(
                     "Run Assign Internal IDs first. " +
                     "Internal MH-### names are required before production.");
@@ -46,8 +46,12 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException("Clearance must be a finite non-negative value.");
             var slot = BatchSheetLayoutService.Find(doc, foundation);
             ViewSheet existingSheet = slot?.Sheet ?? FirstProductionSheetService.FindExisting(doc, foundation);
-            if (existingOnly && (slot == null || !BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot)))
-                throw new InvalidOperationException("Existing-only mode requires the plan and W1-W4 on the reserved sheet. No views will be created.");
+            if (id.Length == 0) id = "Foundation " + foundation.Id.IntegerValue;
+            string viewPrefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
+            var availableViews = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
+                .Where(v => !v.IsTemplate).Select(v => v.Name).ToHashSet();
+            bool dimensionViewsReady = availableViews.Contains(viewPrefix + "_PLAN") &&
+                Enumerable.Range(1, 4).All(i => availableViews.Contains(viewPrefix + "_OUT_W" + i));
             // Preserve placed views and layout; only the opening table is refreshed on reruns.
             string prefix = "MH_" + foundation.Id.IntegerValue +
                 "_PROD_2D";
@@ -64,7 +68,7 @@ namespace Hatco.PrecastManholeManager.Commands
                      x.Name == prefix + "_OUT_W3" ||
                      x.Name == prefix + "_OUT_W4") &&
                      onSheet.Contains(x.Id.IntegerValue));
-            if (placed && existingSheet == null)
+            if (!existingOnly && placed && existingSheet == null)
                 throw new InvalidOperationException(
                     "The production Plan/Sections already appear on a " +
                     "sheet. Existing manual layouts are protected.");
@@ -241,7 +245,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         throw new InvalidOperationException(
                             "Native opening transaction failed: " +
                             applied.Error);
-                    if (existingOnly)
+                    if (existingOnly && slot != null)
                     using (var noteTx = new Transaction(doc, "HATCO - Update Existing Opening Note"))
                     {
                         noteTx.Start();
@@ -318,7 +322,9 @@ namespace Hatco.PrecastManholeManager.Commands
             string dimensionStatus;
             bool dimensionsComplete = false;
             bool layoutNeedsReview = false;
-            try { dimensionStatus = OpeningDimensionService.Generate(doc, foundation, log, ok => dimensionsComplete = ok); }
+            bool dimensionsDeferred = existingOnly && !dimensionViewsReady;
+            try { dimensionStatus = dimensionsDeferred ? "Dimensions deferred: prepare PLAN and W1-W4 when required." :
+                OpeningDimensionService.Generate(doc, foundation, log, ok => dimensionsComplete = ok); }
             catch (Exception ex)
             {
                 log.Error("Dimension stage needs review; openings and sheet remain committed.", ex);
@@ -353,9 +359,9 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             string summary = "COMMITTED: " + id + " | New=" + applied.NewOpenings +
                 " Updated=" + applied.ManagedUpdated + " Unchanged=" + applied.ManagedUnchanged +
-                " | Sheet=" + newSheet.SheetNumber + (dimensionsComplete ? "" : " | DIMENSION REVIEW") + "\n" + dimensionStatus;
+                " | Sheet=" + (newSheet?.SheetNumber ?? "NONE") + (dimensionsDeferred ? " | DIMENSIONS DEFERRED" : dimensionsComplete ? "" : " | DIMENSION REVIEW") + "\n" + dimensionStatus;
             var result = new ProductionManholeResult(true, dimensionsComplete, summary)
-            { LayoutNeedsReview = layoutNeedsReview };
+            { LayoutNeedsReview = layoutNeedsReview, DimensionsDeferred = dimensionsDeferred };
             if (unattended || existingOnly) return result;
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",

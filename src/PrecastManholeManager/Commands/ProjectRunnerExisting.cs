@@ -33,23 +33,23 @@ namespace Hatco.PrecastManholeManager.Commands
                 {
                     var foundation = Resolve(doc, item);
                     var slot = BatchSheetLayoutService.Find(doc, foundation);
-                    if (slot != null && BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot))
+                    if (!dimensionsOnly || (slot != null && BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot)))
                         eligible.Add(item);
                     else log.Info("EXISTING ONLY SKIP Foundation=" + item.FoundationId + " Missing prepared plan/sections on reserved sheet.");
                 }
                 catch (Exception ex) { log.Error("EXISTING ONLY SKIP Foundation=" + item.FoundationId, ex); }
             }
             if (eligible.Count == 0)
-                throw new InvalidOperationException("No complete prepared rows found. Requires existing PLAN and W1-W4 on the reserved six-row sheet.");
+                throw new InvalidOperationException("No eligible manholes found. The dimensions-only batch requires prepared rows.");
             var ask = new TaskDialog("Existing Manholes") {
-                MainInstruction = (repairLowBase ? "Repair lower-wall opening failures in " : dimensionsOnly ? "Update dimensions for " : "Update openings and dimensions for ") + eligible.Count + " prepared manhole(s)?",
+                MainInstruction = (repairLowBase ? "Repair lower-wall opening failures in " : dimensionsOnly ? "Update dimensions for " : "Update openings and dimensions for ") + eligible.Count + " manhole(s)?",
                 MainContent = (scopeDescription == null ? "" : scopeDescription + "\n") +
                     (repairLowBase ? "LOWER BASE REPAIR: lower only bases with openings failing at the wall bottom. Leave 100 mm below the lowest opening including clearance, preserve base thickness and wall tops, extend all four walls. Temporarily unpin and restore original pin states. Update existing view extents. Any opening/dimension failure rolls the entire repair back.\n" : "") +
                     "Eligible: " + eligible.Count + "; skipped: " + (source.Count - eligible.Count) + " (missing prepared views/row).\n" +
                     "Targets: " + string.Join(", ", eligible.Take(20).Select(x => x.ManholeName)) + (eligible.Count > 20 ? ", ..." : "") + "\n" +
                     "No new views or sheets; existing viewport positions are preserved.\n" +
                     (dimensionsOnly ? "Existing cuts remain unchanged.\n" : "Pipes and ducts only. Clearance per side: " + clearance + " mm. Includes verified end connectors touching/entering the wall or up to 150 mm before it (approach within 15 degrees). Current geometry is validated again, including recorded review cases. Unsafe cuts are skipped.\n") +
-                    "Hidden dimensions and annotation crop problems are reported for review.\n" +
+                    "Missing production views defer dimensions; they do not block openings. Hidden dimensions and annotation crop problems in existing views are reported for review.\n" +
                     "Saves in the CURRENT RVT every 10 items or 5 minutes, and at completion. No Synchronize with Central.\n" + doc.PathName,
                 CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,
                 DefaultButton = TaskDialogResult.No
@@ -89,6 +89,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         {
                             bool ok = false;
                             bool noRepair = false;
+                            bool dimensionsDeferred = false;
                             if (dimensionsOnly)
                                 details = OpeningDimensionService.Generate(doc, Resolve(doc, item), log, value => ok = value);
                             else
@@ -96,10 +97,11 @@ namespace Hatco.PrecastManholeManager.Commands
                                 var result = repairLowBase ? RepairAndGenerate(app.ActiveUIDocument, item, log, clearance) :
                                     GenerateProductionManhole(app.ActiveUIDocument, item, log, clearance, unattended: true, existingOnly: true);
                                 noRepair = repairLowBase && !result.Committed;
-                                ok = result.Committed && result.DimensionsComplete;
+                                dimensionsDeferred = result.DimensionsDeferred;
+                                ok = result.Committed && (result.DimensionsComplete || dimensionsDeferred);
                                 details = result.Summary;
                             }
-                            status = noRepair ? "SKIPPED" : ok ? "COMPLETE" : "DIMENSION REVIEW";
+                            status = noRepair ? "SKIPPED" : dimensionsDeferred ? "OPENINGS COMPLETE" : ok ? "COMPLETE" : "DIMENSION REVIEW";
                             if (noRepair) skipped++; else if (ok) complete++; else review++;
                         }
                         catch (Exception ex)

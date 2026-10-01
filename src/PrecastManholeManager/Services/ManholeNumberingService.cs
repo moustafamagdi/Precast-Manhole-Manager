@@ -59,18 +59,16 @@ namespace Hatco.PrecastManholeManager.Services
             if (doc == null)
                 throw new ArgumentNullException(nameof(doc));
             var plan = new ManholeNumberingPlan();
-            var used = new HashSet<string>(
-                StringComparer.OrdinalIgnoreCase);
+
             foreach (Element foundation in GetFoundations(doc))
             {
                 // An existing INTERNAL number is always preserved.
                 // Revit Mark and other naming schemes are reference only.
                 string internalName =
                     (ManholeIdentityStore.Read(foundation) ?? "").Trim();
-                if (internalName.Length > 0 && !used.Add(internalName))
-                    plan.Errors.Add("Duplicate INTERNAL name '" +
-                        internalName + "' on foundation " +
-                        foundation.Id.IntegerValue + ".");
+                // Legacy storage was copied with the base. Keep the earliest
+                // foundation's number and assign fresh numbers to later duplicates.
+
                 var mark = foundation.get_Parameter(
                     BuiltInParameter.ALL_MODEL_MARK);
                 plan.Rows.Add(new ManholeNumberingRow
@@ -84,11 +82,23 @@ namespace Hatco.PrecastManholeManager.Services
                 });
             }
 
+            AllocateNames(plan);
+            return plan;
+        }
+
+        internal static void AllocateNames(ManholeNumberingPlan plan)
+        {
+            var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in plan.Rows.OrderBy(r => r.FoundationId))
+            {
+                row.NewNumber = string.IsNullOrWhiteSpace(row.PreviousName) || !used.Add(row.PreviousName);
+                row.ProposedName = row.NewNumber ? "" : row.PreviousName;
+            }
             // ElementId is ONLY an initial sorting key. Once assigned,
             // numbers persist against the foundation's stable UniqueId.
             int next = 1;
             foreach (ManholeNumberingRow row in plan.Rows
-                .Where(x => x.NewNumber))
+                .Where(x => x.NewNumber).OrderBy(x => x.FoundationId))
             {
                 string candidate;
                 do
@@ -100,7 +110,6 @@ namespace Hatco.PrecastManholeManager.Services
                 } while (!used.Add(candidate));
                 row.ProposedName = candidate;
             }
-            return plan;
         }
 
         public static string ExportPreview(ManholeNumberingPlan plan)
@@ -181,7 +190,16 @@ namespace Hatco.PrecastManholeManager.Services
                             throw new InvalidOperationException(
                                 "Foundation no longer matches numbering " +
                                 row.FoundationId);
-                        if (!row.NewNumber) continue;
+                        if (!row.NewNumber)
+                        {
+                            ManholeIdentityStore.Write(foundation, row.ProposedName);
+                            continue;
+                        }
+                        if (!string.IsNullOrWhiteSpace(row.PreviousName) || ManholeIdentityStore.HasForeignOwner(foundation))
+                        {
+                            BatchSheetLayoutService.ForgetCopiedReservation(foundation);
+                            log.Warn("COPIED BASE REIDENTIFIED Foundation=" + row.FoundationId + " Previous=" + row.PreviousName + " New=" + row.ProposedName);
+                        }
 
                         // Capture the previous auto-generated view title
                         // source before persisting our new internal name.

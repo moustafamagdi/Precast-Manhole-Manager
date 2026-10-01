@@ -15,7 +15,7 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     public sealed partial class ProjectRunnerCommand
     {
-        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true)
+        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false)
         {
             var uidoc = app.ActiveUIDocument;
             var doc = uidoc.Document;
@@ -27,11 +27,11 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException("Invalid clearance.");
             var templates = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
                 .Where(v=>v.IsTemplate).Select(v=>v.Name).ToList();
-            foreach (string name in new[] { "MH_PLAN", "MH_SEC", "MH_3D" })
+            foreach (string name in (sheetsOnly ? new[] { "MH_PLAN", "MH_SEC" } : new[] { "MH_PLAN", "MH_SEC", "MH_3D" }))
                 if (!templates.Any(n=>n.Equals(name,StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidOperationException("Missing template " + name);
             ManholeViewTitleService.RequiredSectionType(doc);
-            if (!new FilteredElementCollector(doc).OfClass(typeof(DimensionType)).Cast<DimensionType>()
+            if (!sheetsOnly && !new FilteredElementCollector(doc).OfClass(typeof(DimensionType)).Cast<DimensionType>()
                 .Any(t=>t.StyleType == DimensionStyleType.Linear && t.Name.Equals("HTC_DIM_1.8mm",StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Missing linear dimension type HTC_DIM_1.8mm.");
             var titleblock = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks)
@@ -45,16 +45,17 @@ namespace Hatco.PrecastManholeManager.Commands
             if (numbering.Errors.Count > 0) throw new InvalidOperationException(string.Join("\n", numbering.Errors));
             if (numbering.Rows.Count == 0) throw new InvalidOperationException("No eligible manholes found.");
             foreach (var row in numbering.Rows)
-                BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
+                if (!row.NewNumber) BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
             string folder = Path.Combine(Path.GetDirectoryName(log.LogPath), "Batch_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0,6));
             string output = doc.PathName;
             var ask = new TaskDialog("Generate / Update All") {
-                MainInstruction = "Run " + numbering.Rows.Count + " manholes unattended?",
+                MainInstruction = (sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
+                    (sheetsOnly ? "SHEETS ONLY: creates/reuses body views and reserved rows. No opening pass; existing physical cuts remain unchanged.\n" : "") +
                     (timingDiagnostic ? "TIMING DIAGNOSTIC: at most 3 new documentation attempts, no opening pass. Extra regeneration=" + extraRegeneration + ". Saves changes in the current RVT.\n" : "") +
                     (timingDiagnostic && cropOrderExperiment ? "EXPERIMENT: set plan crop bounds before activating the crop.\n" : "") +
                     "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
-                    "Stage 1 prepares and saves body views on sheets for all identifiable manholes. Stage 2 attempts openings; failed cuts retain the prepared views for manual completion.\n" +
+                    (sheetsOnly ? "Prepares and saves body views on sheets; opening problems do not block documentation.\n" : "Stage 1 prepares and saves body views on sheets for all identifiable manholes. Stage 2 attempts openings; failed cuts retain the prepared views for manual completion.\n") +
                     "Missing internal IDs will be assigned. Repaired issues are checked again. Verified end connectors touching/entering a wall or up to 150 mm before it are included (approach within 15 degrees).\n" +
                     "Changes are saved IN THE CURRENT RVT every 10 manholes or 5 minutes and at completion. No new RVT is created.\n" +
                     (doc.IsWorkshared ? "Uses Save only; Synchronize with Central is not performed.\n" : "") +
@@ -113,7 +114,8 @@ namespace Hatco.PrecastManholeManager.Commands
                     }
                     PrepareBatchDocumentation(doc, items, log, progress, writer, documented, timingDiagnostic, cropOrderExperiment, extraRegeneration);
                     if (timingDiagnostic) stopped = "Timing diagnostic finished. Opening stage was not run. See the .performance.csv beside the log.";
-                    foreach (var item in timingDiagnostic ? new List<SimpleManholeItem>() : items)
+                    if (sheetsOnly) stopped = progress.CancelRequested ? "Sheets-only pass stopped by user; saved progress retained." : "Sheets-only pass finished. Opening stage was not run. See VIEWS statuses in the report.";
+                    foreach (var item in (timingDiagnostic || sheetsOnly) ? new List<SimpleManholeItem>() : items)
                     {
                         progress.Update(processed, items.Count, "Stage 2/2 - openings: " + item.ManholeName + "\nSaved through opening item " + savedThrough + "\n" + output);
                         if (progress.CancelRequested) { stopped = "Stopped by user between manholes."; break; }
@@ -191,9 +193,9 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             string summary = (stopped.Length == 0 ? "Run completed." : stopped) +
                 "\nManholes with prepared views: " + documented.Count + " / " + numbering.Rows.Count +
-                "\nProcessed: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
+                (sheetsOnly ? "\nOpening stage: not requested." : "\nProcessed openings: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
                 "\nReview: " + review + "\nSaved through item: " + savedThrough +
-                "\nCommitted with dimension review: " + dimensionReview +
+                "\nCommitted with dimension review: " + dimensionReview) +
                 "\nRVT: " + output + "\nReport: " + report + "\nLog: " + log.LogPath;
             File.WriteAllText(summaryPath,summary);
             TaskDialog.Show("Unattended Run Results",summary);

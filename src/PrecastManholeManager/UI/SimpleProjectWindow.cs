@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -85,8 +85,8 @@ namespace Hatco.PrecastManholeManager.UI
 
             var tabs = new TabControl { Height = 185, Margin = new Thickness(0, 0, 0, 12) };
             top.Children.Add(tabs);
-            var openings = TaskPanel(tabs, "Openings", "Update openings and dimensions on prepared manholes. Keeps existing sheets and viewport positions.");
-            var openingScope = Scope(openings, "Selected row", "Pick bases in Revit", "Current model view", "All prepared manholes");
+            var openings = TaskPanel(tabs, "Openings", "Cut/update openings with or without sheets. Dimensions update when all five production views exist; otherwise they are deferred. No new views or sheets.");
+            var openingScope = Scope(openings, "Selected row", "Pick bases in Revit", "Current model view", "All detected manholes");
             var runOpenings = Button("Run Openings", 190, openings);
             runOpenings.Click += (s, e) => {
                 var actions = new[] { ProjectAction.ExistingOne, ProjectAction.ExistingPicked, ProjectAction.ExistingActiveView, ProjectAction.ExistingAll };
@@ -97,7 +97,7 @@ namespace Hatco.PrecastManholeManager.UI
             var dimensionScope = Scope(dimensionPanel, "Selected row", "All prepared manholes");
             Button dimensions = Button("Update Dimensions", 190, dimensionPanel);
 
-            var repairs = TaskPanel(tabs, "Base Repair", "Repair openings below the wall: lower the base, leave 100 mm below the opening, keep wall tops and restore pins. Prepared manholes only.");
+            var repairs = TaskPanel(tabs, "Base Repair", "Repair openings below the wall: lower the base, leave 100 mm below the opening, keep wall tops and restore pins. Sheets are not required.");
             var repairScope = Scope(repairs, "Pick bases in Revit", "Current model view");
             var runRepair = Button("Repair Low Bases", 190, repairs);
             runRepair.Click += (s, e) => Choose(repairScope.SelectedIndex == 0 ? ProjectAction.RepairPicked : ProjectAction.RepairActiveView, false);
@@ -105,7 +105,9 @@ namespace Hatco.PrecastManholeManager.UI
             var sheets = TaskPanel(tabs, "Views & Sheets", "Create missing documentation or run the full workflow. Generate / Update All can create views and sheets and arrange prepared rows.");
             var sheetButtons = new WrapPanel(); sheets.Children.Add(sheetButtons);
             Button draft = Button("Views - Selected", 180, sheetButtons);
-            Button produce = Button("Generate - Selected", 180, sheetButtons);
+            Button produce = Button("Prepare Sheet - Selected", 190, sheetButtons);
+            Button sheetsAll = Button("Prepare Sheets - All", 190, sheetButtons);
+            sheetsAll.Click += (s, e) => Choose(ProjectAction.SheetsAll, false);
             Button batch = Button("Generate / Update All", 190, sheetButtons);
             batch.Click += (s, e) => Choose(ProjectAction.ProductionAll, false);
 
@@ -205,14 +207,6 @@ namespace Hatco.PrecastManholeManager.UI
                     MessageBox.Show(this, "Select one manhole first.");
                     return;
                 }
-                if (row.State == "REVIEW")
-                {
-                    MessageBox.Show(this,
-                        "This manhole is isolated for review. Choose " +
-                        "a manhole with no recorded issues for the " +
-                        "first draft prototype.");
-                    return;
-                }
                 if (MessageBox.Show(this,
                     "Create a real Revit FLOOR PLAN plus four " +
                     "SECTIONS (W1-W4) for this ONE manhole? " +
@@ -224,25 +218,7 @@ namespace Hatco.PrecastManholeManager.UI
                     return;
                 Choose(ProjectAction.DraftSheet, true);
             };
-            produce.Click += (sender, args) =>
-            {
-                SimpleManholeItem row = _grid.SelectedItem as SimpleManholeItem;
-                if (row == null)
-                {
-                    MessageBox.Show(this, "Select ONE manhole first.");
-                    return;
-                }
-                if (row.State == "REVIEW")
-                {
-                    MessageBox.Show(this, "Resolve this manhole's recorded " +
-                        "review issues before production.");
-                    return;
-                }
-                // Detailed scan runs AFTER the dialog closes. The user
-                // receives actual sizes/counts plus a second approval
-                // dialog before any physical Revit wall changes.
-                Choose(ProjectAction.ProductionOne, true);
-            };
+            produce.Click += (s, e) => Choose(ProjectAction.SheetOnly, true);
             dimensions.Click += (sender, args) => Choose(dimensionScope.SelectedIndex == 0 ? ProjectAction.DimensionOne : ProjectAction.ExistingDimensions, dimensionScope.SelectedIndex == 0);
             six.Click += (sender, args) =>
             {

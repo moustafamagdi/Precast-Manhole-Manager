@@ -37,13 +37,14 @@ namespace Hatco.PrecastManholeManager.Commands
                             throw new InvalidOperationException("A newly detected opening needs a deeper base repair; no changes committed.");
                     ExpandRepairedViews(doc, foundation, UnitUtil.MmToFt(drop), log);
                     var result = GenerateProductionManhole(uidoc, item, log, clearance, unattended: true, existingOnly: true);
-                    if (!result.Committed || !result.DimensionsComplete)
+                    if (!result.Committed || (!result.DimensionsComplete && !result.DimensionsDeferred))
                         throw new InvalidOperationException("Repair rolled back because openings/dimensions are incomplete. " + result.Summary);
                     if (group.Assimilate() != TransactionStatus.Committed)
                         throw new InvalidOperationException("Repair group did not commit.");
                     log.Info("BASE REPAIR COMMITTED Foundation=" + foundation.Id.IntegerValue + " DropMm=" + drop.ToString("0.###"));
-                    return new ProductionManholeResult(true, true, "BASE LOWERED " + drop.ToString("0.###") +
-                        " mm; gap below lowest opening=100 mm; original pin states restored.\n" + result.Summary);
+                    return new ProductionManholeResult(true, result.DimensionsComplete, "BASE LOWERED " + drop.ToString("0.###") +
+                        " mm; gap below lowest opening=100 mm; original pin states restored.\n" + result.Summary)
+                        { DimensionsDeferred = result.DimensionsDeferred };
                 }
                 catch
                 {
