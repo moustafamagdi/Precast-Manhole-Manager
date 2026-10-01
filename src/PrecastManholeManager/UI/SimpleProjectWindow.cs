@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -26,6 +26,7 @@ namespace Hatco.PrecastManholeManager.UI
         private static bool _lastReviewFilter;
         private static int? _lastFoundation;
         public bool MissingOpeningsOnly { get; private set; }
+        public bool AutomationMergeOpenings { get; private set; }
         private readonly DataGrid _grid;
         private readonly TextBox _filter;
         private readonly TextBox _clearance;
@@ -102,6 +103,9 @@ namespace Hatco.PrecastManholeManager.UI
             check.Click += (sender, args) => Choose(new[] { ProjectAction.CleanScan, ProjectAction.RecheckReviewOnly, ProjectAction.RecheckOne }[checkScope.SelectedIndex], checkScope.SelectedIndex == 2);
             var inspect = Button("Inspect Selected", 160, reviewButtons);
             inspect.Click += (sender, args) => Choose(ProjectAction.ReviewOne, true);
+            var ignore = Button("Ignore / Restore Review", 195, reviewButtons);
+            ignore.ToolTip = "Selected row: OPEN becomes IGNORED; IGNORED is restored to OPEN. Same reasons remain ignored; changed reasons reopen. Geometry checks are never bypassed. Uncheck the review-only filter to see ignored rows.";
+            ignore.Click += (sender, args) => Choose(ProjectAction.ToggleIgnoreReview, true);
             var reviewViewScope = Choice(reviewPanel, "3D views:", "Selected row", "All review cases");
             var reviewView = Button("Create / Open Review 3D", 225, reviewPanel);
             reviewView.Click += (sender, args) => Choose(reviewViewScope.SelectedIndex == 0 ? ProjectAction.Make3D : ProjectAction.Review3DAll, reviewViewScope.SelectedIndex == 0);
@@ -136,6 +140,13 @@ namespace Hatco.PrecastManholeManager.UI
             openings.Children.Add(new Expander { Header = "Base repair", Content = repairs, Margin = new Thickness(0, 6, 0, 0) });
 
             var drawings = TaskPanel(tabs, "3. Drawings", "Review status does not block sheet preparation. Existing views are reused; moved manholes still need their view extents checked.");
+            var automationRow = new WrapPanel(); drawings.Children.Add(automationRow);
+            var automate = Button("Full Automation - All", 210, automationRow);
+            var automationMerge = new CheckBox { Content = "Merge overlapping openings", Margin = new Thickness(0, 8, 0, 0) };
+            automationRow.Children.Add(automationMerge);
+            automate.ToolTip = "All manholes: sheets, create/update openings, recheck, dimensions and presentation. Saves current RVT. No automatic base repair, profile reset or moved-view refresh.";
+            automate.Click += (sender, args) => { AutomationMergeOpenings = automationMerge.IsChecked == true; Choose(ProjectAction.FullAutomation, false); };
+            drawings.Children.Add(new TextBlock { Text = "Full Automation includes opening changes and checkpoints in the current RVT.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
             var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All");
             drawingTask.Width = 350;
             var drawingHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
@@ -368,9 +379,11 @@ namespace Hatco.PrecastManholeManager.UI
         private void UpdateCounts()
         {
             int review = _all.Count(x => x.State == "REVIEW");
+            int ignored = _all.Count(x => x.State == "IGNORED");
             _counts.Text = "Detected: " + _all.Count +
                 "    |    For review: " + review +
-                "    |    No recorded issue: " + (_all.Count - review) +
+                "    |    Ignored: " + ignored +
+                "    |    No recorded issue: " + (_all.Count - review - ignored) +
                 "";
         }
 
@@ -398,7 +411,7 @@ namespace Hatco.PrecastManholeManager.UI
                 double.TryParse(_clearance.Text, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
-            if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
+            if (!valid && (requested == ProjectAction.FullAutomation || requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
                 requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
                 requested == ProjectAction.RepairPicked || requested == ProjectAction.RepairActiveView ||

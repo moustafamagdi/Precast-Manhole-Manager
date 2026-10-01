@@ -158,8 +158,8 @@ namespace Hatco.PrecastManholeManager.Services
                     TypeName = doc.GetElement(el.GetTypeId()).Name,
                     ManholeName = (ManholeIdentityStore.Read(el) ??
                         "NOT ASSIGNED").Trim(),
-                    State = flagged ? "REVIEW" : "NO ISSUE RECORDED",
-                    Problem = flagged ? issue.Reason : "",
+                    State = flagged ? "REVIEW" : found && issue.Status == "IGNORED" ? "IGNORED" : "NO ISSUE RECORDED",
+                    Problem = found && (flagged || issue.Status == "IGNORED") ? issue.Reason : "",
                     ViewName = found ? issue.ViewName : ""
                 });
             }

@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.Commands
     public sealed partial class ProjectRunnerCommand
     {
         private static ProductionManholeResult GenerateWallOpenings(UIDocument uidoc, SimpleManholeItem item,
-            DiagnosticLogger log, double clearance, bool merge, bool resetProfiles = false, bool missingOnly = false)
+            DiagnosticLogger log, double clearance, bool merge, bool resetProfiles = false, bool missingOnly = false, bool deferDimensions = false)
         {
             if (missingOnly) resetProfiles = false;
             var doc = uidoc.Document;
@@ -184,7 +184,8 @@ namespace Hatco.PrecastManholeManager.Commands
             if (!missingOnly && candidateCount == 0 && problems.Count == 0) problems.Add("No confirmed crossing or validated end connector within 150 mm; existing openings preserved.");
             bool dimensionsComplete = false, deferred = false;
             string dimensionStatus = "Dimensions unchanged: no opening groups committed.";
-            if (committedGroups > 0)
+            if (deferDimensions) { deferred = true; dimensionStatus = "Dimensions deferred to the dedicated automation phase."; }
+            if (committedGroups > 0 && !deferDimensions)
             {
                 string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
                 var names = new HashSet<string>(new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().Where(v => !v.IsTemplate).Select(v => v.Name));

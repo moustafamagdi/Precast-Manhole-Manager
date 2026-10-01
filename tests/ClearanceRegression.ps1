@@ -416,3 +416,24 @@ Assert-That (!(Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' 'MH_5503711_PROD_2D_OUT_
 Assert-That (!(Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' 'MH_5503857_DRAFT_2D_OUT_W1')) 'Draft marker is not mistaken for production marker'
 Assert-That (!(Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' 'MH_5503857_PROD_2D_OUT_W10')) 'W10 prefix does not match W1'
 Assert-That (!(Test-OwnMarker 'Manual PLAN' 'Manual_OUT_W1')) 'Manual plans are not managed by name similarity'
+
+$registry=$assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeReviewRegistry')
+$sameReason=$registry.GetMethod('SameReviewReason',[Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($sameReason.Invoke($null,@('W1: issue; W2: issue',' W2: issue ; W1: issue '))) 'Review reason ordering and whitespace do not reopen an ignored warning'
+Assert-That (!$sameReason.Invoke($null,@('W1: issue','W1: issue; MISSING OPENING W2'))) 'A newly added failure reopens ignored review'
+Assert-That (!$sameReason.Invoke($null,@('MISSING OPENING W1 Source=123','MISSING OPENING W1 Source=456'))) 'A different service is not covered by the previous ignore'
+Assert-That (!$sameReason.Invoke($null,@('opening 200 x 200','opening 300 x 200'))) 'A changed opening size is not covered by the previous ignore'
+
+
+$issueType=$assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeReviewIssue')
+$issue=[Activator]::CreateInstance($issueType,$true)
+$issue.FoundationUniqueId='test-foundation'; $issue.FoundationId=123
+$issue.Status='IGNORED'; $issue.Reason='MISSING OPENING W1'; $issue.Severity='RECHECK'
+$listType=$registry.GetMethod('SaveAt',[Reflection.BindingFlags]'NonPublic,Static').GetParameters()[1].ParameterType
+$values=[Activator]::CreateInstance($listType); $values.Add($issue)
+$tempRegister=Join-Path ([IO.Path]::GetTempPath()) ('mh-review-test-'+[Guid]::NewGuid().ToString('N')+'.tsv')
+try {
+    $registry.GetMethod('SaveAt',[Reflection.BindingFlags]'NonPublic,Static').Invoke($null,[object[]]@([string]$tempRegister,$values.PSObject.BaseObject))
+    $loaded=$registry.GetMethod('LoadAt',[Reflection.BindingFlags]'NonPublic,Static').Invoke($null,[object[]]@([string]$tempRegister))
+    Assert-That ($loaded.Count -eq 1 -and $loaded[0].Status -eq 'IGNORED' -and $loaded[0].Reason -eq $issue.Reason) 'Ignored review and its reason survive register reload'
+} finally { if(Test-Path -LiteralPath $tempRegister) { Remove-Item -LiteralPath $tempRegister } }

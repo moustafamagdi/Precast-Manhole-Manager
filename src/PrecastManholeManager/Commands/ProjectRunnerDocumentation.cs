@@ -14,7 +14,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // must leave the existing body views available for manual completion.
         private static void PrepareBatchDocumentation(Document doc,
             IList<SimpleManholeItem> items, DiagnosticLogger log,
-            BatchProgressWindow progress, StreamWriter writer, HashSet<int> ready, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true)
+            BatchProgressWindow progress, StreamWriter writer, HashSet<int> ready, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool fullAutomation = false)
         {
             int processed = 0;
             int diagnosticAttempts = 0;
@@ -23,7 +23,7 @@ namespace Hatco.PrecastManholeManager.Commands
             {
                 if (timingDiagnostic && diagnosticAttempts >= 3) break;
                 progress.Update(processed, items.Count,
-                    "Stage 1/2 - preparing sheets and views: " + item.ManholeName);
+                    (fullAutomation ? "Full automation 1/5 - sheets and views: " : "Stage 1/2 - preparing sheets and views: ") + item.ManholeName);
                 if (progress.CancelRequested) break;
                 Element foundation = null;
                 BatchSheetSlot slot = null;
@@ -93,7 +93,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     lastSave = DateTime.Now;
                 }
             }
-            if (!progress.CancelRequested) ManholeViewPresentationService.ApplyAll(doc, log, (done, total) =>
+            if (!progress.CancelRequested && !fullAutomation) ManholeViewPresentationService.ApplyAll(doc, log, (done, total) =>
             {
                 progress.Update(done, total, "Cleaning plan section marks and viewport types");
                 return !progress.CancelRequested;

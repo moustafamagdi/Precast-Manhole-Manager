@@ -34,7 +34,7 @@ namespace Hatco.PrecastManholeManager.Services
                 log.Info("RECHECK REVIEW ONLY Matched=" + items.Count + " Unavailable=" + unavailable);
                 if (openIds.Count == 0) return "No OPEN review cases in this model.";
             }
-            int passed = 0, review = 0, errors = 0;
+            int passed = 0, review = 0, errors = 0, ignored = 0;
             var report = new System.Text.StringBuilder("FoundationId,InternalId,Result,Details\r\n");
             log.WriteHeader(reviewOnly ? "RECHECK OPEN REVIEW CASES - NO MODEL CHANGES" : "CLEAN SCAN - ALL MANHOLES - NO MODEL CHANGES");
             foreach (var item in items)
@@ -45,13 +45,12 @@ namespace Hatco.PrecastManholeManager.Services
                 {
                     if (foundation == null || foundation.UniqueId != item.UniqueId)
                         throw new InvalidOperationException("Foundation identity changed during scan.");
-                    log.Info("CLEAN SCAN " + (passed + review + errors + 1) + "/" + items.Count +
+                    log.Info("CLEAN SCAN " + (passed + review + errors + ignored + 1) + "/" + items.Count +
                         " Foundation=" + item.FoundationId);
                     details = Run(doc, foundation, clearanceMm, log);
-                    bool open = ManholeReviewRegistry.Load(doc).Any(x =>
-                        x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN");
-                    status = open ? "REVIEW" : "RECHECK PASSED";
-                    if (open) review++; else passed++;
+                    var current = ManholeReviewRegistry.Load(doc).FirstOrDefault(x => x.FoundationUniqueId == foundation.UniqueId);
+                    status = current?.Status == "IGNORED" ? "IGNORED" : current?.Status == "OPEN" ? "REVIEW" : "RECHECK PASSED";
+                    if (status == "IGNORED") ignored++; else if (status == "REVIEW") review++; else passed++;
                 }
                 catch (Exception ex)
                 {
@@ -69,7 +68,7 @@ namespace Hatco.PrecastManholeManager.Services
             System.IO.File.WriteAllText(path, report.ToString(), new System.Text.UTF8Encoding(true));
             ManholeReviewRegistry.ExportReadableCsv(doc, ManholeReviewRegistry.Load(doc));
             return (reviewOnly ? "Review recheck completed for " : "Clean scan completed for ") + items.Count + " manholes.\nPassed: " + passed +
-                "\nStill require review: " + review + "\nScan errors: " + errors +
+                "\nIgnored by user: " + ignored + "\nStill require review: " + review + "\nScan errors: " + errors +
                 (unavailable > 0 ? "\nReview records not found among current manholes: " + unavailable + " (kept OPEN)." : "") +
                 "\nRepaired issues have been resolved. No openings, walls or views were changed." +
                 "\nProduction prerequisites still apply to passed manholes.\nReport: " + path;
@@ -157,7 +156,8 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 ManholeReviewRegistry.Save(doc, currentIssues);
                 ManholeReviewRegistry.ExportReadableCsv(doc, currentIssues);
-                return "Still requires REVIEW:\n" + string.Join("\n", reasons) +
+                bool ignored = currentIssues.Any(x => x.FoundationUniqueId == foundation.UniqueId && x.Status == "IGNORED");
+                return (ignored ? "IGNORED by user (same reasons):\n" : "Still requires REVIEW:\n") + string.Join("\n", reasons) +
                     "\n\nIf the wall still has an edited sketch, use Reset Profile before rechecking." +
                     "\nReview CSV: " + csv;
             }

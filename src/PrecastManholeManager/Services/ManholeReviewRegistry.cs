@@ -32,6 +32,33 @@ namespace Hatco.PrecastManholeManager.Services
     {
         private static readonly object Gate = new object();
 
+        internal static bool SameReviewReason(string previous, string current)
+        {
+            Func<string, string> normalize = value => string.Join(";", (value ?? "")
+                .Split(new[] { ';', '|', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => System.Text.RegularExpressions.Regex.Replace(x.Trim(), @"\s+", " "))
+                .Where(x => x.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)).ToUpperInvariant();
+            return normalize(previous) == normalize(current);
+        }
+
+        public static void ToggleIgnored(Document doc, Element foundation, DiagnosticLogger log)
+        {
+            lock (Gate)
+            {
+                string path = RegisterPath(doc);
+                var rows = LoadAt(path);
+                var row = rows.FirstOrDefault(x => x.FoundationUniqueId == foundation.UniqueId);
+                if (row == null || (row.Status != "OPEN" && row.Status != "IGNORED"))
+                    throw new InvalidOperationException("Select a manhole with an OPEN or IGNORED review first.");
+                row.Status = row.Status == "IGNORED" ? "OPEN" : "IGNORED";
+                row.UpdatedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                SaveAt(path, rows);
+                ExportReadableCsv(doc, rows);
+                log.Info("USER REVIEW " + row.Status + " Foundation=" + row.FoundationId + " User=" + Environment.UserName + " Reason=" + row.Reason);
+            }
+        }
+
         public static string RegisterPath(Document doc)
         {
             string full = doc.PathName ?? string.Empty;
@@ -92,6 +119,17 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 row.FoundationId = foundation.Id.IntegerValue;
                 string newReason = reason ?? "Review required";
+                if (row.Status == "IGNORED")
+                {
+                    if (SameReviewReason(row.Reason, newReason))
+                    {
+                        log?.Info("IGNORED review unchanged Foundation=" + row.FoundationId);
+                        return;
+                    }
+                    // Acknowledging an old warning must never suppress a different failure.
+                    row.Status = "OPEN";
+                    row.Reason = newReason;
+                }
                 // Preserve the earlier hard failure even when a later broad
                 // audit only sees "edited profile + in-place insert".
                 if (string.IsNullOrWhiteSpace(row.Reason))

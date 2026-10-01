@@ -15,8 +15,9 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     public sealed partial class ProjectRunnerCommand
     {
-        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false, bool mergeOverlapping = false, bool dimensionsAfterSheets = false)
+        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false, bool mergeOverlapping = false, bool dimensionsAfterSheets = false, bool fullAutomation = false)
         {
+            if (fullAutomation) { sheetsOnly = true; dimensionsAfterSheets = false; timingDiagnostic = false; }
             if (dimensionsAfterSheets) { sheetsOnly = true; timingDiagnostic = false; }
             var uidoc = app.ActiveUIDocument;
             var doc = uidoc.Document;
@@ -32,7 +33,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 if (!templates.Any(n=>n.Equals(name,StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidOperationException("Missing template " + name);
             ManholeViewTitleService.RequiredSectionType(doc);
-            if ((!sheetsOnly || dimensionsAfterSheets) && !new FilteredElementCollector(doc).OfClass(typeof(DimensionType)).Cast<DimensionType>()
+            if ((!sheetsOnly || dimensionsAfterSheets || fullAutomation) && !new FilteredElementCollector(doc).OfClass(typeof(DimensionType)).Cast<DimensionType>()
                 .Any(t=>t.StyleType == DimensionStyleType.Linear && t.Name.Equals("HTC_DIM_1.8mm",StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidOperationException("Missing linear dimension type HTC_DIM_1.8mm.");
             var titleblock = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks)
@@ -49,11 +50,11 @@ namespace Hatco.PrecastManholeManager.Commands
                 if (!row.NewNumber) BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
             string folder = Path.Combine(Path.GetDirectoryName(log.LogPath), "Batch_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0,6));
             string output = doc.PathName;
-            var ask = new TaskDialog("Generate / Update All") {
-                MainInstruction = (dimensionsAfterSheets ? "Prepare SHEETS then DIMENSIONS for " : sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + numbering.Rows.Count + " manholes unattended?",
-                MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
+            var ask = new TaskDialog(fullAutomation ? "Full Automation - All" : "Generate / Update All") {
+                MainInstruction = (fullAutomation ? "Run FULL AUTOMATION for " : dimensionsAfterSheets ? "Prepare SHEETS then DIMENSIONS for " : sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + numbering.Rows.Count + " manholes unattended?",
+                MainContent = (fullAutomation ? "Sheets -> create/update openings -> geometry recheck -> dimensions -> plan marks / NO BUBBLE NTS. No prompts between phases. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ". No automatic base repair, profile reset or moved-view refresh.\n" : "") + "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
                     (!sheetsOnly ? "Each opening/overlapping group commits independently. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
-                    (dimensionsAfterSheets ? "Stage 1: create/reuse and place views, then save. Stage 2: opening/body/base dimensions for all prepared manholes, including REVIEW cases. No opening creation or repair. No prompts between stages.\n" : sheetsOnly ? "SHEETS ONLY: creates/reuses body views and reserved rows. No opening pass; existing physical cuts remain unchanged.\n" : "") +
+                    (dimensionsAfterSheets ? "Stage 1: create/reuse and place views, then save. Stage 2: opening/body/base dimensions for all prepared manholes, including REVIEW cases. No opening creation or repair. No prompts between stages.\n" : sheetsOnly && !fullAutomation ? "SHEETS ONLY: creates/reuses body views and reserved rows. No opening pass; existing physical cuts remain unchanged.\n" : "") +
                     (timingDiagnostic ? "TIMING DIAGNOSTIC: at most 3 new documentation attempts, no opening pass. Extra regeneration=" + extraRegeneration + ". Saves changes in the current RVT.\n" : "") +
                     (timingDiagnostic && cropOrderExperiment ? "EXPERIMENT: set plan crop bounds before activating the crop.\n" : "") +
                     "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
@@ -73,6 +74,7 @@ namespace Hatco.PrecastManholeManager.Commands
             int processed = 0, committed = 0, review = 0, dimensionReview = 0, savedThrough = 0;
             var documented = new HashSet<int>();
             string dimensionSummary = "Dimensions: not requested.";
+            string automationSummary = "";
             string stopped = "";
             bool runFailed = false;
             DateTime lastSave = DateTime.Now;
@@ -116,9 +118,14 @@ namespace Hatco.PrecastManholeManager.Commands
                         var slot = BatchSheetLayoutService.Find(doc, Resolve(doc,item));
                         WriteBatchRow(writer, item, slot, "QUEUED", "Reservation validated; existing sheet notes preserved");
                     }
-                    PrepareBatchDocumentation(doc, items, log, progress, writer, documented, timingDiagnostic, cropOrderExperiment, extraRegeneration);
+                    PrepareBatchDocumentation(doc, items, log, progress, writer, documented, timingDiagnostic, cropOrderExperiment, extraRegeneration, fullAutomation);
                     if (timingDiagnostic) stopped = "Timing diagnostic finished. Opening stage was not run. See the .performance.csv beside the log.";
                     if (sheetsOnly) stopped = progress.CancelRequested ? "Sheets-only pass stopped by user; saved progress retained." : "Sheets-only pass finished. Opening stage was not run. See VIEWS statuses in the report.";
+                    if (fullAutomation)
+                    {
+                        automationSummary = RunFullAutomationPhases(uidoc, items, log, progress, writer, clearance, mergeOverlapping);
+                        stopped = progress.CancelRequested ? "Full automation stopped by user; committed progress saved." : "Full automation phases finished; review report for incomplete items.";
+                    }
                     if (dimensionsAfterSheets)
                     {
                         if (!progress.CancelRequested)
@@ -216,7 +223,7 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             string summary = (stopped.Length == 0 ? "Run completed." : stopped) +
                 "\nManholes with prepared views: " + documented.Count + " / " + numbering.Rows.Count +
-                (sheetsOnly ? "\nOpening stage: not requested." : "\nProcessed openings: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
+                (fullAutomation ? "\n" + automationSummary : sheetsOnly ? "\nOpening stage: not requested." : "\nProcessed openings: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
                 "\nReview: " + review + "\nSaved through item: " + savedThrough +
                 "\nCommitted with dimension review: " + dimensionReview) +
                 (dimensionsAfterSheets ? "\n" + dimensionSummary : "") +

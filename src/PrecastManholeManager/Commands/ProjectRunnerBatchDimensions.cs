@@ -13,14 +13,14 @@ namespace Hatco.PrecastManholeManager.Commands
         // Runs under the batch failure handler after documentation has been saved.
         // No opening generation, registry gating or modal prompts in this phase.
         private static string RunBatchDimensions(Document doc, IList<SimpleManholeItem> items,
-            DiagnosticLogger log, BatchProgressWindow progress, StreamWriter writer)
+            DiagnosticLogger log, BatchProgressWindow progress, StreamWriter writer, bool fullAutomation = false)
         {
             int processed = 0, complete = 0, review = 0, skipped = 0, savedThrough = 0;
             DateTime lastSave = DateTime.Now;
             log.WriteHeader("BATCH STAGE 2 - DIMENSIONS - INCLUDING REVIEW MANHOLES");
             foreach (var item in items)
             {
-                progress.Update(processed, items.Count, "Stage 2/2 - dimensions: " + item.ManholeName +
+                progress.Update(processed, items.Count, (fullAutomation ? "Full automation 4/5 - dimensions: " : "Stage 2/2 - dimensions: ") + item.ManholeName +
                     "\nSaved through dimension item " + savedThrough);
                 if (progress.CancelRequested) break;
                 Element foundation = null;

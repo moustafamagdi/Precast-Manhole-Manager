@@ -57,6 +57,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                     rows.Count(x => x.State == "REVIEW") +
                                     ".\nNo openings were changed.");
                             }
+                            else if (window.Action == ProjectAction.ToggleIgnoreReview)
+                                ManholeReviewRegistry.ToggleIgnored(doc, Resolve(doc, window.SelectedManhole), log);
                             else if (window.Action == ProjectAction.RecheckReviewOnly)
                                 TaskDialog.Show("Recheck Review Only", ManholeRecheckService.RunAll(doc, window.ClearanceMm, log, true));
                             else if (window.Action == ProjectAction.CleanScan)
@@ -81,6 +83,11 @@ namespace Hatco.PrecastManholeManager.Commands
                             }
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
+                            else if (window.Action == ProjectAction.FullAutomation)
+                            {
+                                RunUnattended(input.Application, log, window.ClearanceMm, mergeOverlapping: window.AutomationMergeOpenings, fullAutomation: true);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.SheetsAndDimensions)
                             {
                                 RunUnattended(input.Application, log, window.ClearanceMm, sheetsOnly: true, dimensionsAfterSheets: true);

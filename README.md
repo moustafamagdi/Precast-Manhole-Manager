@@ -19,6 +19,12 @@ Batch execution first prepares and commits plan/section views on sheets for ever
 
 Required project resources: `Manhole Sec` section type, `MH_PLAN`, `MH_SEC`, `MH_3D` view templates, linear dimension type `HTC_DIM_1.8mm`, and viewport type `NO BUBBLE NTS`. Dimensions cover openings, internal/external body sizes and foundations. Individual sheets use W1–W4 detail numbers; shared sheets require unique manhole-prefixed detail numbers.
 
+## Full automation and acknowledged reviews
+
+**Drawings > Full Automation - All** runs five phases: prepare/reuse sheets and views; create/update openings for every manhole (even without prepared views); recheck current geometry; dimension prepared manholes; clean plan section markers and apply NO BUBBLE NTS. Opening dimensions are deferred to the dedicated dimension phase. One initial confirmation covers the run; no prompts are inserted between phases. The current RVT is saved at phase boundaries and every 10 changed items or 5 minutes between items. Stop takes effect between items; a single Revit API call cannot be interrupted safely. Per-manhole errors are recorded and later manholes continue; a save failure or global setup failure stops the run. RunReport.csv and RunSummary.txt are written beneath the batch log folder. This does not automatically repair bases, reset profiles, relocate manholes, refresh moved view extents or certify sheet appearance.
+
+**Check & Review > Ignore / Restore Review** toggles the selected OPEN review to IGNORED or restores an IGNORED review to OPEN. Ignored rows remain visible with their reason when the review-only filter is off. Rechecking identical reasons preserves the acknowledgment; a different reason reopens the review. A clean geometric check resolves it. Ignore does not bypass opening-fit validation or authorize model edits. Acknowledgments use the existing local per-RVT-path review register, not shared RVT storage.
+
 ## Build and verification
 
 On reruns, valid existing sheet reservations are checked without regenerating, rewriting storage or resetting note text. Only new reservations and missing notes are written. Duplicate indices, inconsistent page mappings and notes belonging to another sheet still block reservation. The log reports retained/created/repaired counts and separate reservation, commit and save timings.

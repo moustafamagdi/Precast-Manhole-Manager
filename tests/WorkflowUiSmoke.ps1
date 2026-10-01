@@ -11,6 +11,10 @@ $w=$t.GetConstructors()[0].Invoke([object[]]@($null,[double]50))
 $root=$w.Content
 $tabs=$root.Children[0].Children | Where-Object { $_ -is [Windows.Controls.TabControl] }
 if($tabs.Items.Count -ne 4){throw 'Expected four workflow tabs'}
+$drawingButtons=@($tabs.Items[2].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.WrapPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
+if(!($drawingButtons | Where-Object {$_.Content -eq 'Full Automation - All'})){throw 'Full automation button is missing'}
+$reviewButtons=@($tabs.Items[0].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.WrapPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
+if(!($reviewButtons | Where-Object {$_.Content -eq 'Ignore / Restore Review'})){throw 'Review acknowledgment button is missing'}
 $openingPanel=$tabs.Items[1].Content.Content
 $scopes=@($openingPanel.Children | Where-Object {$_ -is [Windows.Controls.StackPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.ComboBox]})
 if($scopes[0].SelectedIndex -ne 1){throw 'Opening scope must default to picking'}
