@@ -92,6 +92,11 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.RecheckOne)
                                 TaskDialog.Show("Recheck Selected", ManholeRecheckService.Run(
                                     doc, Resolve(doc, window.SelectedManhole), window.ClearanceMm, log));
+                            else if (window.Action == ProjectAction.Review3DAll)
+                            {
+                                MakeAllReview3Ds(input.Application, log);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.Make3D)
                                 MakeReview3D(uiDoc, window.SelectedManhole,
                                     log);
@@ -102,8 +107,13 @@ namespace Hatco.PrecastManholeManager.Commands
                                 GenerateProductionManhole(uiDoc,
                                     window.SelectedManhole, log, window.ClearanceMm);
                             else if (window.Action == ProjectAction.DimensionOne)
-                                TaskDialog.Show("Opening Dimensions", OpeningDimensionService.Generate(
-                                    doc, Resolve(doc, window.SelectedManhole), log));
+                            {
+                                var foundation = Resolve(doc, window.SelectedManhole);
+                                bool complete = false;
+                                string result = OpeningDimensionService.Generate(doc, foundation, log, ok => complete = ok);
+                                if (!complete) ManholeReviewRegistry.Upsert(doc, foundation, result, null, "DIMENSION REVIEW", log);
+                                TaskDialog.Show("Opening Dimensions", result);
+                            }
                             else if (window.Action == ProjectAction.SixRowLayoutSheet)
                                 GenerateSixRowLayoutSheet(uiDoc,
                                     window.SheetCandidates, referenceSheet, log);

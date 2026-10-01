@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -116,6 +116,9 @@ namespace Hatco.PrecastManholeManager.UI
             Button recheck = Button("Recheck Selected", 170, reviewButtons);
             Button review = Button("Inspect Selected", 170, reviewButtons);
             Button view = Button("Show Review 3D", 160, reviewButtons);
+            var review3Ds = Button("3D - All Review Cases", 190, reviewButtons);
+            review3Ds.Click += (s, e) => Choose(ProjectAction.Review3DAll, false);
+            review3Ds.ToolTip = "Create/update 3D views for OPEN issues in this model's review register. Run Clean Scan to refresh geometry issues first.";
 
             var advanced = TaskPanel(tabs, "Setup & Advanced", "Project numbering, exports and layout experiments. Performance settings apply only to Generate / Update All.");
             var advancedButtons = new WrapPanel(); advanced.Children.Add(advancedButtons);

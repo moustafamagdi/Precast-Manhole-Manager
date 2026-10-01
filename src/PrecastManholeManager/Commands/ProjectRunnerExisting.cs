@@ -109,6 +109,11 @@ namespace Hatco.PrecastManholeManager.Commands
                         }
                         done++;
                         writer.WriteLine(item.FoundationId + "," + status + ",\"" + details.Replace("\"", "\"\"") + "\"");
+                        // Make failed opening/dimension/repair outcomes discoverable by
+                        // the model-specific Review list and batch review-view action.
+                        if (status == "REVIEW" || status == "DIMENSION REVIEW")
+                            ManholeReviewRegistry.Upsert(doc, Resolve(doc, item), details, null,
+                                repairLowBase ? "BASE REPAIR" : status, log);
                         if (done % 10 == 0 || (DateTime.Now - saved).TotalMinutes >= 5)
                         {
                             doc.Save(new SaveOptions()); saved = DateTime.Now;
