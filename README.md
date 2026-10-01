@@ -18,6 +18,8 @@ Required project resources: `Manhole Sec` section type, `MH_PLAN`, `MH_SEC`, `MH
 
 ## Build and verification
 
+`PERF_CALL` records time individual creation, template, viewport setup, layout regeneration, documentation commit and save calls. `Returned=True` means the API returned normally, not that a returned transaction status was Committed. Stage-level `PERF` totals contain these call timings and must not be added to them. Use several newly created manholes for comparison, excluding the reuse path.
+
 Batch layout applies positions for all five viewports, regenerates once, applies all label offsets, then regenerates for final validation. Existing complete five-view rows are reused during documentation preparation. The opening pass reuses prepared views and only performs its final layout after dimensions. `PERF` log entries separate documentation, viewport creation/setup and row arrangement; runtime speed must be measured in Revit.
 
 ```powershell

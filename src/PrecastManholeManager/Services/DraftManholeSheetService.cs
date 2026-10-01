@@ -82,7 +82,7 @@ namespace Hatco.PrecastManholeManager.Services
             bool existingPlan = new FilteredElementCollector(doc)
                 .OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
                 .Any(v => !v.IsTemplate && v.Name == planName);
-            ViewPlan plan = GetOrCreatePlan(doc, planName, planType, level);
+            ViewPlan plan = GetOrCreatePlan(doc, planName, planType, level, log);
             // Never overwrite the user's scale/crop once views have been
             // generated: subsequent clicks must be idempotent.
             if (!existingPlan)
@@ -92,7 +92,7 @@ namespace Hatco.PrecastManholeManager.Services
                 ConfigurePlan(plan, minX - pad, minY - pad, maxX + pad,
                     maxY + pad, minZ - pad, maxZ + pad, centerZ);
                 plan.Scale = 25;
-                plan.ViewTemplateId = planTemplate.Id;
+                PerformanceMeasurement.Call(log, "View.Template.Plan", planName, () => { plan.ViewTemplateId = planTemplate.Id; });
                 // Reduce oversized plan viewport bounds caused by
                 // section markers/other annotations. This is ONLY for
                 // freshly created views; the template may control this
@@ -175,13 +175,13 @@ namespace Hatco.PrecastManholeManager.Services
                     .Any(v => !v.IsTemplate && v.Name == name);
                 ViewSection elevation = GetOrCreateSection(doc, name,
                     sectionType, w.Axis, w.Mid, outward,
-                    w.Wall.Width, minZ - pad, maxZ + pad, pad);
+                    w.Wall.Width, minZ - pad, maxZ + pad, pad, log);
                 if (elevation.GetTypeId() != sectionType.Id)
                     elevation.ChangeTypeId(sectionType.Id);
                 if (!alreadyExists)
                 {
                     elevation.Scale = 25;
-                    elevation.ViewTemplateId = sectionTemplate.Id;
+                    PerformanceMeasurement.Call(log, "View.Template.Section", name, () => { elevation.ViewTemplateId = sectionTemplate.Id; });
                 }
                 ManholeViewTitleService.UpdateTitle(elevation,
                     manholeName, wallNumber,
@@ -215,7 +215,7 @@ namespace Hatco.PrecastManholeManager.Services
         }
 
         private static ViewPlan GetOrCreatePlan(Document doc,
-            string name, ViewFamilyType type, Level level)
+            string name, ViewFamilyType type, Level level, DiagnosticLogger log)
         {
             View existing = new FilteredElementCollector(doc)
                 .OfClass(typeof(View)).Cast<View>()
@@ -228,7 +228,8 @@ namespace Hatco.PrecastManholeManager.Services
                         name + " exists but is not a Floor Plan.");
                 return reuse;
             }
-            ViewPlan plan = ViewPlan.Create(doc, type.Id, level.Id);
+            ViewPlan plan = PerformanceMeasurement.Call(log, "ViewPlan.Create", name,
+                () => ViewPlan.Create(doc, type.Id, level.Id));
             plan.Name = name;
             return plan;
         }
@@ -283,7 +284,7 @@ namespace Hatco.PrecastManholeManager.Services
             string name, ViewFamilyType sectionType,
             Line axis, XYZ midpoint, XYZ outward,
             double wallThicknessFt, double bottomZ, double topZ,
-            double pad)
+            double pad, DiagnosticLogger log)
         {
             View existing = new FilteredElementCollector(doc)
                 .OfClass(typeof(View)).Cast<View>()
@@ -333,8 +334,8 @@ namespace Hatco.PrecastManholeManager.Services
                 Max = new XYZ(halfW, halfH,
                     standOff + wallThicknessFt + extensionInside)
             };
-            ViewSection section = ViewSection.CreateSection(doc,
-                sectionType.Id, sectionBox);
+            ViewSection section = PerformanceMeasurement.Call(log, "ViewSection.CreateSection", name,
+                () => ViewSection.CreateSection(doc, sectionType.Id, sectionBox));
             section.Name = name;
             section.CropBoxActive = true;
             section.CropBoxVisible = false;

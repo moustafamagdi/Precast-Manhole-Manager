@@ -155,16 +155,19 @@ namespace Hatco.PrecastManholeManager.Services
                     doc.Delete(port.Id);
                     port = null;
                 }
-                if (port == null) port = Viewport.Create(doc, slot.Sheet.Id, view.Id, XYZ.Zero);
-                if (viewportType != null && port.GetTypeId() != viewportType.Id) port.ChangeTypeId(viewportType.Id);
-                port.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER).Set(
-                    ManholeIdentityStore.Read(foundation) + (col == 0 ? "-P" : "-W" + col));
+                if (port == null) port = PerformanceMeasurement.Call(log, "Viewport.Create", view.Name,
+                    () => Viewport.Create(doc, slot.Sheet.Id, view.Id, XYZ.Zero));
+                if (viewportType != null && port.GetTypeId() != viewportType.Id)
+                    PerformanceMeasurement.Call(log, "Viewport.ChangeTypeId", view.Name, () => port.ChangeTypeId(viewportType.Id));
+                string detail = ManholeIdentityStore.Read(foundation) + (col == 0 ? "-P" : "-W" + col);
+                PerformanceMeasurement.Call(log, "Viewport.DetailNumber", view.Name,
+                    () => port.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER).Set(detail));
             }
             SetStatus(doc, foundation, slot, "OPENINGS: " + string.Join("; ", actual.OrderBy(r=>r.Source.WallNumber)
                 .Select(r=>"W" + r.Source.WallNumber + " " + r.OpeningSize + " / source " + r.SourceId)));
             log.Info("PERF VIEWPORT_CREATION_AND_SETUP Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
             var arrangeTimer = System.Diagnostics.Stopwatch.StartNew();
-            foreach (string warning in Arrange(doc, foundation, slot))
+            foreach (string warning in Arrange(doc, foundation, slot, log))
                 log.Warn("BATCH LAYOUT REVIEW: " + warning);
             log.Info("PERF ROW_ARRANGE Seconds=" + arrangeTimer.Elapsed.TotalSeconds.ToString("0.000"));
             log.Info("BATCH ROW PLACED Foundation=" + foundation.Id.IntegerValue + " Sheet=" + slot.Sheet.SheetNumber + " Row=" + (slot.Row + 1));
@@ -178,7 +181,7 @@ namespace Hatco.PrecastManholeManager.Services
             return views.Any(v => v is ViewPlan && v.Name == prefix + "_PLAN") &&
                 Enumerable.Range(1, 4).All(n => views.Any(v => v is ViewSection && v.Name == prefix + "_OUT_W" + n));
         }
-        internal static List<string> Arrange(Document doc, Element foundation, BatchSheetSlot slot)
+        internal static List<string> Arrange(Document doc, Element foundation, BatchSheetSlot slot, DiagnosticLogger log)
         {
             var warnings = new List<string>();
             var b = Bounds(slot);
@@ -186,7 +189,7 @@ namespace Hatco.PrecastManholeManager.Services
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
             var ports = new FilteredElementCollector(doc).OfClass(typeof(Viewport)).Cast<Viewport>()
                 .Where(p=>p.SheetId == slot.Sheet.Id).ToList();
-            doc.Regenerate();
+            PerformanceMeasurement.Call(log, "Regenerate.BeforeRow", prefix, () => doc.Regenerate());
             var rowPorts = new List<Viewport>();
             for (int col = 0; col < 5; col++)
             {
@@ -203,7 +206,7 @@ namespace Hatco.PrecastManholeManager.Services
                 port.LabelLineLength = UnitUtil.MmToFt(22);
             }
             // Rebuild once after moving the whole row, rather than once per viewport.
-            doc.Regenerate();
+            PerformanceMeasurement.Call(log, "Regenerate.AfterPositions", prefix, () => doc.Regenerate());
             foreach (var port in rowPorts)
             {
                 var box = port.GetBoxOutline();
@@ -216,7 +219,7 @@ namespace Hatco.PrecastManholeManager.Services
                 }
             }
             // Labels must be measured after all offsets have been applied.
-            doc.Regenerate();
+            PerformanceMeasurement.Call(log, "Regenerate.AfterLabels", prefix, () => doc.Regenerate());
             for (int col = 0; col < rowPorts.Count; col++)
             {
                 var port = rowPorts[col];

@@ -318,7 +318,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     using (var tx = new Transaction(doc, "HATCO - Fit Batch Row After Dimensions"))
                     {
                         tx.Start(); TransactionFailureHandling.Configure(tx, log);
-                        var layoutWarnings = BatchSheetLayoutService.Arrange(doc, foundation, slot);
+                        var layoutWarnings = BatchSheetLayoutService.Arrange(doc, foundation, slot, log);
                         if (layoutWarnings.Count > 0)
                         {
                             layoutNeedsReview = true;

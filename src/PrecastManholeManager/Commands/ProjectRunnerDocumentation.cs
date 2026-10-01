@@ -49,7 +49,8 @@ namespace Hatco.PrecastManholeManager.Commands
                             new List<UnifiedOpeningReviewRow>(), log);
                         BatchSheetLayoutService.SetStatus(doc, foundation, slot,
                             "VIEWS READY - opening stage pending; verify layout.");
-                        if (tx.Commit() != TransactionStatus.Committed)
+                        if (PerformanceMeasurement.Call(log, "Transaction.Commit.Documentation", item.ManholeName,
+                            () => tx.Commit()) != TransactionStatus.Committed)
                             throw new InvalidOperationException("Documentation transaction rejected.");
                     }
                     ready.Add(item.FoundationId);
@@ -76,11 +77,13 @@ namespace Hatco.PrecastManholeManager.Commands
                 processed++;
                 if (processed % 10 == 0 || DateTime.Now - lastSave >= TimeSpan.FromMinutes(5))
                 {
-                    doc.Save(new SaveOptions());
+                    PerformanceMeasurement.Call(log, "Document.Save.Checkpoint", item.ManholeName,
+                        () => doc.Save(new SaveOptions()));
                     lastSave = DateTime.Now;
                 }
             }
-            doc.Save(new SaveOptions());
+            PerformanceMeasurement.Call(log, "Document.Save.DocumentationEnd", doc.Title,
+                () => doc.Save(new SaveOptions()));
         }
     }
 }
