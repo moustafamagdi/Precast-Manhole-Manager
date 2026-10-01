@@ -67,6 +67,14 @@ namespace Hatco.PrecastManholeManager.Commands
                                 RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration);
                                 return Result.Succeeded;
                             }
+                            else if (window.Action == ProjectAction.ExistingOne ||
+                                window.Action == ProjectAction.ExistingAll || window.Action == ProjectAction.ExistingDimensions)
+                            {
+                                RunExistingPrepared(input.Application, log, window.ClearanceMm,
+                                    window.Action == ProjectAction.ExistingOne ? window.SelectedManhole : null,
+                                    window.Action == ProjectAction.ExistingDimensions);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.ReviewOne)
                                 InspectSelected(doc, window.SelectedManhole,
                                     log, window.ClearanceMm);

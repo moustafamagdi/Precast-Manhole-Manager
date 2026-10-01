@@ -245,27 +245,42 @@ namespace Hatco.PrecastManholeManager.Services
             if (!SegmentsMatch(distinct.Select(b => b.Position).ToArray(), measured.ToArray()))
                 throw new InvalidOperationException("Dimension values do not match the measured model faces.");
             doc.Regenerate();
-            if (view.CropBoxActive)
+            BoundingBoxXYZ box = dimension.get_BoundingBox(view);
+            if (box == null) throw new InvalidOperationException("Dimension has no visible bounds in this view.");
+            // Model crop does not bound annotations. Only an enabled annotation crop
+            // can clip dimension graphics; its offsets are paper/view units.
+            if (view.CropBoxActive && view.get_Parameter(BuiltInParameter.VIEWER_ANNOTATION_CROP_ACTIVE)?.AsInteger() == 1)
             {
-                BoundingBoxXYZ box = dimension.get_BoundingBox(view);
                 BoundingBoxXYZ crop = view.CropBox;
-                if (box == null) throw new InvalidOperationException("Dimension has no visible bounds in this section.");
                 Transform toCrop = crop.Transform.Inverse;
-                foreach (double x in new[] { box.Min.X, box.Max.X })
-                foreach (double y in new[] { box.Min.Y, box.Max.Y })
-                foreach (double z in new[] { box.Min.Z, box.Max.Z })
+                using (var manager = view.GetCropRegionShapeManager())
                 {
-                    XYZ local = toCrop.OfPoint(box.Transform.OfPoint(new XYZ(x, y, z)));
-                    if (local.X < crop.Min.X || local.X > crop.Max.X ||
-                        local.Y < crop.Min.Y || local.Y > crop.Max.Y)
-                        throw new InvalidOperationException("Dimension extends outside the view crop. " +
-                            "Expand the view crop and retry Update All Dimensions.");
+                    foreach (double x in new[] { box.Min.X, box.Max.X })
+                    foreach (double y in new[] { box.Min.Y, box.Max.Y })
+                    foreach (double z in new[] { box.Min.Z, box.Max.Z })
+                    {
+                        XYZ local = toCrop.OfPoint(box.Transform.OfPoint(new XYZ(x, y, z)));
+                        if (!WithinAnnotationAxis(local.X, crop.Min.X, crop.Max.X,
+                                manager.LeftAnnotationCropOffset, manager.RightAnnotationCropOffset, view.Scale) ||
+                            !WithinAnnotationAxis(local.Y, crop.Min.Y, crop.Max.Y,
+                                manager.BottomAnnotationCropOffset, manager.TopAnnotationCropOffset, view.Scale))
+                            throw new InvalidOperationException("Dimension extends outside the annotation crop. " +
+                                "Expand the annotation crop and retry Dimensions - Selected.");
+                    }
                 }
             }
             Mark(dimension, foundation.UniqueId, body);
             log.Info("ASSOCIATIVE DIMENSION Id=" + dimension.Id.IntegerValue + " View=" + view.Id.IntegerValue +
                 " Axis=" + (horizontal ? "H" : "V") + " ValuesMm=" +
                 string.Join(",", measured.Select(v => UnitUtil.FtToMm(v.Value).ToString("0.#"))));
+        }
+
+        internal static bool WithinAnnotationAxis(double coordinate, double min, double max,
+            double lowerPaperOffset, double upperPaperOffset, int scale)
+        {
+            return scale > 0 && lowerPaperOffset >= 0 && upperPaperOffset >= 0 &&
+                coordinate >= min - lowerPaperOffset * scale - 1e-9 &&
+                coordinate <= max + upperPaperOffset * scale + 1e-9;
         }
 
         internal static bool SegmentsMatch(double[] orderedCoordinatesFt, double?[] measuredFt)

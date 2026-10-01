@@ -14,7 +14,8 @@ namespace Hatco.PrecastManholeManager.Commands
     public sealed partial class ProjectRunnerCommand
     {
         private static ProductionManholeResult GenerateProductionManhole(UIDocument uidoc,
-            SimpleManholeItem selected, DiagnosticLogger log, double clearanceMm, bool unattended = false)
+            SimpleManholeItem selected, DiagnosticLogger log, double clearanceMm, bool unattended = false,
+            bool existingOnly = false)
         {
             Document doc = uidoc.Document;
             Element foundation = Resolve(doc, selected);
@@ -45,6 +46,8 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException("Clearance must be a finite non-negative value.");
             var slot = BatchSheetLayoutService.Find(doc, foundation);
             ViewSheet existingSheet = slot?.Sheet ?? FirstProductionSheetService.FindExisting(doc, foundation);
+            if (existingOnly && (slot == null || !BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot)))
+                throw new InvalidOperationException("Existing-only mode requires the plan and W1-W4 on the reserved sheet. No views will be created.");
             // Preserve placed views and layout; only the opening table is refreshed on reruns.
             string prefix = "MH_" + foundation.Id.IntegerValue +
                 "_PROD_2D";
@@ -205,8 +208,8 @@ namespace Hatco.PrecastManholeManager.Commands
             }
 
             CleanSyncApplyResult applied;
-            ViewSheet newSheet;
-            View3D production3D;
+            ViewSheet newSheet = existingSheet;
+            View3D production3D = null;
             using (var group = new TransactionGroup(doc,
                 "HATCO - One Manhole Openings and Drawing"))
             {
@@ -239,6 +242,17 @@ namespace Hatco.PrecastManholeManager.Commands
                         throw new InvalidOperationException(
                             "Native opening transaction failed: " +
                             applied.Error);
+                    if (existingOnly)
+                    using (var noteTx = new Transaction(doc, "HATCO - Update Existing Opening Note"))
+                    {
+                        noteTx.Start();
+                        TransactionFailureHandling.Configure(noteTx, log);
+                        BatchSheetLayoutService.SetStatus(doc, foundation, slot,
+                            "OPENINGS: " + string.Join("; ", actual.Select(r => "W" + r.Source.WallNumber + " " + r.OpeningSize)));
+                        if (noteTx.Commit() != TransactionStatus.Committed)
+                            throw new InvalidOperationException("Could not update the existing opening note.");
+                    }
+                    if (!existingOnly)
                     using (var tx = new Transaction(doc,
                         "HATCO - First Production Draft and Sheet"))
                     {
@@ -311,7 +325,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 log.Error("Dimension stage needs review; openings and sheet remain committed.", ex);
                 dimensionStatus = "Dimensions need review: " + ex.Message;
             }
-            if (slot != null)
+            if (slot != null && !existingOnly)
             {
                 try
                 {
@@ -343,7 +357,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 " | Sheet=" + newSheet.SheetNumber + (dimensionsComplete ? "" : " | DIMENSION REVIEW") + "\n" + dimensionStatus;
             var result = new ProductionManholeResult(true, dimensionsComplete, summary)
             { LayoutNeedsReview = layoutNeedsReview };
-            if (unattended) return result;
+            if (unattended || existingOnly) return result;
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",
                 "COMMITTED: " + id +

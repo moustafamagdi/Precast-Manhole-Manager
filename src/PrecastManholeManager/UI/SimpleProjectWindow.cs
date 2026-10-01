@@ -11,7 +11,8 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel
+        Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
+        ExistingOne, ExistingAll, ExistingDimensions
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -95,7 +96,13 @@ namespace Hatco.PrecastManholeManager.UI
             Button produce = Button("Generate Selected Manhole", 210, controls);
             Button batch = Button("Generate / Update All", 210, controls);
             batch.Click += (sender, args) => Choose(ProjectAction.ProductionAll, false);
-            Button dimensions = Button("Update All Dimensions", 215, controls);
+            Button dimensions = Button("Dimensions - Selected", 215, controls);
+            Button existingOne = Button("Openings - Existing Selected", 220, controls);
+            Button existingAll = Button("Openings - All Prepared", 210, controls);
+            Button existingDimensions = Button("Dimensions - All Prepared", 215, controls);
+            existingOne.Click += (s, e) => Choose(ProjectAction.ExistingOne, true);
+            existingAll.Click += (s, e) => Choose(ProjectAction.ExistingAll, false);
+            existingDimensions.Click += (s, e) => Choose(ProjectAction.ExistingDimensions, false);
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
@@ -345,6 +352,7 @@ namespace Hatco.PrecastManholeManager.UI
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
             if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
+                requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");

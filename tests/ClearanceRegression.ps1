@@ -147,3 +147,9 @@ Assert-That (!$attribute.Invoke($null,[object[]]@('Viewport.Create',$false))) 'D
 Assert-That (!$attribute.Invoke($null,[object[]]@('Transaction.Commit.Documentation',$true))) 'Commit timing never triggers post-commit regeneration'
 Assert-That (!$attribute.Invoke($null,[object[]]@('Document.Save.Checkpoint',$true))) 'Save timing does not inject regeneration'
 Assert-That (!$attribute.Invoke($null,[object[]]@('Regenerate.BeforeRow',$true))) 'Explicit regeneration is not recursively instrumented'
+
+$annotationAxis = $assembly.GetType('Hatco.PrecastManholeManager.Services.OpeningDimensionService').GetMethod('WithinAnnotationAxis', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($annotationAxis.Invoke($null,[object[]]@(11.0,0.0,10.0,0.1,0.1,25))) 'Annotation outside model crop remains valid within scaled annotation margin'
+Assert-That (!$annotationAxis.Invoke($null,[object[]]@(13.0,0.0,10.0,0.1,0.1,25))) 'Annotation outside annotation crop remains rejected'
+Assert-That ($annotationAxis.Invoke($null,[object[]]@(-2.5,0.0,10.0,0.1,0.2,25))) 'Annotation lower boundary uses paper units times view scale'
+Assert-That (!$annotationAxis.Invoke($null,[object[]]@(-3.0,0.0,10.0,0.1,0.2,25))) 'Asymmetric annotation margins do not swap lower and upper boundaries'
