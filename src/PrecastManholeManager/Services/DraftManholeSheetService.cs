@@ -263,7 +263,8 @@ namespace Hatco.PrecastManholeManager.Services
             range.SetOffset(PlanViewPlane.ViewDepthPlane,
                 minZ - elevation - UnitUtil.MmToFt(50));
             PerformanceMeasurement.Call(log, "Plan.SetViewRange", plan.Name, () => plan.SetViewRange(range));
-            PerformanceMeasurement.Call(log, "Plan.CropActive", plan.Name, () => { plan.CropBoxActive = true; });
+            if (!PerformanceMeasurement.CropBeforeActivation)
+                PerformanceMeasurement.Call(log, "Plan.CropActive", plan.Name, () => { plan.CropBoxActive = true; });
             PerformanceMeasurement.Call(log, "Plan.CropVisible", plan.Name, () => { plan.CropBoxVisible = false; });
 
             // XY crop in view-local coordinates; Revit supplies the
@@ -277,6 +278,8 @@ namespace Hatco.PrecastManholeManager.Services
             crop.Max = new XYZ(Math.Max(p0.X, p1.X),
                 Math.Max(p0.Y, p1.Y), crop.Max.Z);
             PerformanceMeasurement.Call(log, "Plan.SetCrop", plan.Name, () => { plan.CropBox = crop; });
+            if (PerformanceMeasurement.CropBeforeActivation)
+                PerformanceMeasurement.Call(log, "Plan.CropActive", plan.Name, () => { plan.CropBoxActive = true; });
             PerformanceMeasurement.Call(log, "Plan.Scale", plan.Name, () => { plan.Scale = 50; });
         }
 

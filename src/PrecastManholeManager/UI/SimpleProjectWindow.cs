@@ -26,6 +26,10 @@ namespace Hatco.PrecastManholeManager.UI
         public double ClearanceMm { get; private set; }
         private readonly CheckBox _timing = new CheckBox { Content = "Timing diagnostic: 3 new manholes only (slower)", Margin = new Thickness(0, 4, 0, 8) };
         public bool TimingDiagnostic => _timing.IsChecked == true;
+        private readonly CheckBox _cropOrder = new CheckBox { Content = "Diagnostic experiment: set plan crop before activating", Margin = new Thickness(0, 0, 0, 8), IsEnabled = false };
+        public bool CropOrderExperiment => TimingDiagnostic && _cropOrder.IsChecked == true;
+        private readonly CheckBox _scopeOnly = new CheckBox { Content = "Diagnostic: timing only, without extra regeneration", Margin = new Thickness(0, 0, 0, 8), IsEnabled = false };
+        public bool DiagnosticExtraRegeneration => _scopeOnly.IsChecked != true;
         private readonly TextBlock _counts;
         private readonly CheckBox _onlyReview;
         public ProjectAction Action { get; private set; } = ProjectAction.Close;
@@ -69,6 +73,12 @@ namespace Hatco.PrecastManholeManager.UI
             };
             top.Children.Add(_counts);
             top.Children.Add(_timing);
+            top.Children.Add(_cropOrder);
+            top.Children.Add(_scopeOnly);
+            _timing.Checked += (s, e) => _scopeOnly.IsEnabled = true;
+            _timing.Unchecked += (s, e) => { _scopeOnly.IsChecked = false; _scopeOnly.IsEnabled = false; };
+            _timing.Checked += (s, e) => _cropOrder.IsEnabled = true;
+            _timing.Unchecked += (s, e) => { _cropOrder.IsChecked = false; _cropOrder.IsEnabled = false; };
 
             var controls = new WrapPanel
             {
