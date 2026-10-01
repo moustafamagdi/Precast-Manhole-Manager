@@ -100,14 +100,16 @@ namespace Hatco.PrecastManholeManager.Commands
                     using (var tx = new Transaction(doc, "HATCO - Reserve Stable Batch Rows"))
                     {
                         tx.Start(); TransactionFailureHandling.Configure(tx, log);
-                        BatchSheetLayoutService.Reserve(doc, items.Select(i=>Resolve(doc,i)).ToList(), titleblock);
-                        if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Could not reserve sheet rows.");
+                        PerformanceMeasurement.Call(log, "Batch.ReserveRows", doc.Title,
+                            () => BatchSheetLayoutService.Reserve(doc, items.Select(i=>Resolve(doc,i)).ToList(), titleblock, log));
+                        if (PerformanceMeasurement.Call(log, "Transaction.Commit.Reservations", doc.Title,
+                            () => tx.Commit()) != TransactionStatus.Committed) throw new InvalidOperationException("Could not reserve sheet rows.");
                     }
-                    doc.Save(new SaveOptions());
+                    PerformanceMeasurement.Call(log, "Document.Save.Reservations", doc.Title, () => doc.Save(new SaveOptions()));
                     foreach (var item in items)
                     {
                         var slot = BatchSheetLayoutService.Find(doc, Resolve(doc,item));
-                        WriteBatchRow(writer, item, slot, "QUEUED", "Reserved before execution");
+                        WriteBatchRow(writer, item, slot, "QUEUED", "Reservation validated; existing sheet notes preserved");
                     }
                     PrepareBatchDocumentation(doc, items, log, progress, writer, documented, timingDiagnostic, cropOrderExperiment, extraRegeneration);
                     if (timingDiagnostic) stopped = "Timing diagnostic finished. Opening stage was not run. See the .performance.csv beside the log.";

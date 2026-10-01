@@ -54,26 +54,40 @@ namespace Hatco.PrecastManholeManager.Services
             return name != null && name.StartsWith("MH-",StringComparison.OrdinalIgnoreCase) &&
                 int.TryParse(name.Substring(3),out n) ? n : int.MaxValue;
         }
-        internal static void Reserve(Document doc, IList<Element> foundations, FamilySymbol titleblock)
+        internal static void Reserve(Document doc, IList<Element> foundations, FamilySymbol titleblock, DiagnosticLogger log)
         {
             var schema = Storage();
             var occupied = new HashSet<int>();
             var pages = new Dictionary<int, ViewSheet>();
+            var existing = new Dictionary<string, BatchSheetSlot>();
+            int retained = 0, created = 0, repaired = 0;
             int next = 0;
             foreach (Element foundation in foundations)
             {
                 var old = Find(doc, foundation);
                 if (old == null) continue;
+                existing.Add(foundation.UniqueId, old);
                 if (old.Index < 0 || !occupied.Add(old.Index))
                     throw new InvalidOperationException("Duplicate or invalid saved batch position.");
                 if (pages.ContainsKey(Page(old.Index)) && pages[Page(old.Index)].Id != old.Sheet.Id)
                     throw new InvalidOperationException("Inconsistent saved batch sheet mapping.");
                 pages[Page(old.Index)] = old.Sheet;
+                if (old.Note != null && old.Note.OwnerViewId != old.Sheet.Id)
+                    throw new InvalidOperationException("Reserved row note belongs to another sheet. Review foundation " + foundation.Id);
             }
             next = NextSlotIndex(occupied);
             foreach (Element foundation in foundations)
             {
-                var slot = Find(doc, foundation);
+                BatchSheetSlot slot;
+                existing.TryGetValue(foundation.UniqueId, out slot);
+                if (slot?.Note != null)
+                {
+                    // A valid reservation is already persistent. Preserve its status text,
+                    // manually adjusted note and storage without triggering regeneration.
+                    retained++;
+                    continue;
+                }
+                bool newReservation = slot == null;
                 if (slot == null)
                 {
                     int index = next++;
@@ -98,7 +112,9 @@ namespace Hatco.PrecastManholeManager.Services
                 entity.Set(schema.GetField("Index"), slot.Index);
                 entity.Set(schema.GetField("Note"), slot.Note.UniqueId);
                 foundation.SetEntity(entity);
+                if (newReservation) created++; else repaired++;
             }
+            log.Info("BATCH RESERVATIONS Retained=" + retained + " Created=" + created + " RepairedMissingNotes=" + repaired);
         }
         private static double[] Bounds(BatchSheetSlot slot)
         {

@@ -18,6 +18,8 @@ Required project resources: `Manhole Sec` section type, `MH_PLAN`, `MH_SEC`, `MH
 
 ## Build and verification
 
+On reruns, valid existing sheet reservations are checked without regenerating, rewriting storage or resetting note text. Only new reservations and missing notes are written. Duplicate indices, inconsistent page mappings and notes belonging to another sheet still block reservation. The log reports retained/created/repaired counts and separate reservation, commit and save timings.
+
 Optional **Timing diagnostic: 3 new manholes only (slower)** is unchecked by default. It prepares up to three not-yet-complete manhole rows, saves the current RVT, and skips the opening stage. Existing complete rows are reused and do not consume the three-attempt limit. Sheet/slot reservation still covers the full project. The diagnostic adds measured PreRegen/PostRegen around instrumented calls inside transactions and writes a `.performance.csv` beside the TXT log. It is a model-changing diagnostic, not a read-only benchmark. Explicit regeneration, transaction commit and save calls are timed without additional regeneration. Diagnostic timings must not be compared directly to production totals; controlled before/after comparisons require identical starting models.
 
 `PERF_CALL` records time individual creation, template, viewport setup, layout regeneration, documentation commit and save calls. `Returned=True` means the API returned normally, not that a returned transaction status was Committed. Stage-level `PERF` totals contain these call timings and must not be added to them. Use several newly created manholes for comparison, excluding the reuse path.
