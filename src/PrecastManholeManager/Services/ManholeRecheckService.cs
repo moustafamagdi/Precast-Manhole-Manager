@@ -77,7 +77,7 @@ namespace Hatco.PrecastManholeManager.Services
             if (!footprint.Accepted) reasons.Add("Wall footprint: " + footprint.Reason);
             else
             {
-                var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearanceMm, 150, 15);
+                var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearanceMm, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
                 csv = UnifiedOpeningReviewService.ExportCsv(review);
                 var plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log);
                 reasons.AddRange(ProductionPreflightService.PhysicalBlockers(plan));

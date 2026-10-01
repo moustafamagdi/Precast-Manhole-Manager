@@ -30,7 +30,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     // that leaves a newly detected opening less than 100 mm above the base.
                     var repaired = new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
                     if (!repaired.Accepted) throw new InvalidOperationException(repaired.Reason);
-                    var check = UnifiedOpeningReviewService.Collect(doc, foundation, repaired, log, clearance, 150, 15);
+                    var check = UnifiedOpeningReviewService.Collect(doc, foundation, repaired, log, clearance, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
                     double baseTop = UnitUtil.FtToMm(foundation.get_BoundingBox(null).Max.Z);
                     foreach (var row in check.Rows.Where(x => !x.IsVirtual || x.EndpointQualified))
                         if (row.Source.EffectiveOpeningZmm - row.Source.CutHeightMm / 2 - baseTop < 99.5)

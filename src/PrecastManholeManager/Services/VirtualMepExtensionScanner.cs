@@ -33,7 +33,7 @@ namespace Hatco.PrecastManholeManager.Services
         public double ProjectedWidthMm { get; set; }
         public double ProjectedHeightMm { get; set; }
         internal bool EligibleForProduction => ConnectorVerified && Status != "AMBIGUOUS REVIEW" &&
-            GapToFaceMm >= 0 && GapToFaceMm <= 150 && DeviationDeg >= 0 && DeviationDeg <= 15 &&
+            GapToFaceMm >= 0 && GapToFaceMm <= 150 && DeviationDeg >= 0 && DeviationDeg <= VirtualMepExtensionScanner.ProductionMaxApproachDeg + 1e-8 &&
             ProjectedWidthMm > 0 && !double.IsInfinity(ProjectedWidthMm) &&
             ProjectedHeightMm > 0 && !double.IsInfinity(ProjectedHeightMm);
     }
@@ -54,6 +54,7 @@ namespace Hatco.PrecastManholeManager.Services
     // no edits are made to linked MEP elements, host walls or openings.
     internal sealed class VirtualMepExtensionScanner
     {
+        internal const double ProductionMaxApproachDeg = 45.0;
         private readonly Document _doc;
         private readonly DiagnosticLogger _log;
 
@@ -223,7 +224,7 @@ namespace Hatco.PrecastManholeManager.Services
                                 horizontal.DotProduct(normal);
                             double deviation = Math.Acos(Math.Min(1,
                                 Math.Max(-1, inward))) * 180.0 / Math.PI;
-                            if (inward < minNormalAlignment)
+                            if (inward + 1e-10 < minNormalAlignment)
                             {
                                 if (inward > 0)
                                     diagnostic.Add("W" + item.Number + ":APPROACH_ANGLE_" +

@@ -63,7 +63,7 @@ The three workflow steps are intentionally compact:
    export a readable CSV.
 2. **Review Selected:** for one row, run the existing full linked MEP
    actual/virtual scanner and unified opening review, with test
-   defaults 50 mm clearance, 150 mm virtual gap and 15 degree
+   defaults 50 mm clearance, 150 mm virtual gap and 45 degree
    horizontal approach. Export UnifiedOpeningReview CSV and surface
    a short status summary; record outstanding issues. No cutting.
    **Create / Open 3D** creates or updates an isometric Revit review

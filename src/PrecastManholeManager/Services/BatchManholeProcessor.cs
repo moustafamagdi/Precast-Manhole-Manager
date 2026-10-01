@@ -189,7 +189,7 @@ namespace Hatco.PrecastManholeManager.Services
                     {
                         VirtualMepScanResult virtualScan =
                             new VirtualMepExtensionScanner(doc, log)
-                                .Scan(virtualFootprint, 150.0, 15.0);
+                                .Scan(virtualFootprint, 150.0, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
                         result.VirtualMepCandidates += virtualScan.Candidates.Count;
                         log?.Info("BATCH VIRTUAL ENDPOINTS Foundation=" +
                             foundation.Id.IntegerValue +

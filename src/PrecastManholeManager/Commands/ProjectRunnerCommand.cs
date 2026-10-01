@@ -255,10 +255,10 @@ namespace Hatco.PrecastManholeManager.Commands
                 return;
             }
             // Reuse the full tested scanner and unified read-only review.
-            // User-selected clearance / 150 mm max gap / 15 degree plan angle.
+            // User-selected clearance / 150 mm max gap / 45 degree plan angle.
             UnifiedOpeningReviewResult review =
                 UnifiedOpeningReviewService.Collect(
-                    doc, foundation, footprint, log, clearanceMm, 150, 15);
+                    doc, foundation, footprint, log, clearanceMm, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
             string csv = UnifiedOpeningReviewService.ExportCsv(review);
             bool needsAttention = review.Rows.Any(x =>
                 x.Status == "REVIEW");

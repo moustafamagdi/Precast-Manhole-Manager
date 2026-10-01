@@ -52,7 +52,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         OpeningResetAuditService.Audit(doc, footprint.Walls, log);
 
                     var scanner = new VirtualMepExtensionScanner(doc, log);
-                    VirtualMepScanResult scan = scanner.Scan(footprint, 150.0, 15.0);
+                    VirtualMepScanResult scan = scanner.Scan(footprint, 150.0, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
 
                     TaskDialog.Show("Virtual MEP + Opening Audit",
                         "READ-ONLY RESULTS\n" +

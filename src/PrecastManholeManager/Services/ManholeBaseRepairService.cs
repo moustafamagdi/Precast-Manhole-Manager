@@ -14,7 +14,7 @@ namespace Hatco.PrecastManholeManager.Services
         {
             var footprint = new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
             if (!footprint.Accepted) throw new InvalidOperationException(footprint.Reason);
-            var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearance, 150, 15);
+            var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearance, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
             var plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log);
             var blockers = ProductionPreflightService.PhysicalBlockers(plan);
             if (blockers.Count > 0) throw new InvalidOperationException(string.Join("; ", blockers));

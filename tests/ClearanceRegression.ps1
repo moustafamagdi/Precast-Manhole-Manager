@@ -177,8 +177,12 @@ $candidate.Status = 'REVIEW'
 $candidate.ConnectorVerified = $false
 Assert-That (!$eligible.GetValue($candidate)) 'An unverified curve endpoint cannot authorize a connector-based cut'
 $candidate.ConnectorVerified = $true
-$candidate.DeviationDeg = 16
-Assert-That (!$eligible.GetValue($candidate)) 'An approach beyond 15 degrees remains deferred'
+$candidate.DeviationDeg = 26
+Assert-That ($eligible.GetValue($candidate)) 'The observed 26-degree duct approach is eligible'
+$candidate.DeviationDeg = 45
+Assert-That ($eligible.GetValue($candidate)) 'Exactly 45 degrees is included'
+$candidate.DeviationDeg = 45.01
+Assert-That (!$eligible.GetValue($candidate)) 'An approach beyond 45 degrees remains deferred'
 $candidate.DeviationDeg = 0
 $candidate.ProjectedWidthMm = [double]::NaN
 Assert-That (!$eligible.GetValue($candidate)) 'Invalid projected envelope cannot authorize a cut'

@@ -20,7 +20,7 @@ namespace Hatco.PrecastManholeManager.Commands
             var foundation = Resolve(doc, item);
             var footprint = new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
             if (!footprint.Accepted) throw new InvalidOperationException(footprint.Reason);
-            var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearance, 150, 15);
+            var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearance, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
             string csv = UnifiedOpeningReviewService.ExportCsv(review);
             var safeWalls = new HashSet<int>();
             var problems = new List<string>();

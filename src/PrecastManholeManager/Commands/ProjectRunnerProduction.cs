@@ -77,7 +77,7 @@ namespace Hatco.PrecastManholeManager.Commands
             // Clearance is selected by the operator, in millimeters per side.
             UnifiedOpeningReviewResult review =
                 UnifiedOpeningReviewService.Collect(doc, foundation,
-                    footprint, log, clearanceMm, 150, 15);
+                    footprint, log, clearanceMm, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
             string csv = UnifiedOpeningReviewService.ExportCsv(review);
             CleanSyncPlan plan = CleanSyncPlanService.Build(doc,
                 foundation.Id.IntegerValue, footprint, review, log);
