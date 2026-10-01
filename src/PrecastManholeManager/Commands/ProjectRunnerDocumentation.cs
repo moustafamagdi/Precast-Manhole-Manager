@@ -14,12 +14,14 @@ namespace Hatco.PrecastManholeManager.Commands
         // must leave the existing body views available for manual completion.
         private static void PrepareBatchDocumentation(Document doc,
             IList<SimpleManholeItem> items, DiagnosticLogger log,
-            BatchProgressWindow progress, StreamWriter writer, HashSet<int> ready)
+            BatchProgressWindow progress, StreamWriter writer, HashSet<int> ready, bool timingDiagnostic = false)
         {
             int processed = 0;
+            int diagnosticAttempts = 0;
             var lastSave = DateTime.Now;
             foreach (var item in items)
             {
+                if (timingDiagnostic && diagnosticAttempts >= 3) break;
                 progress.Update(processed, items.Count,
                     "Stage 1/2 - preparing sheets and views: " + item.ManholeName);
                 if (progress.CancelRequested) break;
@@ -40,6 +42,8 @@ namespace Hatco.PrecastManholeManager.Commands
                     var footprint = new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
                     if (!footprint.Accepted)
                         throw new InvalidOperationException("Cannot identify body for sections: " + footprint.Reason);
+                    diagnosticAttempts++;
+                    using (var measurement = timingDiagnostic ? PerformanceMeasurement.BeginAttribution(doc, log) : null)
                     using (var tx = new Transaction(doc, "HATCO - Prepare Manhole Documentation"))
                     {
                         tx.Start();

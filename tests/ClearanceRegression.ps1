@@ -140,3 +140,10 @@ $result = [Activator]::CreateInstance($resultType, [object[]]@($true,$true,'Repo
 Assert-That ($result.Committed -and $result.DimensionsComplete) 'Historical wording in a report cannot turn successful dimensions into a batch failure'
 $result = [Activator]::CreateInstance($resultType, [object[]]@($true,$false,'Localized report without an English status label'))
 Assert-That ($result.Committed -and !$result.DimensionsComplete) 'Incomplete dimensions remain distinguishable from rolled-back geometry regardless of report language'
+
+$attribute = $assembly.GetType('Hatco.PrecastManholeManager.Infrastructure.PerformanceMeasurement').GetMethod('CanAttribute', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($attribute.Invoke($null,[object[]]@('Viewport.Create',$true))) 'Diagnostic regeneration is enabled for a viewport call inside a transaction'
+Assert-That (!$attribute.Invoke($null,[object[]]@('Viewport.Create',$false))) 'Diagnostic regeneration cannot run outside a transaction'
+Assert-That (!$attribute.Invoke($null,[object[]]@('Transaction.Commit.Documentation',$true))) 'Commit timing never triggers post-commit regeneration'
+Assert-That (!$attribute.Invoke($null,[object[]]@('Document.Save.Checkpoint',$true))) 'Save timing does not inject regeneration'
+Assert-That (!$attribute.Invoke($null,[object[]]@('Regenerate.BeforeRow',$true))) 'Explicit regeneration is not recursively instrumented'

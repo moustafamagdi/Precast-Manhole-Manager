@@ -24,6 +24,8 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly TextBox _filter;
         private readonly TextBox _clearance;
         public double ClearanceMm { get; private set; }
+        private readonly CheckBox _timing = new CheckBox { Content = "Timing diagnostic: 3 new manholes only (slower)", Margin = new Thickness(0, 4, 0, 8) };
+        public bool TimingDiagnostic => _timing.IsChecked == true;
         private readonly TextBlock _counts;
         private readonly CheckBox _onlyReview;
         public ProjectAction Action { get; private set; } = ProjectAction.Close;
@@ -66,6 +68,7 @@ namespace Hatco.PrecastManholeManager.UI
                 Margin = new Thickness(0, 0, 0, 10)
             };
             top.Children.Add(_counts);
+            top.Children.Add(_timing);
 
             var controls = new WrapPanel
             {

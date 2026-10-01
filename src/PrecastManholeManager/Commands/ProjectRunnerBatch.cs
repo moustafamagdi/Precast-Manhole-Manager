@@ -15,7 +15,7 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     public sealed partial class ProjectRunnerCommand
     {
-        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance)
+        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false)
         {
             var uidoc = app.ActiveUIDocument;
             var doc = uidoc.Document;
@@ -51,6 +51,7 @@ namespace Hatco.PrecastManholeManager.Commands
             var ask = new TaskDialog("Generate / Update All") {
                 MainInstruction = "Run " + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
+                    (timingDiagnostic ? "TIMING DIAGNOSTIC: at most 3 new documentation attempts, extra regeneration, no opening pass. Saves changes in the current RVT.\n" : "") +
                     "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
                     "Stage 1 prepares and saves body views on sheets for all identifiable manholes. Stage 2 attempts openings; failed cuts retain the prepared views for manual completion.\n" +
                     "Missing internal IDs will be assigned. Repaired issues are checked again. Virtual-only crossings remain deferred.\n" +
@@ -107,8 +108,9 @@ namespace Hatco.PrecastManholeManager.Commands
                         var slot = BatchSheetLayoutService.Find(doc, Resolve(doc,item));
                         WriteBatchRow(writer, item, slot, "QUEUED", "Reserved before execution");
                     }
-                    PrepareBatchDocumentation(doc, items, log, progress, writer, documented);
-                    foreach (var item in items)
+                    PrepareBatchDocumentation(doc, items, log, progress, writer, documented, timingDiagnostic);
+                    if (timingDiagnostic) stopped = "Timing diagnostic finished. Opening stage was not run. See the .performance.csv beside the log.";
+                    foreach (var item in timingDiagnostic ? new List<SimpleManholeItem>() : items)
                     {
                         progress.Update(processed, items.Count, "Stage 2/2 - openings: " + item.ManholeName + "\nSaved through opening item " + savedThrough + "\n" + output);
                         if (progress.CancelRequested) { stopped = "Stopped by user between manholes."; break; }

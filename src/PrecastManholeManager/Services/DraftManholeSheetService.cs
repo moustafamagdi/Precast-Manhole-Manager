@@ -90,7 +90,7 @@ namespace Hatco.PrecastManholeManager.Services
                 // Set geometry before applying the office template; template
                 // crop/view-range locks, if any, are preserved thereafter.
                 ConfigurePlan(plan, minX - pad, minY - pad, maxX + pad,
-                    maxY + pad, minZ - pad, maxZ + pad, centerZ);
+                    maxY + pad, minZ - pad, maxZ + pad, centerZ, log);
                 plan.Scale = 25;
                 PerformanceMeasurement.Call(log, "View.Template.Plan", planName, () => { plan.ViewTemplateId = planTemplate.Id; });
                 // Reduce oversized plan viewport bounds caused by
@@ -230,13 +230,13 @@ namespace Hatco.PrecastManholeManager.Services
             }
             ViewPlan plan = PerformanceMeasurement.Call(log, "ViewPlan.Create", name,
                 () => ViewPlan.Create(doc, type.Id, level.Id));
-            plan.Name = name;
+            PerformanceMeasurement.Call(log, "ViewPlan.Name", name, () => { plan.Name = name; });
             return plan;
         }
 
         private static void ConfigurePlan(ViewPlan plan,
             double minX, double minY, double maxX, double maxY,
-            double minZ, double maxZ, double centerZ)
+            double minZ, double maxZ, double centerZ, DiagnosticLogger log)
         {
             // PlanViewRange offsets are relative to the associated level,
             // not absolute project coordinates.
@@ -262,13 +262,13 @@ namespace Hatco.PrecastManholeManager.Services
                 minZ - elevation);
             range.SetOffset(PlanViewPlane.ViewDepthPlane,
                 minZ - elevation - UnitUtil.MmToFt(50));
-            plan.SetViewRange(range);
-            plan.CropBoxActive = true;
-            plan.CropBoxVisible = false;
+            PerformanceMeasurement.Call(log, "Plan.SetViewRange", plan.Name, () => plan.SetViewRange(range));
+            PerformanceMeasurement.Call(log, "Plan.CropActive", plan.Name, () => { plan.CropBoxActive = true; });
+            PerformanceMeasurement.Call(log, "Plan.CropVisible", plan.Name, () => { plan.CropBoxVisible = false; });
 
             // XY crop in view-local coordinates; Revit supplies the
             // level-aligned plan transform, typically identity orientation.
-            BoundingBoxXYZ crop = plan.CropBox;
+            BoundingBoxXYZ crop = PerformanceMeasurement.Call(log, "Plan.GetCrop", plan.Name, () => plan.CropBox);
             Transform inverse = crop.Transform.Inverse;
             XYZ p0 = inverse.OfPoint(new XYZ(minX, minY, cut));
             XYZ p1 = inverse.OfPoint(new XYZ(maxX, maxY, cut));
@@ -276,8 +276,8 @@ namespace Hatco.PrecastManholeManager.Services
                 Math.Min(p0.Y, p1.Y), crop.Min.Z);
             crop.Max = new XYZ(Math.Max(p0.X, p1.X),
                 Math.Max(p0.Y, p1.Y), crop.Max.Z);
-            plan.CropBox = crop;
-            plan.Scale = 50;
+            PerformanceMeasurement.Call(log, "Plan.SetCrop", plan.Name, () => { plan.CropBox = crop; });
+            PerformanceMeasurement.Call(log, "Plan.Scale", plan.Name, () => { plan.Scale = 50; });
         }
 
         private static ViewSection GetOrCreateSection(Document doc,

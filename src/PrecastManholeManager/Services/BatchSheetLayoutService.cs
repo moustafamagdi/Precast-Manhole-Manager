@@ -111,9 +111,9 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException("Titleblock is too small for six reserved manhole rows at 1:25.");
             return new[] { left, right, top - height * slot.Row, height };
         }
-        internal static void SetStatus(Document doc, Element foundation, BatchSheetSlot slot, string status)
+        internal static void SetStatus(Document doc, Element foundation, BatchSheetSlot slot, string status, DiagnosticLogger log = null)
         {
-            var bounds = Bounds(slot);
+            var bounds = log == null ? Bounds(slot) : PerformanceMeasurement.Call(log, "Sheet.Bounds", foundation.Id.ToString(), () => Bounds(slot));
             string text = ManholeIdentityStore.Read(foundation) + " | " + status;
             if (text.Length > 500) text = text.Substring(0, 500) + "... See run report.";
             if (slot.Note == null)
@@ -130,7 +130,8 @@ namespace Hatco.PrecastManholeManager.Services
                 slot.Note = TextNote.Create(doc, slot.Sheet.Id, new XYZ(bounds[0], bounds[2], 0),
                     bounds[1] - bounds[0], text, new TextNoteOptions(type.Id));
             }
-            else slot.Note.Text = text;
+            else if (log == null) slot.Note.Text = text;
+            else PerformanceMeasurement.Call(log, "TextNote.Text", foundation.Id.ToString(), () => { slot.Note.Text = text; });
         }
         internal static void Place(Document doc, Element foundation, BatchSheetSlot slot,
             IList<View> views, IList<UnifiedOpeningReviewRow> actual, DiagnosticLogger log)
@@ -164,7 +165,7 @@ namespace Hatco.PrecastManholeManager.Services
                     () => port.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER).Set(detail));
             }
             SetStatus(doc, foundation, slot, "OPENINGS: " + string.Join("; ", actual.OrderBy(r=>r.Source.WallNumber)
-                .Select(r=>"W" + r.Source.WallNumber + " " + r.OpeningSize + " / source " + r.SourceId)));
+                .Select(r=>"W" + r.Source.WallNumber + " " + r.OpeningSize + " / source " + r.SourceId)), log);
             log.Info("PERF VIEWPORT_CREATION_AND_SETUP Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
             var arrangeTimer = System.Diagnostics.Stopwatch.StartNew();
             foreach (string warning in Arrange(doc, foundation, slot, log))
@@ -197,7 +198,7 @@ namespace Hatco.PrecastManholeManager.Services
                 var port = ports.SingleOrDefault(p=>doc.GetElement(p.ViewId).Name == name);
                 if (port == null) throw new InvalidOperationException("Reserved row is missing view " + name);
                 rowPorts.Add(port);
-                var box = port.GetBoxOutline();
+                var box = PerformanceMeasurement.Call(log, "Viewport.GetBoxOutline", name, () => port.GetBoxOutline());
                 double width = box.MaximumPoint.X - box.MinimumPoint.X;
                 double height = box.MaximumPoint.Y - box.MinimumPoint.Y;
                 if (width > cell - UnitUtil.MmToFt(4) || height > b[3] - UnitUtil.MmToFt(24))
@@ -209,8 +210,8 @@ namespace Hatco.PrecastManholeManager.Services
             PerformanceMeasurement.Call(log, "Regenerate.AfterPositions", prefix, () => doc.Regenerate());
             foreach (var port in rowPorts)
             {
-                var box = port.GetBoxOutline();
-                var label = port.GetLabelOutline();
+                var box = PerformanceMeasurement.Call(log, "Viewport.GetBoxOutline", port.ViewId.ToString(), () => port.GetBoxOutline());
+                var label = PerformanceMeasurement.Call(log, "Viewport.GetLabelOutline", port.ViewId.ToString(), () => port.GetLabelOutline());
                 if (label != null && label.MaximumPoint.X > label.MinimumPoint.X)
                 {
                     var offset = port.LabelOffset;
@@ -223,7 +224,7 @@ namespace Hatco.PrecastManholeManager.Services
             for (int col = 0; col < rowPorts.Count; col++)
             {
                 var port = rowPorts[col];
-                var label = port.GetLabelOutline();
+                var label = PerformanceMeasurement.Call(log, "Viewport.GetLabelOutline", port.ViewId.ToString(), () => port.GetLabelOutline());
                 if (label != null && label.MaximumPoint.X > label.MinimumPoint.X)
                 {
                     if (label.MinimumPoint.X < b[0] + cell * col || label.MaximumPoint.X > b[0] + cell * (col + 1) ||
