@@ -112,11 +112,14 @@ namespace Hatco.PrecastManholeManager.Services
                         sheet.SheetNumber = code;
                         sheet.Name = "Precast Manholes - " + (Page(index) + 1).ToString("000");
                         pages[Page(index)] = sheet;
+                        log.Info("BATCH NEW SHEET " + sheet.SheetNumber + " Foundation=" + foundation.Id.IntegerValue);
+                        PerformanceMeasurement.Call(log, "Batch.NewSheet.Regenerate", sheet.SheetNumber, () => doc.Regenerate());
                     }
                     slot = new BatchSheetSlot { Sheet = sheet, Index = index };
                 }
-                doc.Regenerate();
-                SetStatus(doc, foundation, slot, "QUEUED - position reserved");
+                log.Info("BATCH RESERVATION NOTE Foundation=" + foundation.Id.IntegerValue + " Sheet=" + slot.Sheet.SheetNumber + " Row=" + (slot.Row + 1));
+                try { SetStatus(doc, foundation, slot, "QUEUED - position reserved", log); }
+                catch (Exception ex) { throw new InvalidOperationException("Reservation note failed: foundation " + foundation.Id.IntegerValue + ", sheet " + slot.Sheet.SheetNumber + ", row " + (slot.Row + 1) + ". " + ex.Message, ex); }
                 var entity = new Entity(schema);
                 entity.Set(schema.GetField("Sheet"), slot.Sheet.UniqueId);
                 entity.Set(schema.GetField("Index"), slot.Index);
@@ -137,13 +140,22 @@ namespace Hatco.PrecastManholeManager.Services
                 throw new InvalidOperationException("Titleblock is too small for six reserved manhole rows at 1:25.");
             return new[] { left, right, top - height * slot.Row, height };
         }
+        internal static double ValidNoteWidth(double requested, double minimum, double maximum)
+        {
+            if (double.IsNaN(requested) || double.IsInfinity(requested) ||
+                double.IsNaN(minimum) || double.IsInfinity(minimum) ||
+                double.IsNaN(maximum) || double.IsInfinity(maximum) || minimum < 0 || maximum <= 0 || maximum < minimum)
+                throw new InvalidOperationException("Invalid Revit text note width bounds.");
+            return Math.Max(minimum, Math.Min(maximum, requested));
+        }
+
         internal static void SetStatus(Document doc, Element foundation, BatchSheetSlot slot, string status, DiagnosticLogger log = null)
         {
-            var bounds = log == null ? Bounds(slot) : PerformanceMeasurement.Call(log, "Sheet.Bounds", foundation.Id.ToString(), () => Bounds(slot));
             string text = ManholeIdentityStore.Read(foundation) + " | " + status;
             if (text.Length > 500) text = text.Substring(0, 500) + "... See run report.";
             if (slot.Note == null)
             {
+                var bounds = log == null ? Bounds(slot) : PerformanceMeasurement.Call(log, "Sheet.Bounds", foundation.Id.ToString(), () => Bounds(slot));
                 var type = new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).Cast<TextNoteType>()
                     .FirstOrDefault(t=>t.Name == "HATCO_BATCH_1.8mm");
                 if (type == null)
@@ -153,8 +165,15 @@ namespace Hatco.PrecastManholeManager.Services
                     type = (TextNoteType)source.Duplicate("HATCO_BATCH_1.8mm");
                     type.get_Parameter(BuiltInParameter.TEXT_SIZE).Set(UnitUtil.MmToFt(1.8));
                 }
+                // Limits depend on the selected text type, not the sheet width alone.
+                double requested = bounds[1] - bounds[0];
+                double minimum = TextElement.GetMinimumAllowedWidth(doc, type.Id);
+                double maximum = TextElement.GetMaximumAllowedWidth(doc, type.Id);
+                double width = ValidNoteWidth(requested, minimum, maximum);
                 slot.Note = TextNote.Create(doc, slot.Sheet.Id, new XYZ(bounds[0], bounds[2], 0),
-                    bounds[1] - bounds[0], text, new TextNoteOptions(type.Id));
+                    width, text, new TextNoteOptions(type.Id));
+                log?.Info("BATCH NOTE WIDTH Foundation=" + foundation.Id.IntegerValue + " Sheet=" + slot.Sheet.SheetNumber +
+                    " RequestedFt=" + requested + " MinFt=" + minimum + " MaxFt=" + maximum + " AppliedFt=" + width);
             }
             else if (log == null) slot.Note.Text = text;
             else PerformanceMeasurement.Call(log, "TextNote.Text", foundation.Id.ToString(), () => { slot.Note.Text = text; });

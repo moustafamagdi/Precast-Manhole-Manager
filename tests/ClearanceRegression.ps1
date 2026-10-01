@@ -437,3 +437,11 @@ try {
     $loaded=$registry.GetMethod('LoadAt',[Reflection.BindingFlags]'NonPublic,Static').Invoke($null,[object[]]@([string]$tempRegister))
     Assert-That ($loaded.Count -eq 1 -and $loaded[0].Status -eq 'IGNORED' -and $loaded[0].Reason -eq $issue.Reason) 'Ignored review and its reason survive register reload'
 } finally { if(Test-Path -LiteralPath $tempRegister) { Remove-Item -LiteralPath $tempRegister } }
+
+$noteWidth=$assembly.GetType('Hatco.PrecastManholeManager.Services.BatchSheetLayoutService').GetMethod('ValidNoteWidth',[Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($noteWidth.Invoke($null,[object[]]@([double]4,[double]0.1,[double]2)) -eq 2) 'Wide sheet note is capped to the Revit text type maximum'
+Assert-That ($noteWidth.Invoke($null,[object[]]@([double]0.01,[double]0.1,[double]2)) -eq 0.1) 'Narrow note respects the Revit minimum'
+Assert-That ($noteWidth.Invoke($null,[object[]]@([double]1,[double]0.1,[double]2)) -eq 1) 'Valid note width is preserved'
+$invalidWidthRejected=$false
+try { $noteWidth.Invoke($null,[object[]]@([double]::NaN,[double]0.1,[double]2)) } catch { $invalidWidthRejected=$true }
+Assert-That $invalidWidthRejected 'Non-finite note bounds fail explicitly rather than reaching Revit'
