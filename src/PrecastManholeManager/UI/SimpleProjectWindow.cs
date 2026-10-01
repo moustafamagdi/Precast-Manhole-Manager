@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -73,9 +73,12 @@ namespace Hatco.PrecastManholeManager.UI
                 Margin = new Thickness(0, 0, 0, 10)
             };
             top.Children.Add(_counts);
-            top.Children.Add(_timing);
-            top.Children.Add(_cropOrder);
-            top.Children.Add(_scopeOnly);
+            var diagnostics = new StackPanel();
+            diagnostics.Children.Add(_timing);
+            diagnostics.Children.Add(_cropOrder);
+            diagnostics.Children.Add(_scopeOnly);
+            top.Children.Add(new Expander { Header = "Performance diagnostics", Content = diagnostics,
+                IsExpanded = false, Margin = new Thickness(0, 0, 0, 6) });
             _timing.Checked += (s, e) => _scopeOnly.IsEnabled = true;
             _timing.Unchecked += (s, e) => { _scopeOnly.IsChecked = false; _scopeOnly.IsEnabled = false; };
             _timing.Checked += (s, e) => _cropOrder.IsEnabled = true;
@@ -109,6 +112,11 @@ namespace Hatco.PrecastManholeManager.UI
             activeView.Click += (s, e) => Choose(ProjectAction.ExistingActiveView, false);
             picked.ToolTip = "Use preselected manhole bases, or pick bases in Revit and press Finish. Prepared rows only.";
             activeView.ToolTip = "Process recognized host-model bases in the active model view. Prepared rows only; no new views or sheets.";
+            Button repairPicked = Button("Repair Low Base - Pick", 210, controls);
+            Button repairView = Button("Repair Low Base - View", 215, controls);
+            repairPicked.Click += (s, e) => Choose(ProjectAction.RepairPicked, false);
+            repairView.Click += (s, e) => Choose(ProjectAction.RepairActiveView, false);
+            repairPicked.ToolTip = repairView.ToolTip = "Lower bases only for lower-wall opening failures, leaving 100 mm below openings. Extend walls while keeping their tops. Restore original pin states.";
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
@@ -360,6 +368,7 @@ namespace Hatco.PrecastManholeManager.UI
             if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
                 requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
+                requested == ProjectAction.RepairPicked || requested == ProjectAction.RepairActiveView ||
                 requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");

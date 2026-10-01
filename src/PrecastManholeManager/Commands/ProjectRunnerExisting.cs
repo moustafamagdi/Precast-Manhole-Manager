@@ -18,7 +18,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // view/3D generation, viewport placement or row rearrangement.
         private static void RunExistingPrepared(UIApplication app, DiagnosticLogger log,
             double clearance, SimpleManholeItem selected, bool dimensionsOnly,
-            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null)
+            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false)
         {
             var doc = app.ActiveUIDocument.Document;
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModifiable || doc.IsModelInCloud ||
@@ -42,8 +42,9 @@ namespace Hatco.PrecastManholeManager.Commands
             if (eligible.Count == 0)
                 throw new InvalidOperationException("No complete prepared rows found. Requires existing PLAN and W1-W4 on the reserved six-row sheet.");
             var ask = new TaskDialog("Existing Manholes") {
-                MainInstruction = (dimensionsOnly ? "Update dimensions for " : "Update openings and dimensions for ") + eligible.Count + " prepared manhole(s)?",
+                MainInstruction = (repairLowBase ? "Repair lower-wall opening failures in " : dimensionsOnly ? "Update dimensions for " : "Update openings and dimensions for ") + eligible.Count + " prepared manhole(s)?",
                 MainContent = (scopeDescription == null ? "" : scopeDescription + "\n") +
+                    (repairLowBase ? "LOWER BASE REPAIR: lower only bases with openings failing at the wall bottom. Leave 100 mm below the lowest opening including clearance, preserve base thickness and wall tops, extend all four walls. Temporarily unpin and restore original pin states. Update existing view extents. Any opening/dimension failure rolls the entire repair back.\n" : "") +
                     "Eligible: " + eligible.Count + "; skipped: " + (source.Count - eligible.Count) + " (missing prepared views/row).\n" +
                     "Targets: " + string.Join(", ", eligible.Take(20).Select(x => x.ManholeName)) + (eligible.Count > 20 ? ", ..." : "") + "\n" +
                     "No new views or sheets; existing viewport positions are preserved.\n" +
@@ -55,7 +56,7 @@ namespace Hatco.PrecastManholeManager.Commands
             };
             if (ask.Show() != TaskDialogResult.Yes) return;
             string report = Path.ChangeExtension(log.LogPath, ".existing.csv");
-            int done = 0, complete = 0, review = 0;
+            int done = 0, complete = 0, review = 0, skipped = 0;
             DateTime saved = DateTime.Now;
             var progress = new BatchProgressWindow(app.MainWindowHandle);
             EventHandler<FailuresProcessingEventArgs> handler = (s, e) => {
@@ -87,17 +88,19 @@ namespace Hatco.PrecastManholeManager.Commands
                         try
                         {
                             bool ok = false;
+                            bool noRepair = false;
                             if (dimensionsOnly)
                                 details = OpeningDimensionService.Generate(doc, Resolve(doc, item), log, value => ok = value);
                             else
                             {
-                                var result = GenerateProductionManhole(app.ActiveUIDocument, item, log, clearance,
-                                    unattended: true, existingOnly: true);
+                                var result = repairLowBase ? RepairAndGenerate(app.ActiveUIDocument, item, log, clearance) :
+                                    GenerateProductionManhole(app.ActiveUIDocument, item, log, clearance, unattended: true, existingOnly: true);
+                                noRepair = repairLowBase && !result.Committed;
                                 ok = result.Committed && result.DimensionsComplete;
                                 details = result.Summary;
                             }
-                            status = ok ? "COMPLETE" : "DIMENSION REVIEW";
-                            if (ok) complete++; else review++;
+                            status = noRepair ? "SKIPPED" : ok ? "COMPLETE" : "DIMENSION REVIEW";
+                            if (noRepair) skipped++; else if (ok) complete++; else review++;
                         }
                         catch (Exception ex)
                         {
@@ -120,7 +123,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
             }
             TaskDialog.Show("Existing Manholes", "Processed: " + done + " / " + eligible.Count +
-                "\nComplete: " + complete + "\nNeeds review: " + review +
+                "\nComplete: " + complete + "\nNeeds review: " + review + "\nNo repair needed: " + skipped +
                 "\nSaved in the current RVT.\nReport: " + report);
         }
     }

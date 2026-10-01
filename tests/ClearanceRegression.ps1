@@ -193,3 +193,15 @@ $record.ClearanceMm = 50
 Assert-That ($record.CutWidthMm -eq 805 -and $record.CutHeightMm -eq 800) 'Verified duct endpoint envelope receives clearance on both sides'
 $record.ClearanceMm = 75
 Assert-That ($record.CutWidthMm -eq 855 -and $record.CutHeightMm -eq 850 -and $record.SourceKey -eq $key) 'Endpoint clearance updates preserve the source key and projected size'
+
+$repairType = $assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeBaseRepairService')
+$dropMethod = $repairType.GetMethod('RequiredDrop', [Reflection.BindingFlags]'NonPublic,Static')
+$lowerMethod = $repairType.GetMethod('IsLowerFailure', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($dropMethod.Invoke($null,[object[]]@(1000.0,950.0)) -eq 150) 'Base drops enough for an opening 50 mm below it plus a 100 mm clear gap'
+Assert-That ($dropMethod.Invoke($null,[object[]]@(1000.0,1002.0)) -eq 98) 'Opening within the wall edge margin receives the full 100 mm base separation'
+Assert-That ($dropMethod.Invoke($null,[object[]]@(1000.0,1100.0)) -eq 0) 'Already satisfied 100 mm gap never lowers the base again'
+Assert-That ($dropMethod.Invoke($null,[object[]]@(-1000.0,-1050.0)) -eq 150) 'Repair works with negative project elevations'
+Assert-That ($lowerMethod.Invoke($null,[object[]]@(950.0,1550.0,1000.0,2000.0))) 'Lower-wall-only fit failure can be repaired'
+Assert-That (!$lowerMethod.Invoke($null,[object[]]@(1100.0,2100.0,1000.0,2000.0))) 'Upper-wall failure cannot authorize base lowering'
+Assert-That (!$lowerMethod.Invoke($null,[object[]]@(950.0,2100.0,1000.0,2000.0))) 'Opening spanning below and above the wall requires manual review'
+Assert-That (!$lowerMethod.Invoke($null,[object[]]@(1100.0,1550.0,1000.0,2000.0))) 'A fitting opening alone cannot trigger a repair'
