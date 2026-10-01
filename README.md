@@ -18,6 +18,8 @@ Required project resources: `Manhole Sec` section type, `MH_PLAN`, `MH_SEC`, `MH
 
 ## Build and verification
 
+Batch layout applies positions for all five viewports, regenerates once, applies all label offsets, then regenerates for final validation. Existing complete five-view rows are reused during documentation preparation. The opening pass reuses prepared views and only performs its final layout after dimensions. `PERF` log entries separate documentation, viewport creation/setup and row arrangement; runtime speed must be measured in Revit.
+
 ```powershell
 dotnet build src/PrecastManholeManager/PrecastManholeManager.csproj -c Release -p:DeployRevitAddin=false
 powershell -NoProfile -ExecutionPolicy Bypass -File tests/ClearanceRegression.ps1

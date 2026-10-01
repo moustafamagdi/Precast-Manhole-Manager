@@ -248,9 +248,18 @@ namespace Hatco.PrecastManholeManager.Commands
                         {
                             if (slot != null)
                             {
-                                DraftSheetResult views = DraftManholeSheetService.Generate(
-                                    doc, foundation, footprint, log, forProduction: true);
-                                BatchSheetLayoutService.Place(doc, foundation, slot, views.Views, actual, log);
+                                if (unattended && BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot))
+                                {
+                                    log.Info("BATCH REUSE PREPARED VIEWS Foundation=" + foundation.Id.IntegerValue);
+                                    BatchSheetLayoutService.SetStatus(doc, foundation, slot,
+                                        "OPENINGS: " + string.Join("; ", actual.Select(r => "W" + r.Source.WallNumber + " " + r.OpeningSize)));
+                                }
+                                else
+                                {
+                                    DraftSheetResult views = DraftManholeSheetService.Generate(
+                                        doc, foundation, footprint, log, forProduction: true);
+                                    BatchSheetLayoutService.Place(doc, foundation, slot, views.Views, actual, log);
+                                }
                                 newSheet = slot.Sheet;
                             }
                             else if (existingSheet != null)

@@ -26,8 +26,17 @@ namespace Hatco.PrecastManholeManager.Commands
                 var foundation = Resolve(doc, item);
                 var slot = BatchSheetLayoutService.Find(doc, foundation);
                 string status, details;
+                var timer = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
+                    if (BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot))
+                    {
+                        ready.Add(item.FoundationId);
+                        WriteBatchRow(writer, item, slot, "VIEWS READY", "Reused five existing placed views; layout preserved.");
+                        log.Info("PERF DOCUMENTATION_REUSE Foundation=" + item.FoundationId + " Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
+                        processed++;
+                        continue;
+                    }
                     var footprint = new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
                     if (!footprint.Accepted)
                         throw new InvalidOperationException("Cannot identify body for sections: " + footprint.Reason);
@@ -63,6 +72,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     }
                 }
                 WriteBatchRow(writer, item, slot, status, details);
+                log.Info("PERF DOCUMENTATION Foundation=" + item.FoundationId + " Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
                 processed++;
                 if (processed % 10 == 0 || DateTime.Now - lastSave >= TimeSpan.FromMinutes(5))
                 {

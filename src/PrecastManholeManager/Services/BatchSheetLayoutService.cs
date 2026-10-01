@@ -135,15 +135,17 @@ namespace Hatco.PrecastManholeManager.Services
         internal static void Place(Document doc, Element foundation, BatchSheetSlot slot,
             IList<View> views, IList<UnifiedOpeningReviewRow> actual, DiagnosticLogger log)
         {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
             if (views.Count != 5) throw new InvalidOperationException("Five production views required.");
             var viewportType = new FilteredElementCollector(doc).OfClass(typeof(ElementType)).Cast<ElementType>()
                 .FirstOrDefault(t => t.Category?.Id.IntegerValue == (int)BuiltInCategory.OST_Viewports && t.Name == "NO BUBBLE NTS");
+            var existingPorts = new FilteredElementCollector(doc).OfClass(typeof(Viewport))
+                .Cast<Viewport>().ToList();
             for (int col = 0; col < views.Count; col++)
             {
                 View view = views[col];
                 if (view.Scale != 25) throw new InvalidOperationException("Batch views must use 1:25: " + view.Name);
-                var port = new FilteredElementCollector(doc).OfClass(typeof(Viewport)).Cast<Viewport>()
-                    .SingleOrDefault(p=>p.ViewId == view.Id);
+                var port = existingPorts.SingleOrDefault(p=>p.ViewId == view.Id);
                 if (port != null && port.SheetId != slot.Sheet.Id)
                 {
                     var old = doc.GetElement(port.SheetId) as ViewSheet;
@@ -154,16 +156,27 @@ namespace Hatco.PrecastManholeManager.Services
                     port = null;
                 }
                 if (port == null) port = Viewport.Create(doc, slot.Sheet.Id, view.Id, XYZ.Zero);
-                if (viewportType != null) port.ChangeTypeId(viewportType.Id);
+                if (viewportType != null && port.GetTypeId() != viewportType.Id) port.ChangeTypeId(viewportType.Id);
                 port.get_Parameter(BuiltInParameter.VIEWPORT_DETAIL_NUMBER).Set(
                     ManholeIdentityStore.Read(foundation) + (col == 0 ? "-P" : "-W" + col));
             }
             SetStatus(doc, foundation, slot, "OPENINGS: " + string.Join("; ", actual.OrderBy(r=>r.Source.WallNumber)
                 .Select(r=>"W" + r.Source.WallNumber + " " + r.OpeningSize + " / source " + r.SourceId)));
-            doc.Regenerate();
+            log.Info("PERF VIEWPORT_CREATION_AND_SETUP Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
+            var arrangeTimer = System.Diagnostics.Stopwatch.StartNew();
             foreach (string warning in Arrange(doc, foundation, slot))
                 log.Warn("BATCH LAYOUT REVIEW: " + warning);
+            log.Info("PERF ROW_ARRANGE Seconds=" + arrangeTimer.Elapsed.TotalSeconds.ToString("0.000"));
             log.Info("BATCH ROW PLACED Foundation=" + foundation.Id.IntegerValue + " Sheet=" + slot.Sheet.SheetNumber + " Row=" + (slot.Row + 1));
+            log.Info("PERF PLACE_AND_ARRANGE Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
+        }
+        internal static bool HasPreparedViews(Document doc, Element foundation, BatchSheetSlot slot)
+        {
+            string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
+            var views = slot.Sheet.GetAllViewports().Select(id => doc.GetElement(id) as Viewport)
+                .Where(p => p != null).Select(p => doc.GetElement(p.ViewId) as View).ToList();
+            return views.Any(v => v is ViewPlan && v.Name == prefix + "_PLAN") &&
+                Enumerable.Range(1, 4).All(n => views.Any(v => v is ViewSection && v.Name == prefix + "_OUT_W" + n));
         }
         internal static List<string> Arrange(Document doc, Element foundation, BatchSheetSlot slot)
         {
@@ -174,11 +187,13 @@ namespace Hatco.PrecastManholeManager.Services
             var ports = new FilteredElementCollector(doc).OfClass(typeof(Viewport)).Cast<Viewport>()
                 .Where(p=>p.SheetId == slot.Sheet.Id).ToList();
             doc.Regenerate();
+            var rowPorts = new List<Viewport>();
             for (int col = 0; col < 5; col++)
             {
                 string name = prefix + (col == 0 ? "_PLAN" : "_OUT_W" + col);
                 var port = ports.SingleOrDefault(p=>doc.GetElement(p.ViewId).Name == name);
                 if (port == null) throw new InvalidOperationException("Reserved row is missing view " + name);
+                rowPorts.Add(port);
                 var box = port.GetBoxOutline();
                 double width = box.MaximumPoint.X - box.MinimumPoint.X;
                 double height = box.MaximumPoint.Y - box.MinimumPoint.Y;
@@ -186,18 +201,31 @@ namespace Hatco.PrecastManholeManager.Services
                     warnings.Add("View and dimensions exceed reserved row at 1:25: " + name);
                 port.SetBoxCenter(new XYZ(b[0] + cell * (col + .5), b[2] - UnitUtil.MmToFt(10) - height / 2, 0));
                 port.LabelLineLength = UnitUtil.MmToFt(22);
-                doc.Regenerate();
-                box = port.GetBoxOutline();
+            }
+            // Rebuild once after moving the whole row, rather than once per viewport.
+            doc.Regenerate();
+            foreach (var port in rowPorts)
+            {
+                var box = port.GetBoxOutline();
                 var label = port.GetLabelOutline();
                 if (label != null && label.MaximumPoint.X > label.MinimumPoint.X)
                 {
                     var offset = port.LabelOffset;
                     port.LabelOffset = new XYZ(offset.X + (box.MinimumPoint.X + box.MaximumPoint.X - label.MinimumPoint.X - label.MaximumPoint.X) / 2,
                         offset.Y + box.MinimumPoint.Y - UnitUtil.MmToFt(3) - label.MaximumPoint.Y, offset.Z);
-                    doc.Regenerate(); label = port.GetLabelOutline();
+                }
+            }
+            // Labels must be measured after all offsets have been applied.
+            doc.Regenerate();
+            for (int col = 0; col < rowPorts.Count; col++)
+            {
+                var port = rowPorts[col];
+                var label = port.GetLabelOutline();
+                if (label != null && label.MaximumPoint.X > label.MinimumPoint.X)
+                {
                     if (label.MinimumPoint.X < b[0] + cell * col || label.MaximumPoint.X > b[0] + cell * (col + 1) ||
                         label.MinimumPoint.Y < b[2] - b[3] + UnitUtil.MmToFt(2))
-                        warnings.Add("View title exceeds its reserved cell: " + name);
+                        warnings.Add("View title exceeds its reserved cell: " + doc.GetElement(port.ViewId).Name);
                 }
             }
             if (slot.Note != null)
