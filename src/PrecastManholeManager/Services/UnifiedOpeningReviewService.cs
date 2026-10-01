@@ -46,6 +46,7 @@ namespace Hatco.PrecastManholeManager.Services
             Source.FittedCenterZmm = null;
 
             DuctEdgeOpeningService.Apply(doc, Source);
+            if (!Source.EdgeAligned) CornerOpeningService.Fit(doc, Source);
             OpeningSize = Source.CutWidthMm > 0 && Source.CutHeightMm > 0
                 ? Source.CutWidthMm.ToString("0.#") + " x " +
                   Source.CutHeightMm.ToString("0.#") + " mm"
@@ -100,7 +101,7 @@ namespace Hatco.PrecastManholeManager.Services
             Status = flags.Count == 0 ? "ACTUAL FIT PREVIEW" : "REVIEW";
             Notes = string.Join(" | ", flags);
             if (Source.EdgeAligned) Notes += " | DUCT SITE ADJUSTMENT: move along wall " + Source.EdgeShiftMm.ToString("0.#") + " mm; full opening starts at wall end";
-            if (Source.CornerStartAllowed || Source.CornerEndAllowed) Notes += " | VERIFIED SHARED CORNER - full projected opening crosses wall end";
+            if (Source.CornerStartAllowed || Source.CornerEndAllowed) Notes += " | VERIFIED SHARED CORNER - projected opening clipped to host wall end";
             if (IsVirtual && Detection == "INSIDE WALL")
                 Notes += " | Endpoint already enters wall thickness.";
         }
@@ -218,6 +219,11 @@ namespace Hatco.PrecastManholeManager.Services
                         ? "INSIDE WALL" : "VIRTUAL",
                     true, manhole.FoundationTopZ, candidate));
             }
+
+            foreach (var row in all) row.Source.ClearanceMm = clearanceMm;
+            CornerOpeningService.AddAdjacentPipeRows(doc, footprint, all,
+                manhole.Walls.ToDictionary(w => w.Wall.Id.IntegerValue, w => w.Number), log);
+            result.ActualCount = all.Count(r => !r.IsVirtual);
 
             // Native opening matching applies to actual AND virtual proposals.
             // It does not detect openings embedded in edited profiles;

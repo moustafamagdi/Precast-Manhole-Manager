@@ -355,3 +355,24 @@ $fittedData.HostWallId=100; $fittedData.ClearanceMm=50; $fittedData.CutWidthMm=5
 Assert-That (!$matches.Invoke($null,@($fittedData,$fitted))) 'Existing opening at the original duct center must update to its fitted position'
 $fittedData.Xmm=250
 Assert-That ($matches.Invoke($null,@($fittedData,$fitted))) 'Rerun reuses an opening already at the fitted position'
+
+# Shared corner envelopes are clipped to physical wall extents, not rejected
+# merely because their complete projected width exceeds the wall length.
+$cornerType=$assembly.GetType('Hatco.PrecastManholeManager.Services.CornerOpeningService')
+$clip=$cornerType.GetMethod('Clip',[Reflection.BindingFlags]'NonPublic,Static')
+$w1=$clip.Invoke($null,[object[]]@(1196.8,1293.4,1200.0,$false,$true))
+Assert-That ($null -ne $w1 -and [Math]::Abs($w1[1]-649.9) -lt 0.001 -and [Math]::Abs($w1[0]+$w1[1]/2-1200) -lt 0.001) 'Observed W1 corner retains the 649.9 mm portion inside the 1200 mm wall'
+$w2=$clip.Invoke($null,[object[]]@(-2.6,1038.0,1200.0,$true,$false))
+Assert-That ($null -ne $w2 -and [Math]::Abs($w2[1]-516.4) -lt 0.001 -and [Math]::Abs($w2[0]-$w2[1]/2) -lt 0.001) 'Observed W2 corner starts at the wall edge with its full in-wall portion'
+Assert-That ($near.Invoke($null,[object[]]@(1196.8,1293.4,1200.0,1))) 'Projected width larger than wall length can qualify when only one wall end is crossed'
+Assert-That ($null -eq $clip.Invoke($null,[object[]]@(600.0,1300.0,1200.0,$true,$true))) 'A corner envelope covering the complete wall remains blocked'
+Assert-That ($null -eq $clip.Invoke($null,[object[]]@(1196.8,1293.4,1200.0,$true,$false))) 'Permission on the opposite wall end cannot authorize clipping'
+Assert-That ($null -eq $clip.Invoke($null,[object[]]@(-800.0,700.0,1200.0,$true,$false))) 'A pipe wholly outside the wall cannot create a clipped cut'
+$repeat=$clip.Invoke($null,[object[]]@([double]$w1[0],[double]$w1[1],1200.0,$false,$true))
+Assert-That ([Math]::Abs($repeat[0]-$w1[0]) -lt 0.001 -and [Math]::Abs($repeat[1]-$w1[1]) -lt 0.001) 'Corner clipping is stable on repeated evaluation'
+$slab=$cornerType.GetMethod('TraversesSlab',[Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($slab.Invoke($null,[object[]]@(500.0,1000.0,0.65,200.0))) 'Finite oblique pipe spanning the wall slab can supply an adjacent corner candidate'
+Assert-That (!$slab.Invoke($null,[object[]]@(1100.0,1000.0,0.65,200.0))) 'Infinite-axis intersection beyond the pipe end is rejected'
+Assert-That (!$slab.Invoke($null,[object[]]@(80.0,1000.0,0.65,200.0))) 'Partial source slab coverage is left for review instead of extrapolating the pipe'
+Assert-That (!$slab.Invoke($null,[object[]]@(500.0,1000.0,0.0,200.0))) 'Parallel pipe cannot supply a projected adjacent wall cut'
+Assert-That (!$slab.Invoke($null,[object[]]@([double]::NaN,1000.0,0.65,200.0))) 'Invalid source station cannot authorize a corner cut'
