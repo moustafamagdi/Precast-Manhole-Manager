@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -103,6 +103,12 @@ namespace Hatco.PrecastManholeManager.UI
             existingOne.Click += (s, e) => Choose(ProjectAction.ExistingOne, true);
             existingAll.Click += (s, e) => Choose(ProjectAction.ExistingAll, false);
             existingDimensions.Click += (s, e) => Choose(ProjectAction.ExistingDimensions, false);
+            Button picked = Button("Openings - Pick Bases", 210, controls);
+            Button activeView = Button("Openings - Current View", 215, controls);
+            picked.Click += (s, e) => Choose(ProjectAction.ExistingPicked, false);
+            activeView.Click += (s, e) => Choose(ProjectAction.ExistingActiveView, false);
+            picked.ToolTip = "Use preselected manhole bases, or pick bases in Revit and press Finish. Prepared rows only.";
+            activeView.ToolTip = "Process recognized host-model bases in the active model view. Prepared rows only; no new views or sheets.";
             Button six = Button("3   Test 6-Row Sheet", 175, controls);
             Button export = Button("Export Existing Excel", 177, controls);
 
@@ -353,6 +359,7 @@ namespace Hatco.PrecastManholeManager.UI
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
             if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
                 requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
+                requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
                 requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");

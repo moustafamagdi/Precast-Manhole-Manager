@@ -19,3 +19,10 @@ Future parallel work could operate on detached numeric snapshots (no Document, E
 Reference: https://help.autodesk.com/cloudhelp/2024/ENU/Revit-API/files/Revit_API_Developers_Guide/Introduction/Getting_Started/Using_the_Autodesk_Revit_API/Revit_API_Revit_API_Developers_Guide_Introduction_Getting_Started_Using_the_Autodesk_Revit_API_Deployment_Options_html.html
 
 Runtime acceptance: test one existing row; confirm no new views/sheets, unchanged viewport centers, resized managed openings, visible associative opening/body/base dimensions, preserved manual dimensions and a second run without duplicate tool dimensions. Build/regression checks do not replace this Revit test.
+
+## Select scope from Revit
+
+Openings - Pick Bases uses the current Revit selection when nonempty (recognized manhole bases only). With no preselection, the manager closes for interactive multi-picking: select bases and press Finish; Esc cancels without edits. A nonempty selection without recognized bases is rejected rather than falling back to all manholes.
+
+Openings - Current View collects host structural foundations using Revit's view-scoped collector, then intersects with recognized manholes. It uses the active model view, not screen zoom; sheets are rejected. Revit visibility/occlusion rules can include candidates that are not visually obvious, so inspect the highlighted targets and confirmation count. Linked bases are excluded. Both actions retain the prepared-row requirement, report skipped rows and create no views/sheets.
+

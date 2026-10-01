@@ -67,6 +67,14 @@ namespace Hatco.PrecastManholeManager.Commands
                                 RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration);
                                 return Result.Succeeded;
                             }
+                            else if (window.Action == ProjectAction.ExistingPicked || window.Action == ProjectAction.ExistingActiveView)
+                            {
+                                var targets = SelectOpeningTargets(uiDoc, window.Action == ProjectAction.ExistingActiveView);
+                                if (targets == null) continue; // Esc cancels picking without edits.
+                                RunExistingPrepared(input.Application, log, window.ClearanceMm, null, false, targets,
+                                    window.Action == ProjectAction.ExistingActiveView ? "Scope: current view - " + uiDoc.ActiveView.Name : "Scope: selected manhole bases");
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.ExistingOne ||
                                 window.Action == ProjectAction.ExistingAll || window.Action == ProjectAction.ExistingDimensions)
                             {

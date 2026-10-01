@@ -17,14 +17,15 @@ namespace Hatco.PrecastManholeManager.Commands
         // Deliberately separate from documentation: no numbering, reservation,
         // view/3D generation, viewport placement or row rearrangement.
         private static void RunExistingPrepared(UIApplication app, DiagnosticLogger log,
-            double clearance, SimpleManholeItem selected, bool dimensionsOnly)
+            double clearance, SimpleManholeItem selected, bool dimensionsOnly,
+            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null)
         {
             var doc = app.ActiveUIDocument.Document;
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModifiable || doc.IsModelInCloud ||
                 doc.IsDetached || string.IsNullOrWhiteSpace(doc.PathName))
                 throw new InvalidOperationException("Open an editable, saved local RVT. This operation saves the current file in place.");
-            var source = selected == null ? SimpleProjectScanService.LoadFast(doc) :
-                new System.Collections.Generic.List<SimpleManholeItem> { selected };
+            var source = scopedItems ?? (selected == null ? SimpleProjectScanService.LoadFast(doc) :
+                new System.Collections.Generic.List<SimpleManholeItem> { selected });
             var eligible = new System.Collections.Generic.List<SimpleManholeItem>();
             foreach (var item in source.OrderBy(x => BatchSheetLayoutService.ManholeOrder(x.ManholeName)))
             {
@@ -42,7 +43,10 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException("No complete prepared rows found. Requires existing PLAN and W1-W4 on the reserved six-row sheet.");
             var ask = new TaskDialog("Existing Manholes") {
                 MainInstruction = (dimensionsOnly ? "Update dimensions for " : "Update openings and dimensions for ") + eligible.Count + " prepared manhole(s)?",
-                MainContent = "No new views or sheets; existing viewport positions are preserved.\n" +
+                MainContent = (scopeDescription == null ? "" : scopeDescription + "\n") +
+                    "Eligible: " + eligible.Count + "; skipped: " + (source.Count - eligible.Count) + " (missing prepared views/row).\n" +
+                    "Targets: " + string.Join(", ", eligible.Take(20).Select(x => x.ManholeName)) + (eligible.Count > 20 ? ", ..." : "") + "\n" +
+                    "No new views or sheets; existing viewport positions are preserved.\n" +
                     (dimensionsOnly ? "Existing cuts remain unchanged.\n" : "Pipes and ducts only. Clearance per side: " + clearance + " mm. Current geometry is validated again, including recorded review cases. Unsafe cuts are skipped.\n") +
                     "Hidden dimensions and annotation crop problems are reported for review.\n" +
                     "Saves in the CURRENT RVT every 10 items or 5 minutes, and at completion. No Synchronize with Central.\n" + doc.PathName,
