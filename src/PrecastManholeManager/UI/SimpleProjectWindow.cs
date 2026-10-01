@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, MissingOpeningsAll
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -94,6 +94,9 @@ namespace Hatco.PrecastManholeManager.UI
             openingScope.SelectedIndex = 1;
             openings.Children.Add(_mergeOpenings);
             openings.Children.Add(_resetProfiles);
+            var missing = Button("Retry Missing Openings - All", 235, openings);
+            missing.ToolTip = "Scan all manholes and create only wholly missing cuts. Existing cuts and edited profiles are preserved. Merge setting applies to new cuts.";
+            missing.Click += (s, e) => Choose(ProjectAction.MissingOpeningsAll, false);
             var runOpenings = Button("Run Openings", 190, openings);
             runOpenings.Click += (s, e) => {
                 var actions = new[] { ProjectAction.ExistingOne, ProjectAction.ExistingPicked, ProjectAction.ExistingActiveView, ProjectAction.ExistingAll };
@@ -364,7 +367,7 @@ namespace Hatco.PrecastManholeManager.UI
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
             if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
-                requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
+                requested == ProjectAction.MissingOpeningsAll || requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
                 requested == ProjectAction.RepairPicked || requested == ProjectAction.RepairActiveView ||
                 requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan || requested == ProjectAction.RecheckReviewOnly))

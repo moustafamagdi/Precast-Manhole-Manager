@@ -18,7 +18,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // view/3D generation, viewport placement or row rearrangement.
         private static void RunExistingPrepared(UIApplication app, DiagnosticLogger log,
             double clearance, SimpleManholeItem selected, bool dimensionsOnly,
-            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false, bool mergeOverlapping = false, bool resetProfiles = false)
+            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false, bool mergeOverlapping = false, bool resetProfiles = false, bool missingOnly = false)
         {
             var doc = app.ActiveUIDocument.Document;
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModifiable || doc.IsModelInCloud ||
@@ -100,12 +100,21 @@ namespace Hatco.PrecastManholeManager.Commands
                             else
                             {
                                 var result = repairLowBase ? RepairAndGenerate(app.ActiveUIDocument, item, log, clearance) :
-                                    GenerateWallOpenings(app.ActiveUIDocument, item, log, clearance, mergeOverlapping, resetProfiles);
+                                    GenerateWallOpenings(app.ActiveUIDocument, item, log, clearance, mergeOverlapping, resetProfiles, missingOnly);
                                 noRepair = repairLowBase && !result.Committed;
                                 dimensionsDeferred = result.DimensionsDeferred;
                                 openingsReview = result.OpeningsNeedReview;
                                 ok = result.Committed && !openingsReview && (result.DimensionsComplete || dimensionsDeferred);
                                 details = result.Summary;
+                                if (missingOnly)
+                                {
+                                    var foundation = Resolve(doc, item);
+                                    details += "\n" + ManholeRecheckService.Run(doc, foundation, clearance, log);
+                                    openingsReview = result.OpeningsNeedReview || ManholeReviewRegistry.Load(doc).Any(x =>
+                                        x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN");
+                                    dimensionsDeferred = true;
+                                    ok = !openingsReview;
+                                }
                             }
                             status = noRepair ? "SKIPPED" : openingsReview ? "OPENINGS REVIEW" : dimensionsDeferred ? "OPENINGS COMPLETE" : ok ? "COMPLETE" : "DIMENSION REVIEW";
                             if (noRepair) skipped++; else if (ok) complete++; else review++;

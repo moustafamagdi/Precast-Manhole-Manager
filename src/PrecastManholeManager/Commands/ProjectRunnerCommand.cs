@@ -79,6 +79,11 @@ namespace Hatco.PrecastManholeManager.Commands
                                 RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration, mergeOverlapping: window.MergeOverlappingOpenings);
                                 return Result.Succeeded;
                             }
+                            else if (window.Action == ProjectAction.MissingOpeningsAll)
+                            {
+                                RunExistingPrepared(input.Application, log, window.ClearanceMm, null, false, mergeOverlapping: window.MergeOverlappingOpenings, missingOnly: true);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.ExistingPicked || window.Action == ProjectAction.ExistingActiveView ||
                                 window.Action == ProjectAction.RepairPicked || window.Action == ProjectAction.RepairActiveView)
                             {

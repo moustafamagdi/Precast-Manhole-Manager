@@ -12,8 +12,9 @@ namespace Hatco.PrecastManholeManager.Commands
     public sealed partial class ProjectRunnerCommand
     {
         private static ProductionManholeResult GenerateWallOpenings(UIDocument uidoc, SimpleManholeItem item,
-            DiagnosticLogger log, double clearance, bool merge, bool resetProfiles = false)
+            DiagnosticLogger log, double clearance, bool merge, bool resetProfiles = false, bool missingOnly = false)
         {
+            if (missingOnly) resetProfiles = false;
             var doc = uidoc.Document;
             if (doc.IsReadOnly || doc.IsLinked || double.IsNaN(clearance) || double.IsInfinity(clearance) || clearance < 0)
                 throw new InvalidOperationException("Editable host and finite non-negative clearance required.");
@@ -51,6 +52,15 @@ namespace Hatco.PrecastManholeManager.Commands
                     var blockers = ProductionPreflightService.PhysicalBlockers(plan);
                     if (blockers.Count > 0) throw new InvalidOperationException(string.Join("; ", blockers));
                     var rows = plan.ProposedRows.Where(r => !r.IsVirtual || r.EndpointQualified).ToList();
+                    if (missingOnly)
+                    {
+                        var known = new HashSet<string>(plan.ManagedOpeningIds.SelectMany(pair =>
+                            CompoundOpeningService.ReadMembers(doc.GetElement(new ElementId(pair.Value)) as Opening, pair.Key)));
+                        var cuts = OpeningCoverageService.Read(doc, new[] { wallId }, log);
+                        rows = rows.Where(r => !known.Contains(r.Source.SourceKey) &&
+                            !OpeningCoverageService.Covers(cuts, r.Source, bodyWall.Direction.X, bodyWall.Direction.Y)).ToList();
+                        log.Info("MISSING ONLY W" + number + " New candidates=" + rows.Count + "; existing cuts preserved");
+                    }
                     candidateCount += rows.Count;
                     if (rows.Count == 0)
                     {
@@ -90,6 +100,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                     " Size=" + record.CutWidthMm + "x" + record.CutHeightMm);
                             }
                             var replacements = ManagedReplacements(doc, plan, desired, component.Select(r => r.SourceKey), dx, dy, merge);
+                            if (missingOnly && (replacements.Count > 0 || desired.Any(r => plan.ManagedOpeningIds.ContainsKey(r.SourceKey))))
+                                throw new InvalidOperationException("Missing-only run would replace an existing cut; use Run Openings to update or merge it.");
                             plan.ProposedRows.Clear();
                             plan.ProposedRows.AddRange(desired.Select(r => new UnifiedOpeningReviewRow {
                                 Source = r, WallId = wallId, Wall = "W" + number, SourceId = r.LinkedElementId,
@@ -169,7 +181,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
                 finally { profileGroup?.Dispose(); }
             }
-            if (candidateCount == 0 && problems.Count == 0) problems.Add("No confirmed crossing or validated end connector within 150 mm; existing openings preserved.");
+            if (!missingOnly && candidateCount == 0 && problems.Count == 0) problems.Add("No confirmed crossing or validated end connector within 150 mm; existing openings preserved.");
             bool dimensionsComplete = false, deferred = false;
             string dimensionStatus = "Dimensions unchanged: no opening groups committed.";
             if (committedGroups > 0)
