@@ -63,7 +63,10 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
                             else if (window.Action == ProjectAction.ProductionAll)
+                            {
                                 RunUnattended(input.Application, log, window.ClearanceMm);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.ReviewOne)
                                 InspectSelected(doc, window.SelectedManhole,
                                     log, window.ClearanceMm);

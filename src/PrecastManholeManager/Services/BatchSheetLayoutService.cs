@@ -161,11 +161,13 @@ namespace Hatco.PrecastManholeManager.Services
             SetStatus(doc, foundation, slot, "OPENINGS: " + string.Join("; ", actual.OrderBy(r=>r.Source.WallNumber)
                 .Select(r=>"W" + r.Source.WallNumber + " " + r.OpeningSize + " / source " + r.SourceId)));
             doc.Regenerate();
-            Arrange(doc, foundation, slot);
+            foreach (string warning in Arrange(doc, foundation, slot))
+                log.Warn("BATCH LAYOUT REVIEW: " + warning);
             log.Info("BATCH ROW PLACED Foundation=" + foundation.Id.IntegerValue + " Sheet=" + slot.Sheet.SheetNumber + " Row=" + (slot.Row + 1));
         }
-        internal static void Arrange(Document doc, Element foundation, BatchSheetSlot slot)
+        internal static List<string> Arrange(Document doc, Element foundation, BatchSheetSlot slot)
         {
+            var warnings = new List<string>();
             var b = Bounds(slot);
             double cell = (b[1] - b[0]) / 5;
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
@@ -181,7 +183,7 @@ namespace Hatco.PrecastManholeManager.Services
                 double width = box.MaximumPoint.X - box.MinimumPoint.X;
                 double height = box.MaximumPoint.Y - box.MinimumPoint.Y;
                 if (width > cell - UnitUtil.MmToFt(4) || height > b[3] - UnitUtil.MmToFt(24))
-                    throw new InvalidOperationException("View and dimensions exceed reserved row at 1:25: " + name);
+                    warnings.Add("View and dimensions exceed reserved row at 1:25: " + name);
                 port.SetBoxCenter(new XYZ(b[0] + cell * (col + .5), b[2] - UnitUtil.MmToFt(10) - height / 2, 0));
                 port.LabelLineLength = UnitUtil.MmToFt(22);
                 doc.Regenerate();
@@ -195,15 +197,16 @@ namespace Hatco.PrecastManholeManager.Services
                     doc.Regenerate(); label = port.GetLabelOutline();
                     if (label.MinimumPoint.X < b[0] + cell * col || label.MaximumPoint.X > b[0] + cell * (col + 1) ||
                         label.MinimumPoint.Y < b[2] - b[3] + UnitUtil.MmToFt(2))
-                        throw new InvalidOperationException("View title exceeds its reserved cell: " + name);
+                        warnings.Add("View title exceeds its reserved cell: " + name);
                 }
             }
             if (slot.Note != null)
             {
                 var note = slot.Note.get_BoundingBox(slot.Sheet);
                 if (note == null || note.Min.Y < b[2] - UnitUtil.MmToFt(8))
-                    throw new InvalidOperationException("Row header exceeds reserved note band.");
+                    warnings.Add("Row header exceeds reserved note band.");
             }
+            return warnings;
         }
     }
 }

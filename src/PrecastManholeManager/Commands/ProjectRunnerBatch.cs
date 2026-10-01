@@ -130,9 +130,11 @@ namespace Hatco.PrecastManholeManager.Commands
                                     throw new InvalidOperationException("Batch manhole transaction rejected.");
                             }
                             status = result.DimensionsComplete ? "COMPLETE" : "COMMITTED - DIMENSION REVIEW";
+                            if (result.LayoutNeedsReview)
+                                status = result.DimensionsComplete ? "COMMITTED - LAYOUT REVIEW" : "COMMITTED - DIMENSION AND LAYOUT REVIEW";
                             modelCommitted = true;
                             committed++;
-                            if (status != "COMPLETE") dimensionReview++;
+                            if (!result.DimensionsComplete) dimensionReview++;
                             var issues = ManholeReviewRegistry.Load(doc);
                             foreach (var issue in issues.Where(x=>x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN"))
                             { issue.Status = "RESOLVED"; issue.Severity = "BATCH PRODUCTION PASSED"; }
@@ -142,7 +144,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                 using (var tx = new Transaction(doc,"HATCO - Mark Dimension Review"))
                                 {
                                     tx.Start(); TransactionFailureHandling.Configure(tx,log);
-                                    BatchSheetLayoutService.SetStatus(doc,foundation,slot,"DIMENSION REVIEW - openings committed; see run report.");
+                                    BatchSheetLayoutService.SetStatus(doc,foundation,slot,status + " - openings committed; see run report.");
                                     if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Cannot label dimension review row.");
                                 }
                             }

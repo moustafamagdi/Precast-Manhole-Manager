@@ -295,6 +295,7 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             string dimensionStatus;
             bool dimensionsComplete = false;
+            bool layoutNeedsReview = false;
             try { dimensionStatus = OpeningDimensionService.Generate(doc, foundation, log, ok => dimensionsComplete = ok); }
             catch (Exception ex)
             {
@@ -308,7 +309,15 @@ namespace Hatco.PrecastManholeManager.Commands
                     using (var tx = new Transaction(doc, "HATCO - Fit Batch Row After Dimensions"))
                     {
                         tx.Start(); TransactionFailureHandling.Configure(tx, log);
-                        BatchSheetLayoutService.Arrange(doc, foundation, slot);
+                        var layoutWarnings = BatchSheetLayoutService.Arrange(doc, foundation, slot);
+                        if (layoutWarnings.Count > 0)
+                        {
+                            layoutNeedsReview = true;
+                            dimensionStatus += "\nLAYOUT REVIEW (placed for manual adjustment): " +
+                                string.Join("; ", layoutWarnings);
+                            foreach (string warning in layoutWarnings)
+                                log.Warn("BATCH LAYOUT REVIEW: " + warning);
+                        }
                         if (tx.Commit() != TransactionStatus.Committed)
                             throw new InvalidOperationException("Row layout transaction rejected.");
                     }
@@ -316,13 +325,15 @@ namespace Hatco.PrecastManholeManager.Commands
                 catch (Exception ex)
                 {
                     if (unattended) throw new InvalidOperationException("Reserved row layout failed: " + ex.Message, ex);
+                    layoutNeedsReview = true;
                     dimensionStatus += "\nLAYOUT REVIEW: " + ex.Message;
                 }
             }
             string summary = "COMMITTED: " + id + " | New=" + applied.NewOpenings +
                 " Updated=" + applied.ManagedUpdated + " Unchanged=" + applied.ManagedUnchanged +
                 " | Sheet=" + newSheet.SheetNumber + (dimensionsComplete ? "" : " | DIMENSION REVIEW") + "\n" + dimensionStatus;
-            var result = new ProductionManholeResult(true, dimensionsComplete, summary);
+            var result = new ProductionManholeResult(true, dimensionsComplete, summary)
+            { LayoutNeedsReview = layoutNeedsReview };
             if (unattended) return result;
             uidoc.RequestViewChange(newSheet);
             TaskDialog.Show("First Production Manhole",

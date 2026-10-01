@@ -10,6 +10,8 @@ Revit 2024 add-in for linked Pipe/Duct penetrations, managed openings, dimension
 
 Batch sheets contain **six manholes, one per row**: Plan, W1, W2, W3, W4. Failed manholes retain reserved positions for later repair. The run saves a separate RVT and reports with periodic checkpoints. Actual wall crossings drive production; virtual candidates remain diagnostic. Conduits and cable trays are excluded.
 
+Views and titles that exceed their reserved row are placed at the assigned row and reported as **LAYOUT REVIEW** for manual adjustment; overflow can overlap adjacent rows. These size warnings do not roll back openings. Missing views, invalid sheet ownership and failed Revit transactions remain blocking errors. The batch command exits after its results dialog instead of reopening the main tool window.
+
 Required project resources: `Manhole Sec` section type, `MH_PLAN`, `MH_SEC`, `MH_3D` view templates, and linear dimension type `HTC_DIM_1.8mm`. Dimensions cover openings, internal/external body sizes and foundations. Individual sheets use W1–W4 detail numbers; shared sheets require unique manhole-prefixed detail numbers.
 
 ## Build and verification
