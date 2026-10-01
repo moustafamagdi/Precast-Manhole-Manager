@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, MissingOpeningsAll, CleanViewPresentation
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -21,6 +21,11 @@ namespace Hatco.PrecastManholeManager.UI
     internal sealed class SimpleProjectWindow : Window
     {
         private readonly List<SimpleManholeItem> _all;
+        private static int _lastTab;
+        private static string _lastSearch = "";
+        private static bool _lastReviewFilter;
+        private static int? _lastFoundation;
+        public bool MissingOpeningsOnly { get; private set; }
         private readonly DataGrid _grid;
         private readonly TextBox _filter;
         private readonly TextBox _clearance;
@@ -68,7 +73,7 @@ namespace Hatco.PrecastManholeManager.UI
             });
             top.Children.Add(new TextBlock
             {
-                Text = "Choose a task, select its scope, then run.",
+                Text = "1. Check & Review  >  2. Openings & Repair  >  3. Drawings",
                 Margin = new Thickness(0, 6, 0, 10)
             });
             _counts = new TextBlock
@@ -87,67 +92,83 @@ namespace Hatco.PrecastManholeManager.UI
             _timing.Checked += (s, e) => _cropOrder.IsEnabled = true;
             _timing.Unchecked += (s, e) => { _cropOrder.IsChecked = false; _cropOrder.IsEnabled = false; };
 
-            var tabs = new TabControl { Height = 185, Margin = new Thickness(0, 0, 0, 12) };
+            var tabs = new TabControl { Height = 270, Margin = new Thickness(0, 0, 0, 12) };
             top.Children.Add(tabs);
-            var openings = TaskPanel(tabs, "Openings", "Cut/update openings with or without sheets. Duct openings at wall ends shift inward at full size; required site movement is reported. Missing views defer dimensions.");
+
+            var reviewPanel = TaskPanel(tabs, "1. Check & Review", "Recheck current geometry and missing openings. Checking does not create openings or drawings.");
+            var checkScope = Scope(reviewPanel, "All manholes (Clean Scan)", "Review cases only", "Selected row");
+            var reviewButtons = new WrapPanel(); reviewPanel.Children.Add(reviewButtons);
+            var check = Button("Run Check", 155, reviewButtons);
+            check.Click += (sender, args) => Choose(new[] { ProjectAction.CleanScan, ProjectAction.RecheckReviewOnly, ProjectAction.RecheckOne }[checkScope.SelectedIndex], checkScope.SelectedIndex == 2);
+            var inspect = Button("Inspect Selected", 160, reviewButtons);
+            inspect.Click += (sender, args) => Choose(ProjectAction.ReviewOne, true);
+            var reviewViewScope = Choice(reviewPanel, "3D views:", "Selected row", "All review cases");
+            var reviewView = Button("Create / Open Review 3D", 225, reviewPanel);
+            reviewView.Click += (sender, args) => Choose(reviewViewScope.SelectedIndex == 0 ? ProjectAction.Make3D : ProjectAction.Review3DAll, reviewViewScope.SelectedIndex == 0);
+
+            var openings = TaskPanel(tabs, "2. Openings & Repair", "Pipes and ducts only. Sheets are not required. Failed cuts remain in review.");
             var openingScope = Scope(openings, "Selected row", "Pick bases in Revit", "Current model view", "All detected manholes");
             openingScope.SelectedIndex = 1;
-            openings.Children.Add(_mergeOpenings);
-            openings.Children.Add(_resetProfiles);
-            var missing = Button("Retry Missing Openings - All", 235, openings);
-            missing.ToolTip = "Scan all manholes and create only wholly missing cuts. Existing cuts and edited profiles are preserved. Merge setting applies to new cuts.";
-            missing.Click += (s, e) => Choose(ProjectAction.MissingOpeningsAll, false);
-            var runOpenings = Button("Run Openings", 190, openings);
-            runOpenings.Click += (s, e) => {
-                var actions = new[] { ProjectAction.ExistingOne, ProjectAction.ExistingPicked, ProjectAction.ExistingActiveView, ProjectAction.ExistingAll };
-                Choose(actions[openingScope.SelectedIndex], openingScope.SelectedIndex == 0);
+            var openingMode = Choice(openings, "Operation:", "Create / update openings", "Retry missing openings only");
+            var openingHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 5) };
+            openings.Children.Add(openingHint);
+            var openingActions = new WrapPanel(); openings.Children.Add(openingActions);
+            var runOpenings = Button("Run Openings", 180, openingActions);
+            openingActions.Children.Add(_mergeOpenings);
+            var resetPanel = new StackPanel(); resetPanel.Children.Add(_resetProfiles);
+            openings.Children.Add(new Expander { Header = "Wall profile repair options", Content = resetPanel });
+            Action updateOpeningMode = () => {
+                MissingOpeningsOnly = openingMode.SelectedIndex == 1;
+                _resetProfiles.IsEnabled = !MissingOpeningsOnly;
+                if (MissingOpeningsOnly) _resetProfiles.IsChecked = false;
+                openingHint.Text = MissingOpeningsOnly
+                    ? "Creates wholly missing cuts in the chosen scope. Existing cuts and wall profiles are preserved."
+                    : "Creates cuts and updates existing tool openings using the clearance below.";
             };
-
-            var dimensionPanel = TaskPanel(tabs, "Dimensions", "Rebuild tool-owned opening, body and base dimensions. Manual dimensions are preserved; moved tool dimensions are reset.");
-            var dimensionScope = Scope(dimensionPanel, "Selected row", "All prepared manholes");
-            Button dimensions = Button("Update Dimensions", 190, dimensionPanel);
-
-            var repairs = TaskPanel(tabs, "Base Repair", "Repair openings below the wall: lower the base, leave 100 mm below the opening, keep wall tops and restore pins. Sheets are not required.");
+            openingMode.SelectionChanged += (sender, args) => updateOpeningMode();
+            updateOpeningMode();
+            runOpenings.Click += (sender, args) => Choose(new[] { ProjectAction.ExistingOne, ProjectAction.ExistingPicked, ProjectAction.ExistingActiveView, ProjectAction.ExistingAll }[openingScope.SelectedIndex], openingScope.SelectedIndex == 0);
+            var repairs = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+            repairs.Children.Add(new TextBlock { Text = "Lower eligible bases to leave 100 mm below openings; extend walls and restore pins.", TextWrapping = TextWrapping.Wrap });
             var repairScope = Scope(repairs, "Pick bases in Revit", "Current model view");
             var runRepair = Button("Repair Low Bases", 190, repairs);
-            runRepair.Click += (s, e) => Choose(repairScope.SelectedIndex == 0 ? ProjectAction.RepairPicked : ProjectAction.RepairActiveView, false);
+            runRepair.Click += (sender, args) => Choose(repairScope.SelectedIndex == 0 ? ProjectAction.RepairPicked : ProjectAction.RepairActiveView, false);
+            openings.Children.Add(new Expander { Header = "Base repair", Content = repairs, Margin = new Thickness(0, 6, 0, 0) });
 
-            var sheets = TaskPanel(tabs, "Views & Sheets", "Create missing documentation or run the full workflow. Generate / Update All can create views and sheets and arrange prepared rows.");
-            var sheetButtons = new WrapPanel(); sheets.Children.Add(sheetButtons);
-            Button draft = Button("Views - Selected", 180, sheetButtons);
-            Button produce = Button("Prepare Sheet - Selected", 190, sheetButtons);
-            Button sheetsAll = Button("Prepare Sheets - All", 190, sheetButtons);
-            sheetsAll.Click += (s, e) => Choose(ProjectAction.SheetsAll, false);
-            Button overnight = Button("Sheets + Dimensions - All", 215, sheetButtons);
-            overnight.ToolTip = "Unattended: prepare/reuse sheets first, save, then dimension all prepared manholes. Review status does not exclude them. Saves the current RVT; does not run openings.";
-            overnight.Click += (s, e) => Choose(ProjectAction.SheetsAndDimensions, false);
-            Button batch = Button("Generate / Update All", 190, sheetButtons);
-            batch.Click += (s, e) => Choose(ProjectAction.ProductionAll, false);
+            var drawings = TaskPanel(tabs, "3. Drawings", "Review status does not block sheet preparation. Existing views are reused; moved manholes still need their view extents checked.");
+            var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All");
+            drawingTask.Width = 350;
+            var drawingHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
+            drawings.Children.Add(drawingHint);
+            string[] drawingHints = {
+                "Unattended: prepare/reuse sheets, save, then dimension prepared manholes. Saves the current RVT. Does not run openings.",
+                "Prepare/reuse sheets and five views per manhole. No opening or dimension pass.",
+                "Prepare/reuse the selected manhole's sheet and five views. No opening pass.",
+                "Rebuild tool dimensions for all prepared manholes. Manual dimensions are preserved.",
+                "Rebuild tool dimensions for the selected manhole. Manual dimensions are preserved.",
+                "Keep only each plan's own W1-W4 markers and set manhole viewports to NO BUBBLE NTS. Keep sheet positions." };
+            drawingHint.Text = drawingHints[0];
+            drawingTask.SelectionChanged += (sender, args) => drawingHint.Text = drawingHints[drawingTask.SelectedIndex];
+            var runDrawings = Button("Run Drawing Task", 195, drawings);
+            runDrawings.Click += (sender, args) => Choose(new[] { ProjectAction.SheetsAndDimensions, ProjectAction.SheetsAll, ProjectAction.SheetOnly, ProjectAction.ExistingDimensions, ProjectAction.DimensionOne, ProjectAction.CleanViewPresentation }[drawingTask.SelectedIndex], drawingTask.SelectedIndex == 2 || drawingTask.SelectedIndex == 4);
 
-            var presentation = Button("Plan Marks + Viewport Type - All", 265, sheetButtons);
-            presentation.ToolTip = "Show only each manhole's W1-W4 markers and use NO BUBBLE NTS for its viewports. Keeps sheet positions and scales.";
-            presentation.Click += (s, e) => Choose(ProjectAction.CleanViewPresentation, false);
-
-            var reviewPanel = TaskPanel(tabs, "Scan & Review", "Scan the project, recheck recorded issues, or inspect the manhole selected in the table below.");
-            var reviewButtons = new WrapPanel(); reviewPanel.Children.Add(reviewButtons);
-            Button scan = Button("Scan Project", 155, reviewButtons);
-            Button cleanScan = Button("Clean Scan - All", 170, reviewButtons);
-            Button recheckReview = Button("Recheck Review Only", 180, reviewButtons);
-            recheckReview.Click += (s, e) => Choose(ProjectAction.RecheckReviewOnly, false);
-            recheckReview.ToolTip = "Recheck all OPEN review cases in this model, regardless of the table filter. Does not change model geometry.";
-            Button recheck = Button("Recheck Selected", 170, reviewButtons);
-            Button review = Button("Inspect Selected", 170, reviewButtons);
-            Button view = Button("Show Review 3D", 160, reviewButtons);
-            var review3Ds = Button("3D - All Review Cases", 190, reviewButtons);
-            review3Ds.Click += (s, e) => Choose(ProjectAction.Review3DAll, false);
-            review3Ds.ToolTip = "Create/update 3D views for OPEN issues in this model's review register. Run Clean Scan to refresh geometry issues first.";
-
-            var advanced = TaskPanel(tabs, "Setup & Advanced", "Project numbering, exports and layout experiments. Performance settings apply only to Generate / Update All.");
+            var advanced = TaskPanel(tabs, "Setup & Advanced", "Numbering, exports and optional diagnostic tools. Use Drawings for normal sheet preparation.");
             var advancedButtons = new WrapPanel(); advanced.Children.Add(advancedButtons);
             Button number = Button("Assign Internal MH IDs", 190, advancedButtons);
             Button export = Button("Export Existing Excel", 190, advancedButtons);
-            Button six = Button("Test 6-Row Sheet", 180, advancedButtons);
-            advanced.Children.Add(diagnostics);
+            var experiments = new StackPanel();
+            var experimentButtons = new WrapPanel(); experiments.Children.Add(experimentButtons);
+            Button scan = Button("Geometry Inventory", 175, experimentButtons);
+            scan.ToolTip = "Legacy geometry inventory. Use Run Check for current service and missing-opening checks.";
+            Button draft = Button("Views Only - Selected", 185, experimentButtons);
+            Button six = Button("Test 6-Row Sheet", 175, experimentButtons);
+            Button batch = Button("Combined Sheets + Openings", 240, experimentButtons);
+            batch.ToolTip = "Legacy combined workflow; creates sheets and also changes openings. Diagnostics below apply only here.";
+            batch.Click += (sender, args) => Choose(ProjectAction.ProductionAll, false);
+            experiments.Children.Add(diagnostics);
+            advanced.Children.Add(new Expander { Header = "Legacy workflows & performance diagnostics", Content = experiments });
+            tabs.SelectedIndex = Math.Max(0, Math.Min(_lastTab, tabs.Items.Count - 1));
+            tabs.SelectionChanged += (sender, args) => { if (args.Source == tabs) _lastTab = tabs.SelectedIndex; };
             var openingSettings = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
             top.Children.Add(openingSettings);
             openingSettings.Children.Add(new TextBlock {
@@ -156,7 +177,7 @@ namespace Hatco.PrecastManholeManager.UI
                 Text = clearanceMm.ToString("0.###", CultureInfo.CurrentCulture) };
             openingSettings.Children.Add(_clearance);
             openingSettings.Children.Add(new TextBlock {
-                Text = "Generate also updates existing tool openings and their sheet.",
+                Text = "Used by checks, openings and base repair.",
                 VerticalAlignment = VerticalAlignment.Center });
 
             var search = new WrapPanel
@@ -213,12 +234,8 @@ namespace Hatco.PrecastManholeManager.UI
             AddColumn("Type", "TypeName", 204);
             AddColumn("3D view", "ViewName", 185);
 
-            cleanScan.Click += (s, e) => Choose(ProjectAction.CleanScan, false);
             scan.Click += (s, e) => Choose(ProjectAction.Scan, false);
             number.Click += (s, e) => Choose(ProjectAction.NumberAll, false);
-            recheck.Click += (s, e) => Choose(ProjectAction.RecheckOne, true);
-            review.Click += (s, e) => Choose(ProjectAction.ReviewOne, true);
-            view.Click += (s, e) => Choose(ProjectAction.Make3D, true);
             draft.Click += (s, e) =>
             {
                 SimpleManholeItem row = _grid.SelectedItem as SimpleManholeItem;
@@ -238,8 +255,6 @@ namespace Hatco.PrecastManholeManager.UI
                     return;
                 Choose(ProjectAction.DraftSheet, true);
             };
-            produce.Click += (s, e) => Choose(ProjectAction.SheetOnly, true);
-            dimensions.Click += (sender, args) => Choose(dimensionScope.SelectedIndex == 0 ? ProjectAction.DimensionOne : ProjectAction.ExistingDimensions, dimensionScope.SelectedIndex == 0);
             six.Click += (sender, args) =>
             {
                 // Test ONE sheet only. The view-generation engine validates
@@ -272,6 +287,14 @@ namespace Hatco.PrecastManholeManager.UI
             _filter.TextChanged += (s, e) => Filter();
             _onlyReview.Checked += (s, e) => Filter();
             _onlyReview.Unchecked += (s, e) => Filter();
+            _filter.Text = _lastSearch;
+            _onlyReview.IsChecked = _lastReviewFilter;
+            _grid.SelectedItem = _all.FirstOrDefault(x => x.FoundationId == _lastFoundation);
+            Closed += (sender, args) => {
+                _lastSearch = _filter.Text;
+                _lastReviewFilter = _onlyReview.IsChecked == true;
+                _lastFoundation = (_grid.SelectedItem as SimpleManholeItem)?.FoundationId;
+            };
             UpdateCounts();
         }
 
@@ -288,8 +311,13 @@ namespace Hatco.PrecastManholeManager.UI
 
         private static ComboBox Scope(Panel parent, params string[] choices)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
-            row.Children.Add(new TextBlock { Text = "Apply to:", VerticalAlignment = VerticalAlignment.Center,
+            return Choice(parent, "Apply to:", choices);
+        }
+
+        private static ComboBox Choice(Panel parent, string label, params string[] choices)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 12, 0) });
             var scope = new ComboBox { ItemsSource = choices, SelectedIndex = 0, Width = 260, Padding = new Thickness(6) };
             row.Children.Add(scope); parent.Children.Add(row);
@@ -371,7 +399,7 @@ namespace Hatco.PrecastManholeManager.UI
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
             if (!valid && (requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
-                requested == ProjectAction.MissingOpeningsAll || requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
+                requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
                 requested == ProjectAction.RepairPicked || requested == ProjectAction.RepairActiveView ||
                 requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan || requested == ProjectAction.RecheckReviewOnly))

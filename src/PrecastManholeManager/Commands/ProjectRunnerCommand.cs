@@ -96,11 +96,6 @@ namespace Hatco.PrecastManholeManager.Commands
                                 RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration, mergeOverlapping: window.MergeOverlappingOpenings);
                                 return Result.Succeeded;
                             }
-                            else if (window.Action == ProjectAction.MissingOpeningsAll)
-                            {
-                                RunExistingPrepared(input.Application, log, window.ClearanceMm, null, false, mergeOverlapping: window.MergeOverlappingOpenings, missingOnly: true);
-                                return Result.Succeeded;
-                            }
                             else if (window.Action == ProjectAction.ExistingPicked || window.Action == ProjectAction.ExistingActiveView ||
                                 window.Action == ProjectAction.RepairPicked || window.Action == ProjectAction.RepairActiveView)
                             {
@@ -109,7 +104,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                 var targets = SelectOpeningTargets(uiDoc, inView);
                                 if (targets == null) continue; // Esc cancels picking without edits.
                                 RunExistingPrepared(input.Application, log, window.ClearanceMm, null, false, targets,
-                                    inView ? "Scope: current view - " + uiDoc.ActiveView.Name : "Scope: selected manhole bases", repair, window.MergeOverlappingOpenings, window.ResetWallProfiles);
+                                    inView ? "Scope: current view - " + uiDoc.ActiveView.Name : "Scope: selected manhole bases", repair, window.MergeOverlappingOpenings, window.ResetWallProfiles, missingOnly: !repair && window.MissingOpeningsOnly);
                                 return Result.Succeeded;
                             }
                             else if (window.Action == ProjectAction.ExistingOne ||
@@ -117,7 +112,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             {
                                 RunExistingPrepared(input.Application, log, window.ClearanceMm,
                                     window.Action == ProjectAction.ExistingOne ? window.SelectedManhole : null,
-                                    window.Action == ProjectAction.ExistingDimensions, mergeOverlapping: window.MergeOverlappingOpenings, resetProfiles: window.ResetWallProfiles);
+                                    window.Action == ProjectAction.ExistingDimensions, mergeOverlapping: window.MergeOverlappingOpenings, resetProfiles: window.ResetWallProfiles, missingOnly: window.Action != ProjectAction.ExistingDimensions && window.MissingOpeningsOnly);
                                 return Result.Succeeded;
                             }
                             else if (window.Action == ProjectAction.ReviewOne)
