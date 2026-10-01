@@ -97,12 +97,10 @@ namespace Hatco.PrecastManholeManager.Commands
             }
 
             List<UnifiedOpeningReviewRow> actual = review.Rows
-                .Where(x => !x.IsVirtual).ToList();
+                .Where(x => !x.IsVirtual || x.EndpointQualified).ToList();
             if (actual.Count == 0)
                 throw new InvalidOperationException(
-                    "No confirmed actual linked-MEP wall penetrations. " +
-                    "Production will not cut any wall based on virtual " +
-                    "candidates alone. Review: " + csv);
+                    "No confirmed crossing or validated end connector within 150 mm of the wall. Review: " + csv);
             if (actual.Any(x => x.Status != "ACTUAL FIT PREVIEW" &&
                  !(x.Source.ExistingOpeningStatus == "MANAGED" &&
                    x.Source.CutWidthMm > 0 &&
@@ -159,9 +157,9 @@ namespace Hatco.PrecastManholeManager.Commands
                     "actual openings on one manhole so all setout rows " +
                     "remain readable on the sheet. See " + csv);
 
-            // Never let virtual extensions enter the write plan during
-            // the first production rollout; they remain in CSV for review.
-            plan.ProposedRows.RemoveAll(x => x.IsVirtual);
+            // Only connector-verified, unambiguous endpoint projections enter production.
+            plan.ProposedRows.RemoveAll(x => x.IsVirtual && !x.EndpointQualified);
+            int deferred = review.Rows.Count(x => x.IsVirtual && !x.EndpointQualified);
             if (actual.Select(x => x.Source.SourceKey).Distinct().Count() !=
                 actual.Count)
                 throw new InvalidOperationException(
@@ -170,13 +168,13 @@ namespace Hatco.PrecastManholeManager.Commands
             log.Info("PRODUCTION PREFLIGHT Name=" + id +
                 " Actual=" + actual.Count +
                 " ClearancePerSideMm=" + clearanceMm +
-                " VirtualDeferred=" + review.VirtualCount +
+                " EndpointQualified=" + actual.Count(x => x.IsVirtual) + " VirtualDeferred=" + deferred +
                 " ReviewCsv=" + csv);
             if (!unattended)
             {
                 var confirm = new TaskDialog("Approve first production cuts");
                 confirm.MainInstruction = id + " | " + actual.Count +
-                    " confirmed actual opening(s)";
+                    " confirmed crossing / endpoint opening(s)";
                 string proposed = string.Join("\n",
                     actual.OrderBy(x => x.Source.WallNumber)
                         .Select(x => "W" + x.Source.WallNumber +
@@ -191,7 +189,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     "to this one manhole's four walls. " +
                     (existingSheet == null ? "Create a new 1:25 Plan + 4 Sections sheet." :
                         "Update existing openings and the sheet table; preserve view layout.") + "\n\n" +
-                    "Virtual candidates deferred: " + review.VirtualCount +
+                    "Unverified endpoint candidates deferred: " + deferred +
                     "." +
                     " Existing tool openings may be resized. Manual cuts/profiles/void cutters are preserved." +
                     "\nFailed joins within this manhole walls/base may be detached if required by Revit." +
@@ -234,6 +232,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             RemoveVoidCutRelations = false,
                             DeleteIsolatedInPlaceCutters = false,
                             IncludeStraightVirtual = false,
+                            IncludeValidatedEndpoints = true,
                             // Required sources are the links loaded by the operator.
                             RequiredLinksVerified = true,
                             ResolveManholeJoinFailures = true
@@ -366,7 +365,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 "\nManaged unchanged: " + applied.ManagedUnchanged +
                 "\nManaged updated: " + applied.ManagedUpdated +
                 "\nFailed local joins resolved: " + applied.JoinFailuresResolved +
-                "\nVirtual deferred: " + review.VirtualCount +
+                "\nUnverified endpoints deferred: " + deferred +
                 "\n3D: " + production3D.Name + " (MH_3D)" +
                 "\nSheet: " + newSheet.SheetNumber +
                 " / " + newSheet.Name +

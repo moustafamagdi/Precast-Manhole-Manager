@@ -14,6 +14,7 @@ namespace Hatco.PrecastManholeManager.Services
         public bool RemoveVoidCutRelations { get; set; }
         public bool DeleteIsolatedInPlaceCutters { get; set; }
         public bool IncludeStraightVirtual { get; set; }
+        public bool IncludeValidatedEndpoints { get; set; }
         public bool RequiredLinksVerified { get; set; }
         public bool ResolveManholeJoinFailures { get; set; }
         public bool AllowIncompleteLinkCoverageForPreview { get; set; }
@@ -87,7 +88,7 @@ namespace Hatco.PrecastManholeManager.Services
             var keys = new HashSet<string>(StringComparer.Ordinal);
             foreach (UnifiedOpeningReviewRow row in plan.ProposedRows)
             {
-                if (row.IsVirtual &&
+                if (row.IsVirtual && !(options.IncludeValidatedEndpoints && row.EndpointQualified) &&
                     (!options.IncludeStraightVirtual ||
                      Math.Abs(row.SlopePercent) > 0.1 ||
                      row.ApproachAngleDeg > 0.5 ||

@@ -55,7 +55,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     (timingDiagnostic && cropOrderExperiment ? "EXPERIMENT: set plan crop bounds before activating the crop.\n" : "") +
                     "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
                     "Stage 1 prepares and saves body views on sheets for all identifiable manholes. Stage 2 attempts openings; failed cuts retain the prepared views for manual completion.\n" +
-                    "Missing internal IDs will be assigned. Repaired issues are checked again. Virtual-only crossings remain deferred.\n" +
+                    "Missing internal IDs will be assigned. Repaired issues are checked again. Verified end connectors touching/entering a wall or up to 150 mm before it are included (approach within 15 degrees).\n" +
                     "Changes are saved IN THE CURRENT RVT every 10 manholes or 5 minutes and at completion. No new RVT is created.\n" +
                     (doc.IsWorkshared ? "Uses Save only; Synchronize with Central is not performed.\n" : "") +
                     "Current RVT: " + output + "\n\nStart now, then leave Revit open. Stop is available between manholes.",

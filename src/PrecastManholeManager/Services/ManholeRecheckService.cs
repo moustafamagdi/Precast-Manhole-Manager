@@ -81,7 +81,7 @@ namespace Hatco.PrecastManholeManager.Services
                 csv = UnifiedOpeningReviewService.ExportCsv(review);
                 var plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log);
                 reasons.AddRange(ProductionPreflightService.PhysicalBlockers(plan));
-                var actual = review.Rows.Where(r => !r.IsVirtual).ToList();
+                var actual = review.Rows.Where(r => !r.IsVirtual || r.EndpointQualified).ToList();
                 actualCount = actual.Count;
                 foreach (var row in actual)
                 {

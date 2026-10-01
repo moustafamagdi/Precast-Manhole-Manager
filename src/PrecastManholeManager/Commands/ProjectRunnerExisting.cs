@@ -47,7 +47,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     "Eligible: " + eligible.Count + "; skipped: " + (source.Count - eligible.Count) + " (missing prepared views/row).\n" +
                     "Targets: " + string.Join(", ", eligible.Take(20).Select(x => x.ManholeName)) + (eligible.Count > 20 ? ", ..." : "") + "\n" +
                     "No new views or sheets; existing viewport positions are preserved.\n" +
-                    (dimensionsOnly ? "Existing cuts remain unchanged.\n" : "Pipes and ducts only. Clearance per side: " + clearance + " mm. Current geometry is validated again, including recorded review cases. Unsafe cuts are skipped.\n") +
+                    (dimensionsOnly ? "Existing cuts remain unchanged.\n" : "Pipes and ducts only. Clearance per side: " + clearance + " mm. Includes verified end connectors touching/entering the wall or up to 150 mm before it (approach within 15 degrees). Current geometry is validated again, including recorded review cases. Unsafe cuts are skipped.\n") +
                     "Hidden dimensions and annotation crop problems are reported for review.\n" +
                     "Saves in the CURRENT RVT every 10 items or 5 minutes, and at completion. No Synchronize with Central.\n" + doc.PathName,
                 CommonButtons = TaskDialogCommonButtons.Yes | TaskDialogCommonButtons.No,

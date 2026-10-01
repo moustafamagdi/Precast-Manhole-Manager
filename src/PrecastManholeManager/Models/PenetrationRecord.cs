@@ -143,9 +143,13 @@ namespace Hatco.PrecastManholeManager.Models
             }
         }
 
+        public double ProjectedWidthMm { get; set; }
+        public double ProjectedHeightMm { get; set; }
         public double CutWidthMm => CutWidthOverrideMm > 0 ? CutWidthOverrideMm :
+            ProjectedWidthMm > 0 ? ProjectedWidthMm + 2 * ClearanceMm :
             (Shape == "Round" ? OpeningDiameterMm : OpeningWidthMm);
         public double CutHeightMm => CutHeightOverrideMm > 0 ? CutHeightOverrideMm :
+            ProjectedHeightMm > 0 ? ProjectedHeightMm + 2 * ClearanceMm :
             (Shape == "Round" ? OpeningDiameterMm : OpeningHeightMm);
         public string SourceKey => LinkInstanceId.ToString(CultureInfo.InvariantCulture) + "|" +
                                    (LinkedUniqueId ?? LinkedElementId.ToString(CultureInfo.InvariantCulture)) + "|" +

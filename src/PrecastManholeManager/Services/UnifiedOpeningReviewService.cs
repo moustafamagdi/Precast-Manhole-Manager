@@ -32,6 +32,7 @@ namespace Hatco.PrecastManholeManager.Services
         public string Notes { get; set; }
         public PenetrationRecord Source { get; set; }
         public bool IsVirtual { get; set; }
+        public bool EndpointQualified { get; set; }
 
         internal void Evaluate(Document doc, double clearanceMm,
             OpeningResetAuditResult audit)
@@ -88,7 +89,7 @@ namespace Hatco.PrecastManholeManager.Services
                     flags.Add("WALL FIT REVIEW: " + fitReason);
             }
 
-            if (IsVirtual)
+            if (IsVirtual && !EndpointQualified)
             {
                 flags.Add("VIRTUAL EXTENSION - APPROVAL REQUIRED");
                 if (Math.Abs(SlopePercent) > 0.1 || ApproachAngleDeg > 5)
@@ -284,6 +285,7 @@ namespace Hatco.PrecastManholeManager.Services
             {
                 Detection = detection,
                 IsVirtual = isVirtual,
+                EndpointQualified = candidate?.EligibleForProduction == true,
                 Wall = "W" + r.WallNumber,
                 WallId = r.HostWallId,
                 SourceId = r.LinkedElementId,
@@ -341,6 +343,8 @@ namespace Hatco.PrecastManholeManager.Services
                 DiameterMm = dMm,
                 WidthMm = wMm,
                 HeightMm = hMm,
+                ProjectedWidthMm = candidate.ProjectedWidthMm,
+                ProjectedHeightMm = candidate.ProjectedHeightMm,
                 WallNumber = candidate.WallNumber,
                 HostWallId = candidate.WallId,
                 Xmm = UnitUtil.FtToMm(hit.X),

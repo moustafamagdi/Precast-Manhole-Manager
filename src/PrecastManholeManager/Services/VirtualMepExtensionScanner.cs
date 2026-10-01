@@ -29,6 +29,13 @@ namespace Hatco.PrecastManholeManager.Services
         public double DeviationDeg { get; set; }
         public string Status { get; set; }
         public string Reason { get; set; }
+        public bool ConnectorVerified { get; set; }
+        public double ProjectedWidthMm { get; set; }
+        public double ProjectedHeightMm { get; set; }
+        internal bool EligibleForProduction => ConnectorVerified && Status != "AMBIGUOUS REVIEW" &&
+            GapToFaceMm >= 0 && GapToFaceMm <= 150 && DeviationDeg >= 0 && DeviationDeg <= 15 &&
+            ProjectedWidthMm > 0 && !double.IsInfinity(ProjectedWidthMm) &&
+            ProjectedHeightMm > 0 && !double.IsInfinity(ProjectedHeightMm);
     }
 
     internal sealed class VirtualMepScanResult
@@ -264,6 +271,10 @@ namespace Hatco.PrecastManholeManager.Services
                                 continue;
                             }
 
+                            double projectedWidth, projectedHeight;
+                            bool connectorVerified = TryConnectorEnvelope(e, link.GetTotalTransform(), tip,
+                                extension, normal, tangent, wall.Width, out projectedWidth, out projectedHeight);
+
                             all.Add(new VirtualMepCandidate
                             {
                                 LinkInstanceId = link.Id.IntegerValue,
@@ -282,10 +293,13 @@ namespace Hatco.PrecastManholeManager.Services
                                 DepthInsideWallMm = insideWall ? insideDepthMm : 0,
                                 ReachToAxisMm = UnitUtil.FtToMm(reachFt),
                                 DeviationDeg = deviation,
+                                ConnectorVerified = connectorVerified,
+                                ProjectedWidthMm = projectedWidth,
+                                ProjectedHeightMm = projectedHeight,
                                 Status = insideWall ? "INSIDE_WALL_REVIEW" : "REVIEW",
                                 Reason = insideWall
-                                    ? "Endpoint lies inside wall thickness but before its mid-plane. Verify in Revit before cutting."
-                                    : "Virtual endpoint extension: approval required before any cut."
+                                    ? "Endpoint lies inside wall thickness; connector and opening fit must be validated."
+                                    : "Endpoint before/touching wall; connector and opening fit must be validated."
                             });
                             diagnostic.Add("W" + item.Number +
                                 (insideWall ? ":INSIDE_WALL_REVIEW" : ":VIRTUAL_CANDIDATE"));
@@ -398,6 +412,59 @@ namespace Hatco.PrecastManholeManager.Services
             }
             File.WriteAllText(path, csv.ToString(), new UTF8Encoding(true));
             return path;
+        }
+
+        private bool TryConnectorEnvelope(Element element, Transform transform, XYZ tip, XYZ direction,
+            XYZ normal, XYZ tangent, double thickness, out double widthMm, out double heightMm)
+        {
+            widthMm = heightMm = 0;
+            var curve = element as MEPCurve;
+            if (curve == null) return false;
+            try
+            {
+                var matches = curve.ConnectorManager.Connectors.Cast<Connector>()
+                    .Where(c => c.ConnectorType == ConnectorType.End &&
+                        transform.OfPoint(c.Origin).DistanceTo(tip) <= UnitUtil.MmToFt(1)).ToList();
+                if (matches.Count != 1) return false;
+                var connector = matches[0];
+                var cs = connector.CoordinateSystem;
+                if (Math.Abs(transform.OfVector(cs.BasisZ).Normalize().DotProduct(direction)) < 0.999)
+                    return false;
+                bool round = connector.Shape == ConnectorProfileType.Round;
+                if (!round && connector.Shape != ConnectorProfileType.Rectangular) return false;
+                double halfX = round ? connector.Radius : connector.Width / 2;
+                double halfY = round ? connector.Radius : connector.Height / 2;
+                if (round)
+                {
+                    double outer = element.get_Parameter(BuiltInParameter.RBS_PIPE_OUTER_DIAMETER)?.AsDouble() ?? 0;
+                    halfX = halfY = Math.Max(halfX, outer / 2);
+                }
+                if (halfX <= 0 || halfY <= 0) return false;
+                double dn = direction.DotProduct(normal);
+                if (Math.Abs(dn) < 1e-8) return false;
+                XYZ x = transform.OfVector(cs.BasisX).Normalize();
+                XYZ y = transform.OfVector(cs.BasisY).Normalize();
+                // Project the connector cross-section along its axis onto the wall plane.
+                x -= direction * (x.DotProduct(normal) / dn);
+                y -= direction * (y.DotProduct(normal) / dn);
+                widthMm = UnitUtil.FtToMm(ProjectedExtent(round, halfX * x.DotProduct(tangent),
+                    halfY * y.DotProduct(tangent), thickness * direction.DotProduct(tangent) / dn));
+                heightMm = UnitUtil.FtToMm(ProjectedExtent(round, halfX * x.Z,
+                    halfY * y.Z, thickness * direction.Z / dn));
+                _log.Info("END CONNECTOR VERIFIED Source=" + element.Id.IntegerValue +
+                    " ProjectedEnvelopeMm=" + F(widthMm) + "x" + F(heightMm));
+                return widthMm > 0 && heightMm > 0;
+            }
+            catch (Exception ex)
+            {
+                _log.Warn("END CONNECTOR REVIEW Source=" + element.Id.IntegerValue + " " + ex.Message);
+                return false;
+            }
+        }
+
+        internal static double ProjectedExtent(bool round, double x, double y, double throughThickness)
+        {
+            return 2 * (round ? Math.Sqrt(x * x + y * y) : Math.Abs(x) + Math.Abs(y)) + Math.Abs(throughThickness);
         }
 
         private static string ParamText(Element element, string name)

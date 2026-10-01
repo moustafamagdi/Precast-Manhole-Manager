@@ -26,3 +26,10 @@ Openings - Pick Bases uses the current Revit selection when nonempty (recognized
 
 Openings - Current View collects host structural foundations using Revit's view-scoped collector, then intersects with recognized manholes. It uses the active model view, not screen zoom; sheets are rejected. Revit visibility/occlusion rules can include candidates that are not visually obvious, so inspect the highlighted targets and confirmation count. Linked bases are excluded. Both actions retain the prepared-row requirement, report skipped rows and create no views/sheets.
 
+
+## Verified end connectors
+
+Production and Clean Scan now include unambiguous pipe/duct end connectors touching a wall, stopping within its thickness, or stopping up to 150 mm before its face. Sources already crossing the wall mid-plane continue through actual-crossing detection. The endpoint must match a real End connector in transformed host coordinates; plan approach remains limited to 15 degrees. Unsupported or ambiguous connectors remain deferred.
+
+Connector cross-sections are projected onto the wall plane, including travel through wall thickness. Rectangular connector rotation and round outer pipe diameter are respected; clearance is added afterward. Wall fit, overlap checks, source-key deduplication and manual-edit protection still apply. Linked elements are never extended in the model. Test MH-003 first, then rerun it to check no duplicate openings and clearance updates. Automated tests cover eligibility and envelope mathematics; live Revit connector/geometry validation is still required.
+

@@ -153,3 +153,43 @@ Assert-That ($annotationAxis.Invoke($null,[object[]]@(11.0,0.0,10.0,0.1,0.1,25))
 Assert-That (!$annotationAxis.Invoke($null,[object[]]@(13.0,0.0,10.0,0.1,0.1,25))) 'Annotation outside annotation crop remains rejected'
 Assert-That ($annotationAxis.Invoke($null,[object[]]@(-2.5,0.0,10.0,0.1,0.2,25))) 'Annotation lower boundary uses paper units times view scale'
 Assert-That (!$annotationAxis.Invoke($null,[object[]]@(-3.0,0.0,10.0,0.1,0.2,25))) 'Asymmetric annotation margins do not swap lower and upper boundaries'
+
+$candidateType = $assembly.GetType('Hatco.PrecastManholeManager.Services.VirtualMepCandidate')
+$candidate = [Activator]::CreateInstance($candidateType, $true)
+$eligible = $candidateType.GetProperty('EligibleForProduction', [Reflection.BindingFlags]'NonPublic,Instance')
+$candidate.ConnectorVerified = $true
+$candidate.Status = 'REVIEW'
+$candidate.ProjectedWidthMm = 705
+$candidate.ProjectedHeightMm = 700
+$candidate.GapToFaceMm = 0
+Assert-That ($eligible.GetValue($candidate)) 'Verified end connector touching the wall is eligible'
+$candidate.Status = 'INSIDE_WALL_REVIEW'
+$candidate.DepthInsideWallMm = 25
+Assert-That ($eligible.GetValue($candidate)) 'Verified connector 25 mm inside wall no longer requires a mid-plane crossing'
+$candidate.GapToFaceMm = 150
+Assert-That ($eligible.GetValue($candidate)) 'Endpoint at the agreed 150 mm face gap is eligible'
+$candidate.GapToFaceMm = 150.01
+Assert-That (!$eligible.GetValue($candidate)) 'Endpoint beyond the agreed gap remains deferred'
+$candidate.GapToFaceMm = 0
+$candidate.Status = 'AMBIGUOUS REVIEW'
+Assert-That (!$eligible.GetValue($candidate)) 'An endpoint near several eligible walls cannot authorize a cut'
+$candidate.Status = 'REVIEW'
+$candidate.ConnectorVerified = $false
+Assert-That (!$eligible.GetValue($candidate)) 'An unverified curve endpoint cannot authorize a connector-based cut'
+$candidate.ConnectorVerified = $true
+$candidate.DeviationDeg = 16
+Assert-That (!$eligible.GetValue($candidate)) 'An approach beyond 15 degrees remains deferred'
+$candidate.DeviationDeg = 0
+$candidate.ProjectedWidthMm = [double]::NaN
+Assert-That (!$eligible.GetValue($candidate)) 'Invalid projected envelope cannot authorize a cut'
+
+$extent = $assembly.GetType('Hatco.PrecastManholeManager.Services.VirtualMepExtensionScanner').GetMethod('ProjectedExtent', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($extent.Invoke($null,[object[]]@($true,250.0,0.0,0.0)) -eq 500) 'Normal round connector retains its diameter'
+Assert-That ($extent.Invoke($null,[object[]]@($true,150.0,200.0,20.0)) -eq 520) 'Round envelope includes oblique projection and wall thickness travel'
+Assert-That ($extent.Invoke($null,[object[]]@($false,-150.0,200.0,-20.0)) -eq 720) 'Rotated rectangular envelope includes both connector axes and signed wall travel'
+$record.ProjectedWidthMm = 705
+$record.ProjectedHeightMm = 700
+$record.ClearanceMm = 50
+Assert-That ($record.CutWidthMm -eq 805 -and $record.CutHeightMm -eq 800) 'Verified duct endpoint envelope receives clearance on both sides'
+$record.ClearanceMm = 75
+Assert-That ($record.CutWidthMm -eq 855 -and $record.CutHeightMm -eq 850 -and $record.SourceKey -eq $key) 'Endpoint clearance updates preserve the source key and projected size'
