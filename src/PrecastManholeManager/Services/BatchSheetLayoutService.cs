@@ -164,8 +164,7 @@ namespace Hatco.PrecastManholeManager.Services
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
             if (views.Count != 5) throw new InvalidOperationException("Five production views required.");
-            var viewportType = new FilteredElementCollector(doc).OfClass(typeof(ElementType)).Cast<ElementType>()
-                .FirstOrDefault(t => t.Category?.Id.IntegerValue == (int)BuiltInCategory.OST_Viewports && t.Name == "NO BUBBLE NTS");
+            ElementType viewportType = null;
             var existingPorts = new FilteredElementCollector(doc).OfClass(typeof(Viewport))
                 .Cast<Viewport>().ToList();
             for (int col = 0; col < views.Count; col++)
@@ -184,7 +183,8 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 if (port == null) port = PerformanceMeasurement.Call(log, "Viewport.Create", view.Name,
                     () => Viewport.Create(doc, slot.Sheet.Id, view.Id, XYZ.Zero));
-                if (viewportType != null && port.GetTypeId() != viewportType.Id)
+                if (viewportType == null) viewportType = ManholeViewPresentationService.RequiredViewportType(doc, port);
+                if (port.GetTypeId() != viewportType.Id)
                     PerformanceMeasurement.Call(log, "Viewport.ChangeTypeId", view.Name, () => port.ChangeTypeId(viewportType.Id));
                 string detail = ManholeIdentityStore.Read(foundation) + (col == 0 ? "-P" : "-W" + col);
                 PerformanceMeasurement.Call(log, "Viewport.DetailNumber", view.Name,

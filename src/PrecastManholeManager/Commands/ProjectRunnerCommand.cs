@@ -62,6 +62,23 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.CleanScan)
                                 TaskDialog.Show("Clean Scan - All Manholes", ManholeRecheckService.RunAll(
                                     doc, window.ClearanceMm, log));
+                            else if (window.Action == ProjectAction.CleanViewPresentation)
+                                {
+                                var progress = new BatchProgressWindow(input.Application.MainWindowHandle);
+                                string summary;
+                                progress.Start();
+                                try
+                                {
+                                    summary = ManholeViewPresentationService.ApplyAll(doc, log, (done, total) =>
+                                    {
+                                        progress.Update(done, total, "Cleaning plan marks and viewport types");
+                                        return !progress.CancelRequested;
+                                    });
+                                    if (!string.IsNullOrWhiteSpace(doc.PathName)) doc.Save(new SaveOptions());
+                                }
+                                finally { progress.Finish(); }
+                                TaskDialog.Show("Manhole View Presentation", summary);
+                            }
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
                             else if (window.Action == ProjectAction.SheetsAndDimensions)

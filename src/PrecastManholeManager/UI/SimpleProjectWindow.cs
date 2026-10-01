@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, MissingOpeningsAll
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, MissingOpeningsAll, CleanViewPresentation
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -123,6 +123,10 @@ namespace Hatco.PrecastManholeManager.UI
             overnight.Click += (s, e) => Choose(ProjectAction.SheetsAndDimensions, false);
             Button batch = Button("Generate / Update All", 190, sheetButtons);
             batch.Click += (s, e) => Choose(ProjectAction.ProductionAll, false);
+
+            var presentation = Button("Plan Marks + Viewport Type - All", 265, sheetButtons);
+            presentation.ToolTip = "Show only each manhole's W1-W4 markers and use NO BUBBLE NTS for its viewports. Keeps sheet positions and scales.";
+            presentation.Click += (s, e) => Choose(ProjectAction.CleanViewPresentation, false);
 
             var reviewPanel = TaskPanel(tabs, "Scan & Review", "Scan the project, recheck recorded issues, or inspect the manhole selected in the table below.");
             var reviewButtons = new WrapPanel(); reviewPanel.Children.Add(reviewButtons);

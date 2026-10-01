@@ -93,6 +93,11 @@ namespace Hatco.PrecastManholeManager.Commands
                     lastSave = DateTime.Now;
                 }
             }
+            if (!progress.CancelRequested) ManholeViewPresentationService.ApplyAll(doc, log, (done, total) =>
+            {
+                progress.Update(done, total, "Cleaning plan section marks and viewport types");
+                return !progress.CancelRequested;
+            });
             PerformanceMeasurement.Call(log, "Document.Save.DocumentationEnd", doc.Title,
                 () => doc.Save(new SaveOptions()));
         }

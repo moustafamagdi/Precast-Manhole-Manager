@@ -211,6 +211,7 @@ namespace Hatco.PrecastManholeManager.Services
                 foundation.Id.IntegerValue + " Views=" +
                 string.Join(",", result.Views.Select(x =>
                     x.Name + ":" + x.Id.IntegerValue)));
+            ManholeViewPresentationService.CleanPlan(doc, plan, log);
             return result;
         }
 

@@ -407,3 +407,12 @@ Assert-That (Test-OpeningCoverage @((New-Cut 'combined' 175 50 500 300)) $requir
 Assert-That (!(Test-OpeningCoverage @((New-Cut 'wrong-wall' 100 50 300 300 101)) $required)) 'An opening on another wall cannot clear Missing Opening'
 $required.FittedCenterXmm=150; $required.CutWidthOverrideMm=200
 Assert-That (Test-OpeningCoverage @((New-Cut 'clipped-corner' 150 50 200 300)) $required) 'Corner coverage uses the clipped width and fitted center'
+
+$presentation=$assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeViewPresentationService')
+$ownsMarker=$presentation.GetMethod('IsOwnSection',[Reflection.BindingFlags]'Public,Static')
+function Test-OwnMarker($plan,$marker) { return $ownsMarker.Invoke($null,[object[]]@($plan,$marker)) }
+1..4 | ForEach-Object { Assert-That (Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' "MH_5503857_PROD_2D_OUT_W$_") "Own W$_ marker is retained" }
+Assert-That (!(Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' 'MH_5503711_PROD_2D_OUT_W1')) 'Neighboring manhole marker is excluded'
+Assert-That (!(Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' 'MH_5503857_DRAFT_2D_OUT_W1')) 'Draft marker is not mistaken for production marker'
+Assert-That (!(Test-OwnMarker 'MH_5503857_PROD_2D_PLAN' 'MH_5503857_PROD_2D_OUT_W10')) 'W10 prefix does not match W1'
+Assert-That (!(Test-OwnMarker 'Manual PLAN' 'Manual_OUT_W1')) 'Manual plans are not managed by name similarity'
