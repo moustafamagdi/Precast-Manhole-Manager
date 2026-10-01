@@ -88,7 +88,8 @@ namespace Hatco.PrecastManholeManager.Services
             double alongFt = (center - a).DotProduct(tangent);
 
             if (!HorizontalFits(UnitUtil.FtToMm(alongFt), record.CutWidthMm, UnitUtil.FtToMm(wallLengthFt),
-                record.CornerStartAllowed, record.CornerEndAllowed))
+                record.CornerStartAllowed || (record.EdgeAligned && alongFt - halfWidthFt >= -UnitUtil.MmToFt(0.001)),
+                record.CornerEndAllowed || (record.EdgeAligned && alongFt + halfWidthFt <= wallLengthFt + UnitUtil.MmToFt(0.001))))
             {
                 reason =
                     "Opening extends beyond wall horizontal limits. " +

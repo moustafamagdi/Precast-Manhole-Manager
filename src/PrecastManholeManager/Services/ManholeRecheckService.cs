@@ -95,6 +95,8 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 foreach (var row in actual)
                 {
+                    if (row.Source.EdgeAligned && Math.Abs(row.Source.EdgeShiftMm) > 0.1)
+                        reasons.Add("W" + row.Source.WallNumber + " Source=" + row.SourceId + ": duct site adjustment " + row.Source.EdgeShiftMm.ToString("0.#") + " mm required.");
                     string why;
                     if (!OpeningFitValidationService.TryValidate(doc, row.Source, out why))
                         reasons.Add("W" + row.Source.WallNumber + " Source=" + row.SourceId + ": " + why);

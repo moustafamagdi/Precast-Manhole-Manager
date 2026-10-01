@@ -335,3 +335,19 @@ Assert-That (!$near.Invoke($null,[object[]]@(550.0,214.3,1100.0,0))) 'Crossings 
 $aCut.CornerStartAllowed=$true
 $cornerMerge=Combine-Cuts @($aCut,$bCut)
 Assert-That ($cornerMerge[0].CornerStartAllowed -and !$cornerMerge[0].CornerEndAllowed) 'Merging preserves only the qualified wall-end permission'
+
+$edge=$assembly.GetType('Hatco.PrecastManholeManager.Services.DuctEdgeOpeningService').GetMethod('AdjustedCenter',[Reflection.BindingFlags]'NonPublic,Static')
+function Edge-Center([double]$c,[double]$w,[double]$l){return [double]$edge.Invoke($null,[object[]]@($c,$w,$l))}
+Assert-That ((Edge-Center -1.2 500 1100) -eq 250) 'Duct at wall start shifts inward while preserving full 500 mm opening width'
+Assert-That ((Edge-Center 1098.8 500 1100) -eq 850) 'Duct at wall end shifts in the opposite direction without reducing clearance'
+Assert-That ((Edge-Center 550 500 1100) -eq 550) 'Centered duct openings are not moved'
+Assert-That ([double]::IsNaN((Edge-Center 550 1200 1100))) 'Oversized duct opening cannot be fixed by shifting'
+Assert-That ([double]::IsNaN((Edge-Center -500 500 1100))) 'A duct opening entirely outside the wall is not relocated arbitrarily'
+Assert-That ((Edge-Center 252 500 1100) -eq 250) 'A sub-5-mm wall-end sliver is replaced by an edge-aligned opening'
+$fitted=New-Cut 'Fitted' 0 0 500 500
+$fitted.FittedCenterXmm=250
+$fittedData=[Activator]::CreateInstance($assembly.GetType('Hatco.PrecastManholeManager.Services.ManagedOpeningData'),$true)
+$fittedData.HostWallId=100; $fittedData.ClearanceMm=50; $fittedData.CutWidthMm=500; $fittedData.CutHeightMm=500; $fittedData.Xmm=0
+Assert-That (!$matches.Invoke($null,@($fittedData,$fitted))) 'Existing opening at the original duct center must update to its fitted position'
+$fittedData.Xmm=250
+Assert-That ($matches.Invoke($null,@($fittedData,$fitted))) 'Rerun reuses an opening already at the fitted position'

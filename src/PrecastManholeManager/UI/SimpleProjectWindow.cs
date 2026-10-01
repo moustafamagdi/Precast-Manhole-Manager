@@ -87,7 +87,7 @@ namespace Hatco.PrecastManholeManager.UI
 
             var tabs = new TabControl { Height = 185, Margin = new Thickness(0, 0, 0, 12) };
             top.Children.Add(tabs);
-            var openings = TaskPanel(tabs, "Openings", "Cut/update openings with or without sheets. Dimensions update when all five production views exist; otherwise they are deferred. No new views or sheets.");
+            var openings = TaskPanel(tabs, "Openings", "Cut/update openings with or without sheets. Duct openings at wall ends shift inward at full size; required site movement is reported. Missing views defer dimensions.");
             var openingScope = Scope(openings, "Selected row", "Pick bases in Revit", "Current model view", "All detected manholes");
             openingScope.SelectedIndex = 1;
             openings.Children.Add(_mergeOpenings);

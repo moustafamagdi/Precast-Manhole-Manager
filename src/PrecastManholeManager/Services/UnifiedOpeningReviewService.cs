@@ -45,6 +45,7 @@ namespace Hatco.PrecastManholeManager.Services
             Source.FittedCenterYmm = null;
             Source.FittedCenterZmm = null;
 
+            DuctEdgeOpeningService.Apply(doc, Source);
             OpeningSize = Source.CutWidthMm > 0 && Source.CutHeightMm > 0
                 ? Source.CutWidthMm.ToString("0.#") + " x " +
                   Source.CutHeightMm.ToString("0.#") + " mm"
@@ -98,6 +99,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             Status = flags.Count == 0 ? "ACTUAL FIT PREVIEW" : "REVIEW";
             Notes = string.Join(" | ", flags);
+            if (Source.EdgeAligned) Notes += " | DUCT SITE ADJUSTMENT: move along wall " + Source.EdgeShiftMm.ToString("0.#") + " mm; full opening starts at wall end";
             if (Source.CornerStartAllowed || Source.CornerEndAllowed) Notes += " | VERIFIED SHARED CORNER - full projected opening crosses wall end";
             if (IsVirtual && Detection == "INSIDE WALL")
                 Notes += " | Endpoint already enters wall thickness.";

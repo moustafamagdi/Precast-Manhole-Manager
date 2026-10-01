@@ -106,6 +106,11 @@ namespace Hatco.PrecastManholeManager.Commands
                                     if (group.Assimilate() != TransactionStatus.Committed) throw new InvalidOperationException("Opening group commit rejected.");
                                     newCuts += applied.NewOpenings; updated += applied.ManagedUpdated; unchanged += applied.ManagedUnchanged;
                                     committedGroups++;
+                                    foreach (var shifted in component.Where(r => r.EdgeAligned && Math.Abs(r.EdgeShiftMm) > 0.1))
+                                    {
+                                        string site = "W" + number + " Source=" + shifted.LinkedElementId + ": OPENING COMMITTED - duct site adjustment along wall " + shifted.EdgeShiftMm.ToString("0.#") + " mm required.";
+                                        problems.Add(site); log.Warn(site);
+                                    }
                                     safeWalls.Add(number);
                                     outcomes.Add(componentLabel + ": committed " + desired.Count + " cut(s); merged=" + desired.Count(r => r.MemberSourceKeys != null));
                                 }

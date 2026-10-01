@@ -60,3 +60,11 @@ For a detected source crossing two adjacent perpendicular wall ends of the recov
 The full projected rectangle crosses the wall end; it is not shortened to leave a concrete sliver at the corner. Revit acceptance of these native end cuts and their associative dimensions must be verified in the live model. Rejected groups stay in review while independent groups remain committed. Sources that cannot be verified/projected retain the normal fit restrictions.
 
 Acceptance: foundation 4445337 / source 32848953 should attempt both W2 and W4 corner cuts. The independent sources 32810164, 32810225 and 32848983 must proceed even if a corner group fails. Rerun to verify reuse, adjust clearance to verify resizing, and inspect both wall ends in 3D. If same-wall envelopes overlap, enable Merge overlapping openings. No merge toggle is required merely because one source crosses two walls.
+
+## Duct openings at a wall end
+
+A duct opening that crosses a wall end, or leaves less than 5 mm there, is aligned with that end at its full width including clearance. The opening center shifts along the wall; the linked duct is not edited. A cut too wide for the wall, entirely outside it, or failing vertical fit still requires review. This duct rule takes precedence over shared-corner end extension; pipe corner behavior remains unchanged.
+
+The log, opening-review CSV and run report record the signed shift along the wall axis. A nonzero shift retains site-coordination review even when the opening was committed. Clean Scan reports the same outstanding coordination until the duct position no longer needs adjustment. Stored opening centers are the actual fitted centers so reruns reuse them correctly.
+
+Run Openings now starts after scope selection/picking without the extra Existing Manholes confirmation dialog. Automatic saving remains active and failures remain visible; dimension-only and base-repair confirmations retain their previous behavior.

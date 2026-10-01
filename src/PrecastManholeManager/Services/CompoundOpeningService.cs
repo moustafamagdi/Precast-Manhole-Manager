@@ -109,7 +109,8 @@ namespace Hatco.PrecastManholeManager.Services
                 var center = (corners[0] + corners[1]) / 2;
                 var delta = corners[1] - corners[0];
                 var actual = new PenetrationRecord { HostWallId = data.HostWallId,
-                    CornerStartAllowed = a.CornerStartAllowed || b.CornerStartAllowed, CornerEndAllowed = a.CornerEndAllowed || b.CornerEndAllowed,
+                    EdgeAligned = a.EdgeAligned || b.EdgeAligned,
+                CornerStartAllowed = a.CornerStartAllowed || b.CornerStartAllowed, CornerEndAllowed = a.CornerEndAllowed || b.CornerEndAllowed,
                     Xmm = UnitUtil.FtToMm(center.X), Ymm = UnitUtil.FtToMm(center.Y), Zmm = UnitUtil.FtToMm(center.Z),
                     CutWidthOverrideMm = UnitUtil.FtToMm(Math.Abs(delta.DotProduct(direction))),
                     CutHeightOverrideMm = UnitUtil.FtToMm(Math.Abs(delta.Z)) };
@@ -133,6 +134,7 @@ namespace Hatco.PrecastManholeManager.Services
             using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", members)))).Replace("-", "");
             return new PenetrationRecord {
                 HostWallId = a.HostWallId, WallNumber = a.WallNumber, Shape = "Rectangular",
+                EdgeAligned = a.EdgeAligned || b.EdgeAligned,
                 CornerStartAllowed = a.CornerStartAllowed || b.CornerStartAllowed,
                 CornerEndAllowed = a.CornerEndAllowed || b.CornerEndAllowed,
                 LinkInstanceId = a.LinkInstanceId, LinkName = "Combined sources", LinkedElementId = a.LinkedElementId,

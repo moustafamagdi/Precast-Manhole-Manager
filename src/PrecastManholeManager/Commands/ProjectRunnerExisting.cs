@@ -41,6 +41,8 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             if (eligible.Count == 0)
                 throw new InvalidOperationException("No eligible manholes found. The dimensions-only batch requires prepared rows.");
+            if (repairLowBase || dimensionsOnly)
+            {
             var ask = new TaskDialog("Existing Manholes") {
                 MainInstruction = (repairLowBase ? "Repair lower-wall opening failures in " : dimensionsOnly ? "Update dimensions for " : "Update openings and dimensions for ") + eligible.Count + " manhole(s)?",
                 MainContent = (scopeDescription == null ? "" : scopeDescription + "\n") +
@@ -56,6 +58,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 DefaultButton = TaskDialogResult.No
             };
             if (ask.Show() != TaskDialogResult.Yes) return;
+            }
             string report = Path.ChangeExtension(log.LogPath, ".existing.csv");
             int done = 0, complete = 0, review = 0, skipped = 0;
             DateTime saved = DateTime.Now;

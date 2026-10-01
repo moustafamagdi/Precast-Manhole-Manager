@@ -428,9 +428,9 @@ namespace Hatco.PrecastManholeManager.Services
             const double tol = 0.001;
             return Math.Abs(data.ClearanceMm - r.ClearanceMm) <= tol &&
                 data.HostWallId == r.HostWallId &&
-                Math.Abs(data.Xmm - r.Xmm) <= tol &&
-                Math.Abs(data.Ymm - r.Ymm) <= tol &&
-                Math.Abs(data.Zmm - r.Zmm) <= tol &&
+                Math.Abs(data.Xmm - r.EffectiveOpeningXmm) <= tol &&
+                Math.Abs(data.Ymm - r.EffectiveOpeningYmm) <= tol &&
+                Math.Abs(data.Zmm - r.EffectiveOpeningZmm) <= tol &&
                 Math.Abs(data.CutWidthMm - r.CutWidthMm) <= tol &&
                 Math.Abs(data.CutHeightMm - r.CutHeightMm) <= tol;
         }

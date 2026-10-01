@@ -63,9 +63,9 @@ namespace Hatco.PrecastManholeManager.Services
             SetMillimeters(entity, schema, "CutWidthMm", record.CutWidthMm);
             SetMillimeters(entity, schema, "CutHeightMm", record.CutHeightMm);
             SetMillimeters(entity, schema, "ClearanceMm", record.ClearanceMm);
-            SetMillimeters(entity, schema, "Xmm", record.Xmm);
-            SetMillimeters(entity, schema, "Ymm", record.Ymm);
-            SetMillimeters(entity, schema, "Zmm", record.Zmm);
+            SetMillimeters(entity, schema, "Xmm", record.EffectiveOpeningXmm);
+            SetMillimeters(entity, schema, "Ymm", record.EffectiveOpeningYmm);
+            SetMillimeters(entity, schema, "Zmm", record.EffectiveOpeningZmm);
 
             entity.Set(schema.GetField("UpdatedUtc"), DateTime.UtcNow.ToString("O"));
 
