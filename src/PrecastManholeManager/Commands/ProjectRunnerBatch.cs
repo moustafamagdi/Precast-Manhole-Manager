@@ -50,6 +50,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 MainInstruction = "Run " + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
                     "Six fixed rows per sheet at 1:25; one manhole per row, failed rows remain reserved. Existing generated views may move from their individual tool sheets into these rows.\n" +
+                    "Stage 1 prepares and saves body views on sheets for all identifiable manholes. Stage 2 attempts openings; failed cuts retain the prepared views for manual completion.\n" +
                     "Missing internal IDs will be assigned. Repaired issues are checked again. Virtual-only crossings remain deferred.\n" +
                     "A separate RVT copy will become the active document. Saves occur every 10 manholes or 5 minutes and at completion. No synchronization to the original central model.\n" +
                     (doc.IsWorkshared ? "The output is a NEW independent central model.\n" : "") +
@@ -67,6 +68,7 @@ namespace Hatco.PrecastManholeManager.Commands
             string report = Path.Combine(folder, "RunReport.csv");
             string summaryPath = Path.Combine(folder, "RunSummary.txt");
             int processed = 0, committed = 0, review = 0, dimensionReview = 0, savedThrough = 0;
+            var documented = new HashSet<int>();
             string stopped = "";
             DateTime lastSave = DateTime.Now;
             var progress = new BatchProgressWindow(app.MainWindowHandle);
@@ -107,9 +109,10 @@ namespace Hatco.PrecastManholeManager.Commands
                         var slot = BatchSheetLayoutService.Find(doc, Resolve(doc,item));
                         WriteBatchRow(writer, item, slot, "QUEUED", "Reserved before execution");
                     }
+                    PrepareBatchDocumentation(doc, items, log, progress, writer, documented);
                     foreach (var item in items)
                     {
-                        progress.Update(processed, items.Count, "Processing " + item.ManholeName + "\nSaved through item " + savedThrough + "\n" + output);
+                        progress.Update(processed, items.Count, "Stage 2/2 - openings: " + item.ManholeName + "\nSaved through opening item " + savedThrough + "\n" + output);
                         if (progress.CancelRequested) { stopped = "Stopped by user between manholes."; break; }
                         var foundation = Resolve(doc,item);
                         var slot = BatchSheetLayoutService.Find(doc,foundation);
@@ -119,6 +122,8 @@ namespace Hatco.PrecastManholeManager.Commands
                         bool modelCommitted = false;
                         try
                         {
+                            if (!documented.Contains(item.FoundationId))
+                                throw new InvalidOperationException("Documentation needs manual completion; reserved row retained. See VIEWS REVIEW in run report.");
                             // Fresh production preflight replaces stale registry gating without a second MEP scan.
                             using (var group = new TransactionGroup(doc,"HATCO - Batch Manhole Including Layout"))
                             {
@@ -158,7 +163,8 @@ namespace Hatco.PrecastManholeManager.Commands
                             using (var tx = new Transaction(doc,"HATCO - Mark Reserved Review Row"))
                             {
                                 tx.Start(); TransactionFailureHandling.Configure(tx,log);
-                                BatchSheetLayoutService.SetStatus(doc,foundation,slot,"REVIEW - " + details);
+                                BatchSheetLayoutService.SetStatus(doc,foundation,slot,
+                                    (documented.Contains(item.FoundationId) ? "VIEWS RETAINED / OPENINGS REVIEW - " : "MANUAL VIEWS REQUIRED - ") + details);
                                 if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Cannot update reserved review row.");
                             }
                         }
@@ -181,6 +187,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
             }
             string summary = (stopped.Length == 0 ? "Run completed." : stopped) +
+                "\nManholes with prepared views: " + documented.Count + " / " + numbering.Rows.Count +
                 "\nProcessed: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
                 "\nReview: " + review + "\nSaved through item: " + savedThrough +
                 "\nCommitted with dimension review: " + dimensionReview +

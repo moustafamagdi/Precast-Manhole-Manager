@@ -12,6 +12,8 @@ Batch sheets contain **six manholes, one per row**: Plan, W1, W2, W3, W4. Failed
 
 Views and titles that exceed their reserved row are placed at the assigned row and reported as **LAYOUT REVIEW** for manual adjustment; overflow can overlap adjacent rows. These size warnings do not roll back openings. Missing views, invalid sheet ownership and failed Revit transactions remain blocking errors. The batch command exits after its results dialog instead of reopening the main tool window.
 
+Batch execution first prepares and commits plan/section views on sheets for every identifiable manhole, then attempts openings in a separate pass. Opening failures retain those body views for manual completion, including manholes with edited profiles or no actual crossings. An unidentifiable four-wall body retains its labeled reserved row for manual view creation. The report distinguishes `VIEWS READY` / `VIEWS REVIEW` from subsequent opening results. Reruns reuse tool view names and stored sheet slots from the input RVT; they still create a new output RVT copy before processing.
+
 Required project resources: `Manhole Sec` section type, `MH_PLAN`, `MH_SEC`, `MH_3D` view templates, and linear dimension type `HTC_DIM_1.8mm`. Dimensions cover openings, internal/external body sizes and foundations. Individual sheets use W1–W4 detail numbers; shared sheets require unique manhole-prefixed detail numbers.
 
 ## Build and verification
