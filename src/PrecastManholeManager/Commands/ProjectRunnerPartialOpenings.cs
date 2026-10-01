@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.Commands
     public sealed partial class ProjectRunnerCommand
     {
         private static ProductionManholeResult GenerateWallOpenings(UIDocument uidoc, SimpleManholeItem item,
-            DiagnosticLogger log, double clearance, bool merge)
+            DiagnosticLogger log, double clearance, bool merge, bool resetProfiles = false)
         {
             var doc = uidoc.Document;
             if (doc.IsReadOnly || doc.IsLinked || double.IsNaN(clearance) || double.IsInfinity(clearance) || clearance < 0)
@@ -29,8 +29,22 @@ namespace Hatco.PrecastManholeManager.Commands
             foreach (var bodyWall in UnifiedOpeningReviewService.BuildManhole(foundation, footprint).Walls)
             {
                 int wallId = bodyWall.Wall.Id.IntegerValue, number = bodyWall.Number;
+                TransactionGroup profileGroup = null;
+                int savedNew = newCuts, savedUpdated = updated, savedUnchanged = unchanged;
+                int savedGroups = committedGroups, savedOutcomes = outcomes.Count, savedProblems = problems.Count;
+                bool groupFailed = false;
                 try
                 {
+                    if (resetProfiles && bodyWall.Wall.SketchId != ElementId.InvalidElementId)
+                    {
+                        profileGroup = new TransactionGroup(doc, "HATCO - Reset profile and open W" + number);
+                        profileGroup.Start();
+                        ResetSingleWallProfile(doc, bodyWall.Wall, foundation, number, log);
+                    }
+                    // Refresh geometry after each individual reset (or prior wall rollback).
+                    if (resetProfiles)
+                        review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearance, 150,
+                            VirtualMepExtensionScanner.ProductionMaxApproachDeg);
                     // Audit this wall against the complete body, but authorize writes
                     // to this wall only. Failure cannot roll back earlier wall groups.
                     var plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log, wallId);
@@ -40,6 +54,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     candidateCount += rows.Count;
                     if (rows.Count == 0)
                     {
+                        if (profileGroup != null) throw new InvalidOperationException("No eligible replacement openings; original profile retained.");
                         safeWalls.Add(number);
                         outcomes.Add("W" + number + ": no eligible crossing; existing cuts preserved");
                         continue;
@@ -123,16 +138,36 @@ namespace Hatco.PrecastManholeManager.Commands
                         }
                         catch (Exception ex)
                         {
+                            groupFailed = true;
                             problems.Add(componentLabel + ": " + ex.Message);
                             log.Error("OPENING GROUP REVIEW " + componentLabel + "; independent groups retained", ex);
                         }
                     }
+                    if (profileGroup != null)
+                    {
+                        if (groupFailed) throw new InvalidOperationException("Replacement opening failed; profile reset and all cuts on this wall rolled back. " + string.Join("; ", problems.Skip(savedProblems).Where(p => !p.Contains("OPENING COMMITTED"))));
+                        if (profileGroup.Assimilate() != TransactionStatus.Committed)
+                            throw new InvalidOperationException("Profile/reset wall group commit rejected.");
+                        outcomes.Add("W" + number + ": profile reset and replacement openings committed");
+                        log.Info("WALL PROFILE RESET COMMITTED Wall=" + wallId + " W" + number);
+                    }
                 }
                 catch (Exception ex)
                 {
+                    if (profileGroup != null)
+                    {
+                        if (profileGroup.GetStatus() == TransactionStatus.Started) profileGroup.RollBack();
+                        newCuts = savedNew; updated = savedUpdated; unchanged = savedUnchanged;
+                        committedGroups = savedGroups; safeWalls.Remove(number);
+                        outcomes.RemoveRange(savedOutcomes, outcomes.Count - savedOutcomes);
+                        // Remove site-adjustment messages for cuts that were rolled back.
+                        problems.RemoveRange(savedProblems, problems.Count - savedProblems);
+                        log.Warn("WALL PROFILE RESET ROLLED BACK Wall=" + wallId + "; original profile and pin retained.");
+                    }
                     problems.Add("W" + number + " (" + wallId + "): " + ex.Message);
                     log.Error("WALL REVIEW W" + number + " Foundation=" + foundation.Id.IntegerValue + "; other walls retained", ex);
                 }
+                finally { profileGroup?.Dispose(); }
             }
             if (candidateCount == 0 && problems.Count == 0) problems.Add("No confirmed crossing or validated end connector within 150 mm; existing openings preserved.");
             bool dimensionsComplete = false, deferred = false;
@@ -169,6 +204,27 @@ namespace Hatco.PrecastManholeManager.Commands
             return new ProductionManholeResult(committedGroups > 0, dimensionsComplete, summary) {
                 DimensionsDeferred = deferred, OpeningsNeedReview = problems.Count > 0
             };
+        }
+
+        // One native reset per transaction; caller owns this wall's rollback group.
+        private static void ResetSingleWallProfile(Document doc, Wall wall, Element foundation,
+            int number, DiagnosticLogger log)
+        {
+            using (var tx = new Transaction(doc, "HATCO - Reset profile W" + number))
+            {
+                tx.Start(); TransactionFailureHandling.Configure(tx, log);
+                bool pinned = wall.Pinned;
+                if (pinned) wall.Pinned = false;
+                OpeningDimensionService.RemoveOwned(doc, foundation, number);
+                wall.RemoveProfileSketch();
+                doc.Regenerate();
+                if (wall.SketchId != ElementId.InvalidElementId)
+                    throw new InvalidOperationException("Wall profile reset did not remove the edited sketch.");
+                if (pinned) wall.Pinned = true;
+                if (tx.Commit() != TransactionStatus.Committed)
+                    throw new InvalidOperationException("Wall profile reset transaction rejected.");
+                log.Info("WALL PROFILE RESET STAGED Wall=" + wall.Id.IntegerValue + " W" + number + " Pin=" + pinned);
+            }
         }
 
         private static List<KeyValuePair<string, int>> ManagedReplacements(Document doc, CleanSyncPlan plan,

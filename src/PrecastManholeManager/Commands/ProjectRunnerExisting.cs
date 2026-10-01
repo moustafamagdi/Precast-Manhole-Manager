@@ -18,7 +18,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // view/3D generation, viewport placement or row rearrangement.
         private static void RunExistingPrepared(UIApplication app, DiagnosticLogger log,
             double clearance, SimpleManholeItem selected, bool dimensionsOnly,
-            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false, bool mergeOverlapping = false)
+            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false, bool mergeOverlapping = false, bool resetProfiles = false)
         {
             var doc = app.ActiveUIDocument.Document;
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModifiable || doc.IsModelInCloud ||
@@ -100,7 +100,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             else
                             {
                                 var result = repairLowBase ? RepairAndGenerate(app.ActiveUIDocument, item, log, clearance) :
-                                    GenerateWallOpenings(app.ActiveUIDocument, item, log, clearance, mergeOverlapping);
+                                    GenerateWallOpenings(app.ActiveUIDocument, item, log, clearance, mergeOverlapping, resetProfiles);
                                 noRepair = repairLowBase && !result.Committed;
                                 dimensionsDeferred = result.DimensionsDeferred;
                                 openingsReview = result.OpeningsNeedReview;

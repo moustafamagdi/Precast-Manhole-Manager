@@ -26,6 +26,8 @@ namespace Hatco.PrecastManholeManager.UI
         private readonly TextBox _clearance;
         public double ClearanceMm { get; private set; }
         private readonly CheckBox _mergeOpenings = new CheckBox { Content = "Merge overlapping openings (one rectangular cut; includes gaps under 5 mm)", Margin = new Thickness(0, 3, 0, 5) };
+        private readonly CheckBox _resetProfiles = new CheckBox { Content = "Reset edited wall profiles, one wall at a time (removes ALL profile edits)", Margin = new Thickness(0, 3, 0, 5) };
+        public bool ResetWallProfiles => _resetProfiles.IsChecked == true;
         public bool MergeOverlappingOpenings => _mergeOpenings.IsChecked == true;
         private readonly CheckBox _timing = new CheckBox { Content = "Timing diagnostic: 3 new manholes only (slower)", Margin = new Thickness(0, 4, 0, 8) };
         public bool TimingDiagnostic => _timing.IsChecked == true;
@@ -91,6 +93,7 @@ namespace Hatco.PrecastManholeManager.UI
             var openingScope = Scope(openings, "Selected row", "Pick bases in Revit", "Current model view", "All detected manholes");
             openingScope.SelectedIndex = 1;
             openings.Children.Add(_mergeOpenings);
+            openings.Children.Add(_resetProfiles);
             var runOpenings = Button("Run Openings", 190, openings);
             runOpenings.Click += (s, e) => {
                 var actions = new[] { ProjectAction.ExistingOne, ProjectAction.ExistingPicked, ProjectAction.ExistingActiveView, ProjectAction.ExistingAll };

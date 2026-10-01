@@ -68,3 +68,11 @@ A duct opening that crosses a wall end, or leaves less than 5 mm there, is align
 The log, opening-review CSV and run report record the signed shift along the wall axis. A nonzero shift retains site-coordination review even when the opening was committed. Clean Scan reports the same outstanding coordination until the duct position no longer needs adjustment. Stored opening centers are the actual fitted centers so reruns reuse them correctly.
 
 Run Openings now starts after scope selection/picking without the extra Existing Manholes confirmation dialog. Automatic saving remains active and failures remain visible; dimension-only and base-repair confirmations retain their previous behavior.
+
+### Optional wall profile replacement
+
+In **Openings**, enable **Reset edited wall profiles, one wall at a time** (off by default), choose the intended manholes and run openings. This option applies only to Run Openings, not dimensions, base repair or Generate / Update All.
+
+Each edited wall receives its own `Wall.RemoveProfileSketch()` call in its own transaction. This removes ALL sketch profile edits, including edits unrelated to old holes. The original pin state is restored. The reset and that wall's replacement cuts share a wall-specific transaction group: a failed replacement or no eligible replacement rolls back that wall completely; other walls continue independently. Walls without an edited profile retain the normal independent-opening-group workflow. Separate manual openings and void cutters remain review blockers and are not deleted by this option. Required duct site adjustments remain review items even when the replacement cuts commit.
+
+Revit acceptance checks (not covered by offline regression): a pinned edited wall resets and receives replacement cuts with its pin restored; a second wall with an invalid opening keeps its original profile and cuts without undoing the first; a wall with no eligible MEP retains its original profile; rerunning reuses the resulting managed cuts.
