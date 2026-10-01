@@ -94,6 +94,8 @@ namespace Hatco.PrecastManholeManager.Services
                 reasons.AddRange(ProductionPreflightService.PhysicalBlockers(plan));
                 var actual = review.Rows.Where(r => !r.IsVirtual || r.EndpointQualified).ToList();
                 actualCount = actual.Count;
+                if (actualCount == 0)
+                    reasons.Add("NO ELIGIBLE SERVICES: no pipe/duct crossing or qualified end connector within 150 mm. Check manhole position and loaded MEP links; existing openings alone do not prove service coverage.");
                 foreach (var pair in plan.ManagedOpeningIds)
                 {
                     try
