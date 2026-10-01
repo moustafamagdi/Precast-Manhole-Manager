@@ -76,7 +76,7 @@ namespace Hatco.PrecastManholeManager.Services
                 // Record parameter heights before moving a joined foundation can affect wall geometry.
                 var wallSettings = footprint.Walls.Select(w => new {
                     Wall = w,
-                    Base = ((Level)doc.GetElement(w.get_Parameter(BuiltInParameter.WALL_BASE_CONSTRAINT).AsElementId())).Elevation +
+                    Base = ((Level)doc.GetElement(w.get_Parameter(BuiltInParameter.WALL_BASE_CONSTRAINT).AsElementId())).ProjectElevation +
                         w.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET).AsDouble(),
                     Height = w.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM).AsDouble(),
                     TopOffset = w.get_Parameter(BuiltInParameter.WALL_TOP_OFFSET).AsDouble(),
@@ -87,7 +87,18 @@ namespace Hatco.PrecastManholeManager.Services
                 {
                     var wall = setting.Wall;
                     var level = (Level)doc.GetElement(wall.get_Parameter(BuiltInParameter.WALL_BASE_CONSTRAINT).AsElementId());
-                    Set(wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET), targetTop - level.Elevation);
+                    // Geometry uses project coordinates; Level.Elevation can instead
+                    // report a survey/shared datum chosen in the level type.
+                    double desiredOffset = BaseOffset(targetTop, level.ProjectElevation);
+                    log.Info("BASE REPAIR WALL SETTINGS Wall=" + wall.Id.IntegerValue +
+                        " LevelElevationMm=" + UnitUtil.FtToMm(level.Elevation).ToString("0.###") +
+                        " ProjectElevationMm=" + UnitUtil.FtToMm(level.ProjectElevation).ToString("0.###") +
+                        " OldBaseMm=" + UnitUtil.FtToMm(setting.Base).ToString("0.###") +
+                        " TargetBaseMm=" + UnitUtil.FtToMm(targetTop).ToString("0.###") +
+                        " NewOffsetMm=" + UnitUtil.FtToMm(desiredOffset).ToString("0.###") +
+                        " OldHeightMm=" + UnitUtil.FtToMm(setting.Height).ToString("0.###") +
+                        " Unconnected=" + setting.Unconnected);
+                    Set(wall.get_Parameter(BuiltInParameter.WALL_BASE_OFFSET), desiredOffset);
                     if (setting.Unconnected)
                         Set(wall.get_Parameter(BuiltInParameter.WALL_USER_HEIGHT_PARAM), setting.Height + setting.Base - targetTop);
                     else Set(wall.get_Parameter(BuiltInParameter.WALL_TOP_OFFSET), setting.TopOffset);
@@ -102,9 +113,14 @@ namespace Hatco.PrecastManholeManager.Services
                 {
                     var after = wall.get_BoundingBox(null);
                     var before = oldWallBoxes[wall.Id.IntegerValue];
+                    string bounds = "Wall=" + wall.Id.IntegerValue + " Before=" + Bounds(before) +
+                        " After=" + Bounds(after) + " TargetBottomMm=" + UnitUtil.FtToMm(targetTop).ToString("0.###") +
+                        " BaseBottomMm=" + UnitUtil.FtToMm(moved.Min.Z).ToString("0.###") +
+                        " XYUnchanged=" + SameXY(before, after, tolerance);
+                    log.Info("BASE REPAIR WALL VALIDATION " + bounds);
                     if (!SameXY(before, after, tolerance) || Math.Abs(after.Max.Z - before.Max.Z) > tolerance ||
                         after.Min.Z > targetTop + tolerance || after.Min.Z < moved.Min.Z - tolerance)
-                        throw new InvalidOperationException("Could not preserve wall top/footprint and extend bottom to the lowered base: " + wall.Id.IntegerValue);
+                        throw new InvalidOperationException("Could not preserve wall top/footprint and extend bottom to the lowered base. " + bounds);
                 }
                 foreach (var element in elements) element.Pinned = pinned[element.Id.IntegerValue];
                 if (tx.Commit() != TransactionStatus.Committed)
@@ -113,6 +129,12 @@ namespace Hatco.PrecastManholeManager.Services
             log.Info("BASE REPAIR GEOMETRY STAGED; original pin states restored. Waiting for opening/dimension validation.");
             return dropMm;
         }
+
+        private static string Bounds(BoundingBoxXYZ box) => box == null ? "NULL" :
+            "[" + string.Join(",", new[] { box.Min.X, box.Min.Y, box.Min.Z, box.Max.X, box.Max.Y, box.Max.Z }
+                .Select(x => UnitUtil.FtToMm(x).ToString("0.###"))) + "]mm";
+
+        internal static double BaseOffset(double targetProjectZ, double levelProjectZ) => targetProjectZ - levelProjectZ;
 
         private static bool SameXY(BoundingBoxXYZ a, BoundingBoxXYZ b, double tolerance) => b != null &&
             Math.Abs(a.Min.X - b.Min.X) <= tolerance && Math.Abs(a.Min.Y - b.Min.Y) <= tolerance &&

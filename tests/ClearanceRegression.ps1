@@ -205,3 +205,7 @@ Assert-That ($lowerMethod.Invoke($null,[object[]]@(950.0,1550.0,1000.0,2000.0)))
 Assert-That (!$lowerMethod.Invoke($null,[object[]]@(1100.0,2100.0,1000.0,2000.0))) 'Upper-wall failure cannot authorize base lowering'
 Assert-That (!$lowerMethod.Invoke($null,[object[]]@(950.0,2100.0,1000.0,2000.0))) 'Opening spanning below and above the wall requires manual review'
 Assert-That (!$lowerMethod.Invoke($null,[object[]]@(1100.0,1550.0,1000.0,2000.0))) 'A fitting opening alone cannot trigger a repair'
+
+$baseOffset = $repairType.GetMethod('BaseOffset', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ([Math]::Abs($baseOffset.Invoke($null,[object[]]@(583846.824,585600.0)) + 1753.176) -lt 0.00001) 'Base offset uses the target and level in the same project coordinate frame'
+Assert-That ($baseOffset.Invoke($null,[object[]]@(-150.0,200.0)) -eq -350) 'Base offset handles levels and targets on opposite sides of project zero'
