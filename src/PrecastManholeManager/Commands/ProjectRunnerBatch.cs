@@ -72,6 +72,7 @@ namespace Hatco.PrecastManholeManager.Commands
             int processed = 0, committed = 0, review = 0, dimensionReview = 0, savedThrough = 0;
             var documented = new HashSet<int>();
             string stopped = "";
+            bool runFailed = false;
             DateTime lastSave = DateTime.Now;
             var progress = new BatchProgressWindow(app.MainWindowHandle);
             EventHandler<FailuresProcessingEventArgs> handler = (s,e) =>
@@ -195,11 +196,11 @@ namespace Hatco.PrecastManholeManager.Commands
                         }
                     }
                 }
-                catch (Exception ex) { stopped = "Run stopped: " + ex.Message; log.Error(stopped,ex); }
+                catch (Exception ex) { runFailed = true; stopped = "Run stopped: " + ex.Message; log.Error(stopped,ex); }
                 finally
                 {
                     try { doc.Save(new SaveOptions()); savedThrough = processed; }
-                    catch (Exception ex) { stopped += "\nFINAL SAVE FAILED: " + ex.Message; log.Error("Batch save failed",ex); }
+                    catch (Exception ex) { runFailed = true; stopped += "\nFINAL SAVE FAILED: " + ex.Message; log.Error("Batch save failed",ex); }
                     app.Application.FailuresProcessing -= handler;
                     progress.Finish();
                 }
@@ -211,7 +212,8 @@ namespace Hatco.PrecastManholeManager.Commands
                 "\nCommitted with dimension review: " + dimensionReview) +
                 "\nRVT: " + output + "\nReport: " + report + "\nLog: " + log.LogPath;
             File.WriteAllText(summaryPath,summary);
-            TaskDialog.Show("Unattended Run Results",summary);
+            log.Info("BATCH RUN RESULTS: " + summary);
+            if (runFailed) TaskDialog.Show("Run needs attention", summary);
         }
         private static void WriteBatchRow(StreamWriter writer, SimpleManholeItem item, BatchSheetSlot slot, string status, string details)
         {

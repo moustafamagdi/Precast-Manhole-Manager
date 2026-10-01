@@ -141,7 +141,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     finally { app.Application.FailuresProcessing -= handler; progress.Finish(); }
                 }
             }
-            TaskDialog.Show("Existing Manholes", "Processed: " + done + " / " + eligible.Count +
+            log.Info("EXISTING RUN RESULTS: Processed: " + done + " / " + eligible.Count +
                 "\nComplete: " + complete + "\nNeeds review: " + review + "\nNo repair needed: " + skipped +
                 "\nSaved in the current RVT.\nReport: " + report);
         }

@@ -102,7 +102,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     finally { progress.Finish(); }
                 }
             }
-            TaskDialog.Show("Review 3Ds", "Processed: " + done + "/" + issues.Count + "\nReady: " + success +
+            log.Info("REVIEW 3D RESULTS: Processed: " + done + "/" + issues.Count + "\nReady: " + success +
                 "\nFailed: " + failed + "\nSaved in current RVT.\nReport: " + report);
         }
 

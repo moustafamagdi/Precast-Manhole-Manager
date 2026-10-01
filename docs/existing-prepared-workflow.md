@@ -6,7 +6,7 @@ These operations validate current physical blockers again, update managed pipe/d
 
 `Dimensions - Selected` updates the selected manhole only. `Dimensions - All Prepared` runs dimensions independently of opening preflight, so body/base dimensions can be attempted even when cuts need manual work. Neither creates missing views. Only managed openings receive automatic opening dimensions; manual openings are not adopted.
 
-The prepared-row runs save the current local RVT every ten items or five minutes between items, and at completion/cancellation. There is no SaveAs or synchronize. The adjacent `.existing.csv` records each attempted foundation and its outcome. Skips are in the TXT log. Completion returns control to Revit rather than reopening the manager.
+The prepared-row runs save the current local RVT every ten items or five minutes between items, and at completion/cancellation. There is no SaveAs or synchronize. The adjacent `.existing.csv` records each attempted foundation and its outcome. Skips are in the TXT log. Completion returns control to Revit without a save/completion popup. Results remain in the TXT log and CSV report. Save failures still report an error.
 
 Dimension validation now checks enabled annotation crop bounds, including paper-space offsets multiplied by view scale, instead of rejecting annotations outside the model crop. Hidden Dimensions in MH_PLAN/MH_SEC remain an explicit review issue: enable the category in the intended template before testing. The tool does not modify shared templates. Real reference/value checks and per-view rollback remain active.
 
