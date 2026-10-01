@@ -57,6 +57,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                     rows.Count(x => x.State == "REVIEW") +
                                     ".\nNo openings were changed.");
                             }
+                            else if (window.Action == ProjectAction.RecheckReviewOnly)
+                                TaskDialog.Show("Recheck Review Only", ManholeRecheckService.RunAll(doc, window.ClearanceMm, log, true));
                             else if (window.Action == ProjectAction.CleanScan)
                                 TaskDialog.Show("Clean Scan - All Manholes", ManholeRecheckService.RunAll(
                                     doc, window.ClearanceMm, log));

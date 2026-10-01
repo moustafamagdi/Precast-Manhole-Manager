@@ -11,7 +11,7 @@ namespace Hatco.PrecastManholeManager.UI
 {
     internal enum ProjectAction
     {
-        Close, Scan, CleanScan, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
+        Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
         ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll
     }
 
@@ -122,6 +122,9 @@ namespace Hatco.PrecastManholeManager.UI
             var reviewButtons = new WrapPanel(); reviewPanel.Children.Add(reviewButtons);
             Button scan = Button("Scan Project", 155, reviewButtons);
             Button cleanScan = Button("Clean Scan - All", 170, reviewButtons);
+            Button recheckReview = Button("Recheck Review Only", 180, reviewButtons);
+            recheckReview.Click += (s, e) => Choose(ProjectAction.RecheckReviewOnly, false);
+            recheckReview.ToolTip = "Recheck all OPEN review cases in this model, regardless of the table filter. Does not change model geometry.";
             Button recheck = Button("Recheck Selected", 170, reviewButtons);
             Button review = Button("Inspect Selected", 170, reviewButtons);
             Button view = Button("Show Review 3D", 160, reviewButtons);
@@ -361,7 +364,7 @@ namespace Hatco.PrecastManholeManager.UI
                 requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
                 requested == ProjectAction.RepairPicked || requested == ProjectAction.RepairActiveView ||
-                requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan))
+                requested == ProjectAction.ReviewOne || requested == ProjectAction.RecheckOne || requested == ProjectAction.CleanScan || requested == ProjectAction.RecheckReviewOnly))
             {
                 MessageBox.Show(this, "Enter a finite clearance of zero or more millimeters per side.");
                 _clearance.Focus();

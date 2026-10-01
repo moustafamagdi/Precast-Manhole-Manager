@@ -8,25 +8,35 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal static class ManholeRecheckService
     {
-        public static string RunAll(Document doc, double clearanceMm, DiagnosticLogger log)
+        public static string RunAll(Document doc, double clearanceMm, DiagnosticLogger log, bool reviewOnly = false)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
             using (var cache = new LinkedMepScanCache())
             {
-                string result = RunAllIndexed(doc, clearanceMm, log);
+                string result = RunAllIndexed(doc, clearanceMm, log, reviewOnly);
                 log.Info("CLEAN SCAN TOTAL SECONDS=" + timer.Elapsed.TotalSeconds.ToString("0.0"));
                 return result + "\nElapsed: " + timer.Elapsed.TotalMinutes.ToString("0.0") + " min.";
             }
         }
 
-        private static string RunAllIndexed(Document doc, double clearanceMm, DiagnosticLogger log)
+        private static string RunAllIndexed(Document doc, double clearanceMm, DiagnosticLogger log, bool reviewOnly)
         {
             if (double.IsNaN(clearanceMm) || double.IsInfinity(clearanceMm) || clearanceMm < 0)
                 throw new InvalidOperationException("Enter a finite non-negative clearance.");
             var items = SimpleProjectScanService.LoadFast(doc);
+            int unavailable = 0;
+            if (reviewOnly)
+            {
+                var openIds = new HashSet<string>(ManholeReviewRegistry.Load(doc)
+                    .Where(x => x.Status == "OPEN").Select(x => x.FoundationUniqueId), StringComparer.Ordinal);
+                items = items.Where(x => openIds.Contains(x.UniqueId)).ToList();
+                unavailable = openIds.Except(items.Select(x => x.UniqueId)).Count();
+                log.Info("RECHECK REVIEW ONLY Matched=" + items.Count + " Unavailable=" + unavailable);
+                if (openIds.Count == 0) return "No OPEN review cases in this model.";
+            }
             int passed = 0, review = 0, errors = 0;
             var report = new System.Text.StringBuilder("FoundationId,InternalId,Result,Details\r\n");
-            log.WriteHeader("CLEAN SCAN - ALL MANHOLES - NO MODEL CHANGES");
+            log.WriteHeader(reviewOnly ? "RECHECK OPEN REVIEW CASES - NO MODEL CHANGES" : "CLEAN SCAN - ALL MANHOLES - NO MODEL CHANGES");
             foreach (var item in items)
             {
                 Element foundation = doc.GetElement(new ElementId(item.FoundationId));
@@ -55,11 +65,12 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 report.AppendLine(item.FoundationId + "," + Csv(item.ManholeName) + "," + status + "," + Csv(details));
             }
-            string path = System.IO.Path.ChangeExtension(log.LogPath, ".CleanScan.csv");
+            string path = System.IO.Path.ChangeExtension(log.LogPath, reviewOnly ? ".ReviewRecheck.csv" : ".CleanScan.csv");
             System.IO.File.WriteAllText(path, report.ToString(), new System.Text.UTF8Encoding(true));
             ManholeReviewRegistry.ExportReadableCsv(doc, ManholeReviewRegistry.Load(doc));
-            return "Clean scan completed for " + items.Count + " manholes.\nPassed: " + passed +
+            return (reviewOnly ? "Review recheck completed for " : "Clean scan completed for ") + items.Count + " manholes.\nPassed: " + passed +
                 "\nStill require review: " + review + "\nScan errors: " + errors +
+                (unavailable > 0 ? "\nReview records not found among current manholes: " + unavailable + " (kept OPEN)." : "") +
                 "\nRepaired issues have been resolved. No openings, walls or views were changed." +
                 "\nProduction prerequisites still apply to passed manholes.\nReport: " + path;
         }
