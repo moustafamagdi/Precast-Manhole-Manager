@@ -64,6 +64,11 @@ namespace Hatco.PrecastManholeManager.Commands
                                     doc, window.ClearanceMm, log));
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
+                            else if (window.Action == ProjectAction.SheetsAndDimensions)
+                            {
+                                RunUnattended(input.Application, log, window.ClearanceMm, sheetsOnly: true, dimensionsAfterSheets: true);
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.SheetsAll)
                             {
                                 RunUnattended(input.Application, log, window.ClearanceMm, sheetsOnly: true);

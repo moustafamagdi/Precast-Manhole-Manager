@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -115,6 +115,9 @@ namespace Hatco.PrecastManholeManager.UI
             Button produce = Button("Prepare Sheet - Selected", 190, sheetButtons);
             Button sheetsAll = Button("Prepare Sheets - All", 190, sheetButtons);
             sheetsAll.Click += (s, e) => Choose(ProjectAction.SheetsAll, false);
+            Button overnight = Button("Sheets + Dimensions - All", 215, sheetButtons);
+            overnight.ToolTip = "Unattended: prepare/reuse sheets first, save, then dimension all prepared manholes. Review status does not exclude them. Saves the current RVT; does not run openings.";
+            overnight.Click += (s, e) => Choose(ProjectAction.SheetsAndDimensions, false);
             Button batch = Button("Generate / Update All", 190, sheetButtons);
             batch.Click += (s, e) => Choose(ProjectAction.ProductionAll, false);
 

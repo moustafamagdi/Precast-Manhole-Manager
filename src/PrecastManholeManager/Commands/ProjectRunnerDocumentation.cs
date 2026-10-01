@@ -25,12 +25,14 @@ namespace Hatco.PrecastManholeManager.Commands
                 progress.Update(processed, items.Count,
                     "Stage 1/2 - preparing sheets and views: " + item.ManholeName);
                 if (progress.CancelRequested) break;
-                var foundation = Resolve(doc, item);
-                var slot = BatchSheetLayoutService.Find(doc, foundation);
+                Element foundation = null;
+                BatchSheetSlot slot = null;
                 string status, details;
                 var timer = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
+                    foundation = Resolve(doc, item);
+                    slot = BatchSheetLayoutService.Find(doc, foundation);
                     if (BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot))
                     {
                         ready.Add(item.FoundationId);
@@ -52,7 +54,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         BatchSheetLayoutService.Place(doc, foundation, slot, views.Views,
                             new List<UnifiedOpeningReviewRow>(), log);
                         BatchSheetLayoutService.SetStatus(doc, foundation, slot,
-                            "VIEWS READY - opening stage pending; verify layout.");
+                            "VIEWS READY - verify layout and dimensions.");
                         if (PerformanceMeasurement.Call(log, "Transaction.Commit.Documentation", item.ManholeName,
                             () => tx.Commit()) != TransactionStatus.Committed)
                             throw new InvalidOperationException("Documentation transaction rejected.");
@@ -66,6 +68,9 @@ namespace Hatco.PrecastManholeManager.Commands
                     status = "VIEWS REVIEW";
                     details = ex.Message;
                     log.Error("BATCH DOCUMENTATION REVIEW " + item.ManholeName, ex);
+                    try
+                    {
+                    if (foundation != null && slot != null)
                     using (var tx = new Transaction(doc, "HATCO - Mark Documentation Review"))
                     {
                         tx.Start();
@@ -75,6 +80,8 @@ namespace Hatco.PrecastManholeManager.Commands
                         if (tx.Commit() != TransactionStatus.Committed)
                             throw new InvalidOperationException("Cannot label documentation review row.");
                     }
+                    }
+                    catch (Exception noteError) { log.Error("Documentation review note failed; continuing batch", noteError); }
                 }
                 WriteBatchRow(writer, item, slot, status, details);
                 log.Info("PERF DOCUMENTATION Foundation=" + item.FoundationId + " Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
