@@ -391,3 +391,19 @@ Assert-That (Test-PairCoverage @((New-Cut 'old-combined' 75 0 350 200)) $pa $pb)
 Assert-That (!(Test-PairCoverage @((New-Cut 'old-a' 0 0)) $pa $pb)) 'A missing second cut still requires overlap review'
 Assert-That (!(Test-PairCoverage @((New-Cut 'small' 75 0 300 200)) $pa $pb)) 'An undersized combined cut does not resolve overlap'
 Assert-That (!(Test-PairCoverage @((New-Cut 'wrong-wall' 75 0 350 200 101)) $pa $pb)) 'Coverage on another wall cannot resolve overlap'
+
+$coverage=$assembly.GetType('Hatco.PrecastManholeManager.Services.OpeningCoverageService').GetMethod('Covers',[Reflection.BindingFlags]'NonPublic,Static')
+function Test-OpeningCoverage($cuts,$required) {
+    $typed=[Array]::CreateInstance($penetrationType,$cuts.Count)
+    for($i=0;$i -lt $cuts.Count;$i++){ $typed.SetValue($cuts[$i],$i) }
+    return $coverage.Invoke($null,[object[]]@($typed,$required,1.0,0.0))
+}
+$required=New-Cut 'required' 100 50 300 300
+Assert-That (!(Test-OpeningCoverage @() $required)) 'A service without a physical opening is missing'
+Assert-That (Test-OpeningCoverage @((New-Cut 'existing' 100 50 300 300)) $required) 'An actual opening at the required size and position is sufficient'
+Assert-That (!(Test-OpeningCoverage @((New-Cut 'old-location' -300 50 300 300)) $required)) 'A displaced old opening does not clear Missing Opening'
+Assert-That (!(Test-OpeningCoverage @((New-Cut 'old-clearance' 100 50 280 300)) $required)) 'Insufficient physical clearance remains Missing Opening'
+Assert-That (Test-OpeningCoverage @((New-Cut 'combined' 175 50 500 300)) $required) 'A larger combined cut covers its member without source-key matching'
+Assert-That (!(Test-OpeningCoverage @((New-Cut 'wrong-wall' 100 50 300 300 101)) $required)) 'An opening on another wall cannot clear Missing Opening'
+$required.FittedCenterXmm=150; $required.CutWidthOverrideMm=200
+Assert-That (Test-OpeningCoverage @((New-Cut 'clipped-corner' 150 50 200 300)) $required) 'Corner coverage uses the clipped width and fitted center'

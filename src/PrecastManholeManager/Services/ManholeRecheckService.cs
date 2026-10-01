@@ -106,6 +106,7 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                     catch (Exception ex) { reasons.Add("Existing opening " + pair.Value + ": " + ex.Message); }
                 }
+                var physicalCuts = OpeningCoverageService.Read(doc, plan.WallIds, log);
                 foreach (var row in actual)
                 {
                     if (row.Source.EdgeAligned && Math.Abs(row.Source.EdgeShiftMm) > 0.1)
@@ -113,7 +114,17 @@ namespace Hatco.PrecastManholeManager.Services
                     string why;
                     if (!OpeningFitValidationService.TryValidate(doc, row.Source, out why))
                         reasons.Add("W" + row.Source.WallNumber + " Source=" + row.SourceId + ": " + why);
-                    else if (row.Status != "ACTUAL FIT PREVIEW" && row.Source.ExistingOpeningStatus != "MANAGED")
+                    else
+                    {
+                        var host = doc.GetElement(new ElementId(row.Source.HostWallId)) as Wall;
+                        var axis = (host?.Location as LocationCurve)?.Curve as Line;
+                        if (axis == null || !OpeningCoverageService.Covers(physicalCuts, row.Source, axis.Direction.X, axis.Direction.Y))
+                            reasons.Add("MISSING OPENING W" + row.Source.WallNumber + " Source=" + row.SourceId +
+                                ": no verified rectangular opening covers the required position and size " +
+                                row.Source.CutWidthMm.ToString("0.#") + " x " + row.Source.CutHeightMm.ToString("0.#") +
+                                " mm including clearance. Missing, undersized or displaced cut; profile/void cuts require separate review.");
+                    }
+                    if (row.Status != "ACTUAL FIT PREVIEW" && row.Source.ExistingOpeningStatus != "MANAGED")
                         reasons.Add("W" + row.Source.WallNumber + ": " + row.Notes);
                 }
                 for (int i = 0; i < actual.Count; i++)
