@@ -46,7 +46,7 @@ namespace Hatco.PrecastManholeManager.Services
     {
         public static CleanSyncPlan Build(Document doc, int foundationId,
             VirtualFoundationResult footprint, UnifiedOpeningReviewResult review,
-            DiagnosticLogger log)
+            DiagnosticLogger log, int? onlyWallId = null)
         {
             if (doc == null || footprint == null || !footprint.Accepted ||
                 review == null)
@@ -57,10 +57,11 @@ namespace Hatco.PrecastManholeManager.Services
                 FoundationId = foundationId,
                 UnavailableLinks = review.VirtualScan.UnavailableLinks
             };
-            plan.WallIds.AddRange(footprint.Walls.Select(x => x.Id.IntegerValue));
-            plan.ProposedRows.AddRange(review.Rows);
+            var bodyWallIds = footprint.Walls.Select(x => x.Id.IntegerValue).ToList();
+            plan.WallIds.AddRange(bodyWallIds.Where(x => !onlyWallId.HasValue || x == onlyWallId.Value));
+            plan.ProposedRows.AddRange(review.Rows.Where(x => plan.WallIds.Contains(x.Source.HostWallId)));
 
-            foreach (Wall wall in footprint.Walls)
+            foreach (Wall wall in footprint.Walls.Where(x => plan.WallIds.Contains(x.Id.IntegerValue)))
             {
                 int id = wall.Id.IntegerValue;
                 WallOpeningAuditInfo audit;
@@ -96,7 +97,7 @@ namespace Hatco.PrecastManholeManager.Services
                         bool joined = cutter != null && JoinGeometryUtils.AreElementsJoined(doc, wall, cutter);
                         bool cutsWall = joined && JoinGeometryUtils.IsCuttingElementInJoin(doc, cutter, wall);
                         bool localJoin = IsLocalBodyJoin(id, cutterId.IntegerValue,
-                            plan.WallIds, foundationId, joined, cutsWall);
+                            bodyWallIds, foundationId, joined, cutsWall);
                         string identity = "Wall=" + id + " Cutter=" + cutterId.IntegerValue +
                             " Class=" + (cutter?.GetType().Name ?? "MISSING") +
                             " Category=" + (cutter?.Category?.Name ?? "UNKNOWN") +
@@ -130,6 +131,8 @@ namespace Hatco.PrecastManholeManager.Services
                 ManagedOpeningData managed;
                 if (OpeningStorageService.TryRead(opening, out managed))
                 {
+                    if (managed.HostWallId != wallId)
+                        plan.BlockReason = "Copied opening ownership does not match host wall " + wallId + "; review before updating.";
                     if (managed.AdoptedManual)
                     {
                         // A previously ADOPTED hand-made opening is still a

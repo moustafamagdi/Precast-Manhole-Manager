@@ -151,7 +151,9 @@ namespace Hatco.PrecastManholeManager.Models
         public double CutHeightMm => CutHeightOverrideMm > 0 ? CutHeightOverrideMm :
             ProjectedHeightMm > 0 ? ProjectedHeightMm + 2 * ClearanceMm :
             (Shape == "Round" ? OpeningDiameterMm : OpeningHeightMm);
-        public string SourceKey => LinkInstanceId.ToString(CultureInfo.InvariantCulture) + "|" +
+        public string SourceKeyOverride { get; set; }
+        public string[] MemberSourceKeys { get; set; }
+        public string SourceKey => SourceKeyOverride ?? LinkInstanceId.ToString(CultureInfo.InvariantCulture) + "|" +
                                    (LinkedUniqueId ?? LinkedElementId.ToString(CultureInfo.InvariantCulture)) + "|" +
                                    HostWallId.ToString(CultureInfo.InvariantCulture);
 

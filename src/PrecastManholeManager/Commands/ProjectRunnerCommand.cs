@@ -69,7 +69,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             }
                             else if (window.Action == ProjectAction.ProductionAll)
                             {
-                                RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration);
+                                RunUnattended(input.Application, log, window.ClearanceMm, window.TimingDiagnostic, window.CropOrderExperiment, window.DiagnosticExtraRegeneration, mergeOverlapping: window.MergeOverlappingOpenings);
                                 return Result.Succeeded;
                             }
                             else if (window.Action == ProjectAction.ExistingPicked || window.Action == ProjectAction.ExistingActiveView ||
@@ -80,7 +80,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                 var targets = SelectOpeningTargets(uiDoc, inView);
                                 if (targets == null) continue; // Esc cancels picking without edits.
                                 RunExistingPrepared(input.Application, log, window.ClearanceMm, null, false, targets,
-                                    inView ? "Scope: current view - " + uiDoc.ActiveView.Name : "Scope: selected manhole bases", repair);
+                                    inView ? "Scope: current view - " + uiDoc.ActiveView.Name : "Scope: selected manhole bases", repair, window.MergeOverlappingOpenings);
                                 return Result.Succeeded;
                             }
                             else if (window.Action == ProjectAction.ExistingOne ||
@@ -88,7 +88,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             {
                                 RunExistingPrepared(input.Application, log, window.ClearanceMm,
                                     window.Action == ProjectAction.ExistingOne ? window.SelectedManhole : null,
-                                    window.Action == ProjectAction.ExistingDimensions);
+                                    window.Action == ProjectAction.ExistingDimensions, mergeOverlapping: window.MergeOverlappingOpenings);
                                 return Result.Succeeded;
                             }
                             else if (window.Action == ProjectAction.ReviewOne)

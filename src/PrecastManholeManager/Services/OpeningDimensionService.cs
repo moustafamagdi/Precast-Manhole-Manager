@@ -32,21 +32,21 @@ namespace Hatco.PrecastManholeManager.Services
         }
 
         // Caller owns the transaction, so a failed production update restores these annotations.
-        public static void RemoveOwned(Document doc, Element foundation)
+        public static void RemoveOwned(Document doc, Element foundation, int? wallNumber = null)
         {
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D_OUT_W";
             var views = new HashSet<int>(new FilteredElementCollector(doc).OfClass(typeof(View))
-                .Cast<View>().Where(v => Enumerable.Range(1, 4).Any(n => v.Name == prefix + n) ||
-                    v.Name == "MH_" + foundation.Id.IntegerValue + "_PROD_2D_PLAN")
+                .Cast<View>().Where(v => Enumerable.Range(1, 4).Any(n => (!wallNumber.HasValue || n == wallNumber.Value) && v.Name == prefix + n) ||
+                    (!wallNumber.HasValue && v.Name == "MH_" + foundation.Id.IntegerValue + "_PROD_2D_PLAN"))
                 .Select(v => v.Id.IntegerValue));
             var ids = new FilteredElementCollector(doc).OfClass(typeof(Dimension)).Cast<Dimension>()
                 .Where(d => views.Contains(d.OwnerViewId.IntegerValue) &&
-                    (IsOwned(d, foundation.UniqueId) || IsOwned(d, foundation.UniqueId, true)))
+                    (IsOwned(d, foundation.UniqueId) || (!wallNumber.HasValue && IsOwned(d, foundation.UniqueId, true))))
                 .Select(d => d.Id).ToList();
             if (ids.Count > 0) doc.Delete(ids);
         }
 
-        public static string Generate(Document doc, Element foundation, DiagnosticLogger log, Action<bool> completed = null)
+        public static string Generate(Document doc, Element foundation, DiagnosticLogger log, Action<bool> completed = null, ISet<int> onlyWalls = null)
         {
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D_OUT_W";
             var sections = new FilteredElementCollector(doc).OfClass(typeof(ViewSection))
@@ -76,7 +76,7 @@ namespace Hatco.PrecastManholeManager.Services
             var diagnostics = new List<string>();
             log.WriteHeader("ASSOCIATIVE OPENING DIMENSIONS");
             log.Info("DIMENSION TYPE: " + type.Name);
-            foreach (ViewSection view in sections.OrderBy(v => v.Name))
+            foreach (ViewSection view in sections.Where(v => onlyWalls == null || onlyWalls.Contains(int.Parse(v.Name.Substring(prefix.Length)))).OrderBy(v => v.Name))
             {
                 int number = int.Parse(view.Name.Substring(prefix.Length));
                 var rows = all.Where(x => x.Data.WallNumber == number).ToList();
@@ -113,8 +113,9 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                 }
             }
-            bool bodyComplete;
-            string bodyStatus = GenerateBody(doc, foundation, footprint, sections, type, log, out bodyComplete);
+            bool bodyComplete = true;
+            string bodyStatus = onlyWalls != null && onlyWalls.Count < 4 ? "Body dimensions retained; some walls still need review." :
+                GenerateBody(doc, foundation, footprint, sections, type, log, out bodyComplete);
             completed?.Invoke(failed == 0 && bodyComplete);
             return "Dimensions: " + created + " strings created; " + failed + " wall(s) need review." +
                 (diagnostics.Count == 0 ? "" : "\n" + string.Join("\n", diagnostics)) +

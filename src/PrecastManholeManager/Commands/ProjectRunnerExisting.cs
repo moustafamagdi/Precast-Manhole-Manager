@@ -18,7 +18,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // view/3D generation, viewport placement or row rearrangement.
         private static void RunExistingPrepared(UIApplication app, DiagnosticLogger log,
             double clearance, SimpleManholeItem selected, bool dimensionsOnly,
-            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false)
+            System.Collections.Generic.List<SimpleManholeItem> scopedItems = null, string scopeDescription = null, bool repairLowBase = false, bool mergeOverlapping = false)
         {
             var doc = app.ActiveUIDocument.Document;
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModifiable || doc.IsModelInCloud ||
@@ -32,7 +32,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 try
                 {
                     var foundation = Resolve(doc, item);
-                    var slot = BatchSheetLayoutService.Find(doc, foundation);
+                    var slot = dimensionsOnly ? BatchSheetLayoutService.Find(doc, foundation) : null;
                     if (!dimensionsOnly || (slot != null && BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot)))
                         eligible.Add(item);
                     else log.Info("EXISTING ONLY SKIP Foundation=" + item.FoundationId + " Missing prepared plan/sections on reserved sheet.");
@@ -48,6 +48,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     "Eligible: " + eligible.Count + "; skipped: " + (source.Count - eligible.Count) + " (missing prepared views/row).\n" +
                     "Targets: " + string.Join(", ", eligible.Take(20).Select(x => x.ManholeName)) + (eligible.Count > 20 ? ", ..." : "") + "\n" +
                     "No new views or sheets; existing viewport positions are preserved.\n" +
+                    (!dimensionsOnly && !repairLowBase ? "Each wall commits independently. Failed walls remain in review. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
                     (dimensionsOnly ? "Existing cuts remain unchanged.\n" : "Pipes and ducts only. Clearance per side: " + clearance + " mm. Includes verified end connectors touching/entering the wall or up to 150 mm before it (approach within 15 degrees). Current geometry is validated again, including recorded review cases. Unsafe cuts are skipped.\n") +
                     "Missing production views defer dimensions; they do not block openings. Hidden dimensions and annotation crop problems in existing views are reported for review.\n" +
                     "Saves in the CURRENT RVT every 10 items or 5 minutes, and at completion. No Synchronize with Central.\n" + doc.PathName,
@@ -90,18 +91,20 @@ namespace Hatco.PrecastManholeManager.Commands
                             bool ok = false;
                             bool noRepair = false;
                             bool dimensionsDeferred = false;
+                            bool openingsReview = false;
                             if (dimensionsOnly)
                                 details = OpeningDimensionService.Generate(doc, Resolve(doc, item), log, value => ok = value);
                             else
                             {
                                 var result = repairLowBase ? RepairAndGenerate(app.ActiveUIDocument, item, log, clearance) :
-                                    GenerateProductionManhole(app.ActiveUIDocument, item, log, clearance, unattended: true, existingOnly: true);
+                                    GenerateWallOpenings(app.ActiveUIDocument, item, log, clearance, mergeOverlapping);
                                 noRepair = repairLowBase && !result.Committed;
                                 dimensionsDeferred = result.DimensionsDeferred;
-                                ok = result.Committed && (result.DimensionsComplete || dimensionsDeferred);
+                                openingsReview = result.OpeningsNeedReview;
+                                ok = result.Committed && !openingsReview && (result.DimensionsComplete || dimensionsDeferred);
                                 details = result.Summary;
                             }
-                            status = noRepair ? "SKIPPED" : dimensionsDeferred ? "OPENINGS COMPLETE" : ok ? "COMPLETE" : "DIMENSION REVIEW";
+                            status = noRepair ? "SKIPPED" : openingsReview ? "OPENINGS REVIEW" : dimensionsDeferred ? "OPENINGS COMPLETE" : ok ? "COMPLETE" : "DIMENSION REVIEW";
                             if (noRepair) skipped++; else if (ok) complete++; else review++;
                         }
                         catch (Exception ex)
@@ -113,9 +116,18 @@ namespace Hatco.PrecastManholeManager.Commands
                         writer.WriteLine(item.FoundationId + "," + status + ",\"" + details.Replace("\"", "\"\"") + "\"");
                         // Make failed opening/dimension/repair outcomes discoverable by
                         // the model-specific Review list and batch review-view action.
-                        if (status == "REVIEW" || status == "DIMENSION REVIEW")
+                        if (status == "REVIEW" || status == "DIMENSION REVIEW" || status == "OPENINGS REVIEW")
                             ManholeReviewRegistry.Upsert(doc, Resolve(doc, item), details, null,
                                 repairLowBase ? "BASE REPAIR" : status, log);
+                        if (!dimensionsOnly && (status == "COMPLETE" || status == "OPENINGS COMPLETE"))
+                        {
+                            var issues = ManholeReviewRegistry.Load(doc);
+                            var uid = Resolve(doc, item).UniqueId;
+                            foreach (var issue in issues.Where(x => x.FoundationUniqueId == uid &&
+                                (status == "COMPLETE" || x.Severity == "OPENINGS REVIEW" || x.Severity == "REVIEW" || x.Severity == "RECHECK")))
+                            { issue.Status = "RESOLVED"; issue.Severity = "OPENINGS PASSED"; issue.UpdatedUtc = DateTime.UtcNow.ToString("O"); }
+                            ManholeReviewRegistry.Save(doc, issues);
+                        }
                         if (done % 10 == 0 || (DateTime.Now - saved).TotalMinutes >= 5)
                         {
                             doc.Save(new SaveOptions()); saved = DateTime.Now;

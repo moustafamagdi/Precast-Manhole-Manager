@@ -15,7 +15,7 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     public sealed partial class ProjectRunnerCommand
     {
-        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false)
+        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false, bool mergeOverlapping = false)
         {
             var uidoc = app.ActiveUIDocument;
             var doc = uidoc.Document;
@@ -51,6 +51,7 @@ namespace Hatco.PrecastManholeManager.Commands
             var ask = new TaskDialog("Generate / Update All") {
                 MainInstruction = (sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
+                    (!sheetsOnly ? "Each wall commits independently. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
                     (sheetsOnly ? "SHEETS ONLY: creates/reuses body views and reserved rows. No opening pass; existing physical cuts remain unchanged.\n" : "") +
                     (timingDiagnostic ? "TIMING DIAGNOSTIC: at most 3 new documentation attempts, no opening pass. Extra regeneration=" + extraRegeneration + ". Saves changes in the current RVT.\n" : "") +
                     (timingDiagnostic && cropOrderExperiment ? "EXPERIMENT: set plan crop bounds before activating the crop.\n" : "") +
@@ -130,31 +131,43 @@ namespace Hatco.PrecastManholeManager.Commands
                             if (!documented.Contains(item.FoundationId))
                                 throw new InvalidOperationException("Documentation needs manual completion; reserved row retained. See VIEWS REVIEW in run report.");
                             // Fresh production preflight replaces stale registry gating without a second MEP scan.
-                            using (var group = new TransactionGroup(doc,"HATCO - Batch Manhole Including Layout"))
-                            {
-                                group.Start();
-                                result = GenerateProductionManhole(uidoc,item,log,clearance,true);
-                                if (!result.Committed) throw new InvalidOperationException(result.Summary);
-                                details = result.Summary;
-                                if (group.Assimilate() != TransactionStatus.Committed)
-                                    throw new InvalidOperationException("Batch manhole transaction rejected.");
-                            }
+                            result = GenerateWallOpenings(uidoc, item, log, clearance, mergeOverlapping);
+                            if (!result.Committed) throw new InvalidOperationException(result.Summary);
+                            modelCommitted = true;
+                            details = result.Summary;
                             status = result.DimensionsComplete ? "COMPLETE" : "COMMITTED - DIMENSION REVIEW";
                             if (result.LayoutNeedsReview)
                                 status = result.DimensionsComplete ? "COMMITTED - LAYOUT REVIEW" : "COMMITTED - DIMENSION AND LAYOUT REVIEW";
-                            modelCommitted = true;
+                            if (result.OpeningsNeedReview) { status = "COMMITTED - OPENINGS REVIEW"; review++; }
+                            try
+                            {
+                                var footprint = new VirtualFoundationRecoveryService(doc, log).Analyze(foundation);
+                                if (!footprint.Accepted) throw new InvalidOperationException(footprint.Reason);
+                                using (var viewTx = new Transaction(doc, "HATCO - Update Production 3D"))
+                                {
+                                    viewTx.Start(); TransactionFailureHandling.Configure(viewTx, log);
+                                    ManholeReviewViewService.CreateProduction(doc, foundation, footprint, log);
+                                    if (viewTx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Production 3D transaction rejected.");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                status += " / 3D REVIEW"; details += "\n3D: " + ex.Message;
+                                log.Error("Production 3D failed; opening commits retained", ex);
+                            }
                             committed++;
                             if (!result.DimensionsComplete) dimensionReview++;
                             var issues = ManholeReviewRegistry.Load(doc);
-                            foreach (var issue in issues.Where(x=>x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN"))
+                            foreach (var issue in issues.Where(x=>x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN" && !result.OpeningsNeedReview))
                             { issue.Status = "RESOLVED"; issue.Severity = "BATCH PRODUCTION PASSED"; }
                             ManholeReviewRegistry.Save(doc,issues);
+                            if (status != "COMPLETE") ManholeReviewRegistry.Upsert(doc, foundation, details, null, result.OpeningsNeedReview ? "OPENINGS REVIEW" : "BATCH REVIEW", log);
                             if (status != "COMPLETE")
                             {
                                 using (var tx = new Transaction(doc,"HATCO - Mark Dimension Review"))
                                 {
                                     tx.Start(); TransactionFailureHandling.Configure(tx,log);
-                                    BatchSheetLayoutService.SetStatus(doc,foundation,slot,status + " - openings committed; see run report.");
+                                    BatchSheetLayoutService.SetStatus(doc,foundation,slot,status + " - see run report for wall results.");
                                     if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Cannot label dimension review row.");
                                 }
                             }

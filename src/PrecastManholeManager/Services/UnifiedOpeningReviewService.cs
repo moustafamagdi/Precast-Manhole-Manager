@@ -366,7 +366,7 @@ namespace Hatco.PrecastManholeManager.Services
                 ? p.AsDouble() : 0;
         }
 
-        private static ManholeDetectionResult BuildManhole(
+        internal static ManholeDetectionResult BuildManhole(
             Element foundation, VirtualFoundationResult footprint)
         {
             BoundingBoxXYZ box = foundation.get_BoundingBox(null);

@@ -8,6 +8,7 @@ namespace Hatco.PrecastManholeManager.Models
         public string Summary { get; }
         public bool LayoutNeedsReview { get; set; }
         public bool DimensionsDeferred { get; set; }
+        public bool OpeningsNeedReview { get; set; }
 
         public ProductionManholeResult(bool committed, bool dimensionsComplete, string summary)
         {

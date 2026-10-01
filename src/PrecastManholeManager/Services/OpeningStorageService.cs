@@ -70,6 +70,7 @@ namespace Hatco.PrecastManholeManager.Services
             entity.Set(schema.GetField("UpdatedUtc"), DateTime.UtcNow.ToString("O"));
 
             opening.SetEntity(entity);
+            CompoundOpeningService.WriteMembers(opening, record);
         }
 
         public static void WriteAdoptedManual(Opening opening, PenetrationRecord record)
@@ -95,6 +96,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             entity.Set(schema.GetField("UpdatedUtc"), DateTime.UtcNow.ToString("O"));
             opening.SetEntity(entity);
+            CompoundOpeningService.WriteMembers(opening, record);
         }
 
         public static bool TryRead(Opening opening, out ManagedOpeningData data)

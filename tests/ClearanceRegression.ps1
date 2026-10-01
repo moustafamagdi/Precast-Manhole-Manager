@@ -236,3 +236,71 @@ Assert-That (($numberPlan.Rows.ProposedName -join '|') -eq $firstAllocation) 'Re
 foreach ($row in $numberPlan.Rows) { $row.PreviousName = $row.ProposedName }
 [void]$allocator.Invoke($null, @($numberPlan))
 Assert-That ($numberPlan.NewlyNumbered -eq 0) 'Already repaired identities stay unchanged on subsequent runs'
+
+# Compound cuts exercise the compiled grouping/union implementation (no Revit session).
+$compound = $assembly.GetType('Hatco.PrecastManholeManager.Services.CompoundOpeningService')
+$combine = $compound.GetMethod('Combine', [Reflection.BindingFlags]'NonPublic,Static')
+$contains = $compound.GetMethod('Contains', [Reflection.BindingFlags]'NonPublic,Static')
+$penetrationType = $assembly.GetType('Hatco.PrecastManholeManager.Models.PenetrationRecord')
+function New-Cut([string]$key, [double]$x, [double]$z, [double]$w=200, [double]$h=200, [int]$wall=100) {
+    $r = [Activator]::CreateInstance($penetrationType, $true)
+    $r.SourceKeyOverride=$key; $r.HostWallId=$wall; $r.WallNumber=1
+    $r.Xmm=$x; $r.Zmm=$z; $r.Shape='Rectangular'; $r.ClearanceMm=50
+    $r.WidthMm=$w-100; $r.HeightMm=$h-100
+    return $r
+}
+function Combine-Cuts($cuts, [bool]$enabled=$true, [double]$dx=1, [double]$dy=0) {
+    $typed = [Array]::CreateInstance($penetrationType, $cuts.Count)
+    for ($i=0; $i -lt $cuts.Count; $i++) { $typed.SetValue($cuts[$i],$i) }
+    return ,$combine.Invoke($null, [object[]]@($typed,$dx,$dy,$enabled))
+}
+$aCut=New-Cut 'A' 0 0
+$bCut=New-Cut 'B' 150 50
+$merged=Combine-Cuts @($aCut,$bCut)
+Assert-That ($merged.Count -eq 1 -and $merged[0].CutWidthMm -eq 350 -and $merged[0].CutHeightMm -eq 250) 'Overlapping cuts create one enclosing rectangle without double clearance'
+Assert-That ($merged[0].Xmm -eq 75 -and $merged[0].Zmm -eq 25) 'Combined cut is centered on union bounds'
+Assert-That ($merged[0].MemberSourceKeys.Count -eq 2 -and $merged[0].SourceKey.StartsWith('GROUP|100|')) 'Combined identity retains both source keys'
+$keyBefore=$merged[0].SourceKey
+$reversed=Combine-Cuts @($bCut,$aCut)
+Assert-That ($reversed[0].SourceKey -eq $keyBefore) 'Combined identity does not depend on scan order'
+$aCut.ClearanceMm=75; $bCut.ClearanceMm=75
+$resized=Combine-Cuts @($aCut,$bCut)
+Assert-That ($resized[0].SourceKey -eq $keyBefore -and $resized[0].CutWidthMm -eq 400 -and $resized[0].CutHeightMm -eq 300) 'Clearance update resizes the group while keeping its identity'
+$aCut.ClearanceMm=50; $bCut.ClearanceMm=50
+$third=New-Cut 'C' 300 0
+$chain=Combine-Cuts @($aCut,$bCut,$third)
+Assert-That ($chain.Count -eq 1 -and $chain[0].MemberSourceKeys.Count -eq 3 -and $chain[0].CutWidthMm -eq 500) 'Transitive overlaps merge all three sources'
+$separate=Combine-Cuts @($aCut,(New-Cut 'D' 500 0))
+Assert-That ($separate.Count -eq 2) 'Separated cuts remain separate'
+$otherWall=Combine-Cuts @($aCut,(New-Cut 'E' 0 0 200 200 101))
+Assert-That ($otherWall.Count -eq 2) 'Coincident cuts on different walls never merge'
+$rejected=$false
+try { [void](Combine-Cuts @($aCut,$bCut) $false) } catch { $rejected=$true }
+Assert-That $rejected 'Disabling merge rejects an overlapping wall instead of cutting overlapping holes'
+$touching=Combine-Cuts @($aCut,(New-Cut 'F' 200 0))
+Assert-That ($touching.Count -eq 1) 'Touching cuts combine under the existing 5 mm separation rule'
+$ra=New-Cut 'RA' 0 0; $ra.Ymm=0
+$rb=New-Cut 'RB' 0 50; $rb.Ymm=150
+$rotated=Combine-Cuts @($ra,$rb) $true 0 1
+Assert-That ($rotated[0].CutWidthMm -eq 350 -and $rotated[0].Ymm -eq 75 -and $rotated[0].Xmm -eq 0) 'Union follows a wall aligned along Y'
+Assert-That ($contains.Invoke($null,[object[]]@($merged[0],$aCut,1.0,0.0))) 'Combined bounds contain the first member for clean-scan validation'
+Assert-That (!$contains.Invoke($null,[object[]]@($aCut,$merged[0],1.0,0.0))) 'A smaller stale opening cannot cover a combined envelope'
+$invalid=New-Cut 'Bad' 0 0; $invalid.Xmm=[double]::NaN
+$rejected=$false
+try { [void](Combine-Cuts @($invalid)) } catch { $rejected=$true }
+Assert-That $rejected 'Invalid coordinates are rejected before opening creation'
+$authorize = $compound.GetMethod('AuthorizeReplacement', [Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($authorize.Invoke($null,[object[]]@([string[]]@('A','B'),[string[]]@('A','B'),$true))) 'A known combined opening can be replaced only with full source coverage'
+Assert-That (!$authorize.Invoke($null,[object[]]@([string[]]@('A','B'),[string[]]@('C'),$true))) 'Unmatched managed groups are preserved'
+$rejected=$false
+try { [void]$authorize.Invoke($null,[object[]]@([string[]]@('A','B'),[string[]]@('A'),$true)) } catch { $rejected=$true }
+Assert-That $rejected 'An unloaded or missing member prevents replacing its combined opening'
+$rejected=$false
+try { [void]$authorize.Invoke($null,[object[]]@([string[]]@('A','B'),[string[]]@('A','B'),$false)) } catch { $rejected=$true }
+Assert-That $rejected 'Turning merge off preserves existing combined cuts for review'
+# The union can hit a third rectangle outside both initial members.
+$l1=New-Cut 'L1' 0 0
+$l2=New-Cut 'L2' 150 150
+$l3=New-Cut 'L3' -75 275 120 120
+$lMerge=Combine-Cuts @($l1,$l2,$l3)
+Assert-That ($lMerge.Count -eq 1 -and $lMerge[0].MemberSourceKeys.Count -eq 3) 'Grouping repeats after union expands into another opening'

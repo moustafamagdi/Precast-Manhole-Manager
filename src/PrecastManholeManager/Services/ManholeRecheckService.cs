@@ -83,6 +83,16 @@ namespace Hatco.PrecastManholeManager.Services
                 reasons.AddRange(ProductionPreflightService.PhysicalBlockers(plan));
                 var actual = review.Rows.Where(r => !r.IsVirtual || r.EndpointQualified).ToList();
                 actualCount = actual.Count;
+                foreach (var pair in plan.ManagedOpeningIds)
+                {
+                    try
+                    {
+                        var opening = doc.GetElement(new ElementId(pair.Value)) as Opening;
+                        var members = CompoundOpeningService.ReadMembers(opening, pair.Key);
+                        CompoundOpeningService.AuthorizeReplacement(members, actual.Select(r => r.Source.SourceKey), true);
+                    }
+                    catch (Exception ex) { reasons.Add("Existing opening " + pair.Value + ": " + ex.Message); }
+                }
                 foreach (var row in actual)
                 {
                     string why;
@@ -100,6 +110,7 @@ namespace Hatco.PrecastManholeManager.Services
                     var wall = doc.GetElement(new ElementId(a.HostWallId)) as Wall;
                     var line = (wall?.Location as LocationCurve)?.Curve as Line;
                     if (line == null) { reasons.Add("Cannot validate opening spacing."); continue; }
+                    if (CompoundOpeningService.ExistingCutCoversPair(doc, plan, a, b, line.Direction)) continue;
                     var delta = new XYZ(a.EffectiveOpeningXmm - b.EffectiveOpeningXmm,
                         a.EffectiveOpeningYmm - b.EffectiveOpeningYmm, a.EffectiveOpeningZmm - b.EffectiveOpeningZmm);
                     if (Math.Abs(delta.DotProduct(line.Direction)) < (a.CutWidthMm + b.CutWidthMm) * 0.5 + 5 &&
