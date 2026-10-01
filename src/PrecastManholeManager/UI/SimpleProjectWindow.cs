@@ -43,14 +43,14 @@ namespace Hatco.PrecastManholeManager.UI
         {
             ClearanceMm = clearanceMm;
             _all = items ?? new List<SimpleManholeItem>();
-            Title = "HATCO | Precast Manhole Manager";
+            Title = "HATCO | Manhole Manager";
             Width = 1080;
-            Height = 660;
-            MinWidth = 750;
-            MinHeight = 470;
+            Height = 740;
+            MinWidth = 860;
+            MinHeight = 600;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
             ResizeMode = ResizeMode.CanResize;
-            var root = new DockPanel { Margin = new Thickness(16) };
+            var root = new DockPanel { Margin = new Thickness(16), Background = System.Windows.Media.Brushes.White };
             Content = root;
 
             var top = new StackPanel();
@@ -58,13 +58,13 @@ namespace Hatco.PrecastManholeManager.UI
             root.Children.Add(top);
             top.Children.Add(new TextBlock
             {
-                Text = "Precast Manhole Manager",
+                Text = "Manhole Manager",
                 FontSize = 22,
                 FontWeight = FontWeights.SemiBold
             });
             top.Children.Add(new TextBlock
             {
-                Text = "One-time project run:  1  SCAN    →    2  REVIEW    →    3  OUTPUT",
+                Text = "Choose a task, select its scope, then run.",
                 Margin = new Thickness(0, 6, 0, 10)
             });
             _counts = new TextBlock
@@ -77,69 +77,52 @@ namespace Hatco.PrecastManholeManager.UI
             diagnostics.Children.Add(_timing);
             diagnostics.Children.Add(_cropOrder);
             diagnostics.Children.Add(_scopeOnly);
-            top.Children.Add(new Expander { Header = "Performance diagnostics", Content = diagnostics,
-                IsExpanded = false, Margin = new Thickness(0, 0, 0, 6) });
+
             _timing.Checked += (s, e) => _scopeOnly.IsEnabled = true;
             _timing.Unchecked += (s, e) => { _scopeOnly.IsChecked = false; _scopeOnly.IsEnabled = false; };
             _timing.Checked += (s, e) => _cropOrder.IsEnabled = true;
             _timing.Unchecked += (s, e) => { _cropOrder.IsChecked = false; _cropOrder.IsEnabled = false; };
 
-            var controls = new WrapPanel
-            {
-                Margin = new Thickness(0, 0, 0, 10)
+            var tabs = new TabControl { Height = 185, Margin = new Thickness(0, 0, 0, 12) };
+            top.Children.Add(tabs);
+            var openings = TaskPanel(tabs, "Openings", "Update openings and dimensions on prepared manholes. Keeps existing sheets and viewport positions.");
+            var openingScope = Scope(openings, "Selected row", "Pick bases in Revit", "Current model view", "All prepared manholes");
+            var runOpenings = Button("Run Openings", 190, openings);
+            runOpenings.Click += (s, e) => {
+                var actions = new[] { ProjectAction.ExistingOne, ProjectAction.ExistingPicked, ProjectAction.ExistingActiveView, ProjectAction.ExistingAll };
+                Choose(actions[openingScope.SelectedIndex], openingScope.SelectedIndex == 0);
             };
-            top.Children.Add(controls);
-            Button scan = Button("1   Scan Project", 155, controls);
-            Button cleanScan = Button("Clean Scan - All Manholes", 210, controls);
-            Button number = Button("Assign Internal MH IDs", 175, controls);
-            Button review = Button("2   Review Selected", 170, controls);
-            Button recheck = Button("Recheck Selected", 155, controls);
-            Button view = Button("Review 3D", 125, controls);
-            Button draft = Button("Create 2D Views", 150, controls);
-            Button produce = Button("Generate Selected Manhole", 210, controls);
-            Button batch = Button("Generate / Update All", 210, controls);
-            batch.Click += (sender, args) => Choose(ProjectAction.ProductionAll, false);
-            Button dimensions = Button("Dimensions - Selected", 215, controls);
-            Button existingOne = Button("Openings - Existing Selected", 220, controls);
-            Button existingAll = Button("Openings - All Prepared", 210, controls);
-            Button existingDimensions = Button("Dimensions - All Prepared", 215, controls);
-            existingOne.Click += (s, e) => Choose(ProjectAction.ExistingOne, true);
-            existingAll.Click += (s, e) => Choose(ProjectAction.ExistingAll, false);
-            existingDimensions.Click += (s, e) => Choose(ProjectAction.ExistingDimensions, false);
-            Button picked = Button("Openings - Pick Bases", 210, controls);
-            Button activeView = Button("Openings - Current View", 215, controls);
-            picked.Click += (s, e) => Choose(ProjectAction.ExistingPicked, false);
-            activeView.Click += (s, e) => Choose(ProjectAction.ExistingActiveView, false);
-            picked.ToolTip = "Use preselected manhole bases, or pick bases in Revit and press Finish. Prepared rows only.";
-            activeView.ToolTip = "Process recognized host-model bases in the active model view. Prepared rows only; no new views or sheets.";
-            Button repairPicked = Button("Repair Low Base - Pick", 210, controls);
-            Button repairView = Button("Repair Low Base - View", 215, controls);
-            repairPicked.Click += (s, e) => Choose(ProjectAction.RepairPicked, false);
-            repairView.Click += (s, e) => Choose(ProjectAction.RepairActiveView, false);
-            repairPicked.ToolTip = repairView.ToolTip = "Lower bases only for lower-wall opening failures, leaving 100 mm below openings. Extend walls while keeping their tops. Restore original pin states.";
-            Button six = Button("3   Test 6-Row Sheet", 175, controls);
-            Button export = Button("Export Existing Excel", 177, controls);
 
-            top.Children.Add(new TextBlock
-            {
-                Text = "Assign Internal MH IDs saves MH-001, MH-002, etc. in " +
-                    "this RVT without changing project Mark or approved " +
-                    "site designations. Scan finds manholes and " +
-                    "isolates problem cases. " +
-                    "Review Selected performs the detailed MEP/opening inspection " +
-                    "without modifying the model. 3D creates a cropped Revit " +
-                    "view. Create 2D Views makes a real Floor Plan and " +
-                    "four Sections for one selected manhole. Generate Selected " +
-                    "Manhole reviews actual MEP cuts and asks permission " +
-                    "before creating real openings and its own sheet. " +
-                    "The test six-row " +
-                    "sheet attempts up to six clean, unplaced manholes at " +
-                    "1:25 without touching your existing manual sheet. Excel reads " +
-                    "only previously SAVED fabrication data.",
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 10)
-            });
+            var dimensionPanel = TaskPanel(tabs, "Dimensions", "Rebuild tool-owned opening, body and base dimensions. Manual dimensions are preserved; moved tool dimensions are reset.");
+            var dimensionScope = Scope(dimensionPanel, "Selected row", "All prepared manholes");
+            Button dimensions = Button("Update Dimensions", 190, dimensionPanel);
 
+            var repairs = TaskPanel(tabs, "Base Repair", "Repair openings below the wall: lower the base, leave 100 mm below the opening, keep wall tops and restore pins. Prepared manholes only.");
+            var repairScope = Scope(repairs, "Pick bases in Revit", "Current model view");
+            var runRepair = Button("Repair Low Bases", 190, repairs);
+            runRepair.Click += (s, e) => Choose(repairScope.SelectedIndex == 0 ? ProjectAction.RepairPicked : ProjectAction.RepairActiveView, false);
+
+            var sheets = TaskPanel(tabs, "Views & Sheets", "Create missing documentation or run the full workflow. Generate / Update All can create views and sheets and arrange prepared rows.");
+            var sheetButtons = new WrapPanel(); sheets.Children.Add(sheetButtons);
+            Button draft = Button("Views - Selected", 180, sheetButtons);
+            Button produce = Button("Generate - Selected", 180, sheetButtons);
+            Button batch = Button("Generate / Update All", 190, sheetButtons);
+            batch.Click += (s, e) => Choose(ProjectAction.ProductionAll, false);
+
+            var reviewPanel = TaskPanel(tabs, "Scan & Review", "Scan the project, recheck recorded issues, or inspect the manhole selected in the table below.");
+            var reviewButtons = new WrapPanel(); reviewPanel.Children.Add(reviewButtons);
+            Button scan = Button("Scan Project", 155, reviewButtons);
+            Button cleanScan = Button("Clean Scan - All", 170, reviewButtons);
+            Button recheck = Button("Recheck Selected", 170, reviewButtons);
+            Button review = Button("Inspect Selected", 170, reviewButtons);
+            Button view = Button("Show Review 3D", 160, reviewButtons);
+
+            var advanced = TaskPanel(tabs, "Setup & Advanced", "Project numbering, exports and layout experiments. Performance settings apply only to Generate / Update All.");
+            var advancedButtons = new WrapPanel(); advanced.Children.Add(advancedButtons);
+            Button number = Button("Assign Internal MH IDs", 190, advancedButtons);
+            Button export = Button("Export Existing Excel", 190, advancedButtons);
+            Button six = Button("Test 6-Row Sheet", 180, advancedButtons);
+            advanced.Children.Add(diagnostics);
             var openingSettings = new WrapPanel { Margin = new Thickness(0, 0, 0, 10) };
             top.Children.Add(openingSettings);
             openingSettings.Children.Add(new TextBlock {
@@ -158,7 +141,7 @@ namespace Hatco.PrecastManholeManager.UI
             top.Children.Add(search);
             search.Children.Add(new TextBlock
             {
-                Text = "Find:",
+                Text = "Find MH / ID:",
                 VerticalAlignment = VerticalAlignment.Center
             });
             _filter = new TextBox
@@ -198,11 +181,11 @@ namespace Hatco.PrecastManholeManager.UI
                 HeadersVisibility = DataGridHeadersVisibility.Column
             };
             root.Children.Add(_grid);
-            AddColumn("Foundation", "FoundationId", 100);
             AddColumn("Internal MH ID", "ManholeName", 152);
+            AddColumn("Foundation", "FoundationId", 100);
             AddColumn("Status", "State", 155);
-            AddColumn("Type", "TypeName", 204);
             AddColumn("Reason / what needs review", "Problem", 330);
+            AddColumn("Type", "TypeName", 204);
             AddColumn("3D view", "ViewName", 185);
 
             cleanScan.Click += (s, e) => Choose(ProjectAction.CleanScan, false);
@@ -257,7 +240,7 @@ namespace Hatco.PrecastManholeManager.UI
                 // dialog before any physical Revit wall changes.
                 Choose(ProjectAction.ProductionOne, true);
             };
-            dimensions.Click += (sender, args) => Choose(ProjectAction.DimensionOne, true);
+            dimensions.Click += (sender, args) => Choose(dimensionScope.SelectedIndex == 0 ? ProjectAction.DimensionOne : ProjectAction.ExistingDimensions, dimensionScope.SelectedIndex == 0);
             six.Click += (sender, args) =>
             {
                 // Test ONE sheet only. The view-generation engine validates
@@ -293,12 +276,34 @@ namespace Hatco.PrecastManholeManager.UI
             UpdateCounts();
         }
 
+        private static StackPanel TaskPanel(TabControl tabs, string title, string description)
+        {
+            var panel = new StackPanel { Margin = new Thickness(14) };
+            panel.Children.Add(new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12) });
+            tabs.Items.Add(new TabItem { Header = title, Padding = new Thickness(12, 7, 12, 7),
+                Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                    HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled } });
+            return panel;
+        }
+
+        private static ComboBox Scope(Panel parent, params string[] choices)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
+            row.Children.Add(new TextBlock { Text = "Apply to:", VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 12, 0) });
+            var scope = new ComboBox { ItemsSource = choices, SelectedIndex = 0, Width = 260, Padding = new Thickness(6) };
+            row.Children.Add(scope); parent.Children.Add(row);
+            return scope;
+        }
+
         private static Button Button(string label, int width, Panel panel)
         {
             var button = new Button
             {
                 Content = label,
                 Width = width,
+                HorizontalAlignment = HorizontalAlignment.Left,
                 Padding = new Thickness(6, 7, 6, 7),
                 Margin = new Thickness(0, 0, 10, 6)
             };
@@ -325,6 +330,7 @@ namespace Hatco.PrecastManholeManager.UI
             if (q.Length > 0)
                 rows = rows.Where(x =>
                     x.FoundationId.ToString().Contains(q) ||
+                    (x.ManholeName ?? "").IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0 ||
                     (x.Problem ?? "").IndexOf(q,
                         StringComparison.OrdinalIgnoreCase) >= 0 ||
                     (x.TypeName ?? "").IndexOf(q,
@@ -337,8 +343,8 @@ namespace Hatco.PrecastManholeManager.UI
             int review = _all.Count(x => x.State == "REVIEW");
             _counts.Text = "Detected: " + _all.Count +
                 "    |    For review: " + review +
-                "    |    Remaining: " + (_all.Count - review) +
-                "    |    Nothing is deleted automatically";
+                "    |    No recorded issue: " + (_all.Count - review) +
+                "";
         }
 
         private void Choose(ProjectAction requested, bool requireRow)
