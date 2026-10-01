@@ -304,3 +304,34 @@ $l2=New-Cut 'L2' 150 150
 $l3=New-Cut 'L3' -75 275 120 120
 $lMerge=Combine-Cuts @($l1,$l2,$l3)
 Assert-That ($lMerge.Count -eq 1 -and $lMerge[0].MemberSourceKeys.Count -eq 3) 'Grouping repeats after union expands into another opening'
+
+# Partition preserves independent candidates and old combined-cut dependencies.
+$partition=$compound.GetMethod('Partition',[Reflection.BindingFlags]'NonPublic,Static')
+function Partition-Cuts($cuts, [string[][]]$old=@()) {
+    $typed=[Array]::CreateInstance($penetrationType,$cuts.Count)
+    for($i=0;$i -lt $cuts.Count;$i++){ $typed.SetValue($cuts[$i],$i) }
+    return ,$partition.Invoke($null,[object[]]@($typed,1.0,0.0,$old))
+}
+$parts=Partition-Cuts @((New-Cut 'BadEdge' -1.2 0 214.3 214.3),(New-Cut 'Good1' 450 0),(New-Cut 'Good2' 800 0))
+Assert-That ($parts.Count -eq 3) 'An edge failure is isolated from two independent openings on the same wall'
+$parts=Partition-Cuts @((New-Cut 'A' 0 0),(New-Cut 'B' 150 0),(New-Cut 'C' 800 0))
+Assert-That ($parts.Count -eq 2 -and $parts[0].Count -eq 2) 'An overlapping pair is one transaction component; a distant cut is independent'
+$parts=Partition-Cuts @((New-Cut 'A' 0 0),(New-Cut 'B' 800 0)) ([string[][]]@(,[string[]]@('A','B')))
+Assert-That ($parts.Count -eq 1) 'Members of an existing combined opening stay in one rollback group even after moving apart'
+$parts=Partition-Cuts @($l1,$l2,$l3)
+Assert-That ($parts.Count -eq 1) 'Union expansion keeps dependent cuts in the same isolated group'
+$fit=$assembly.GetType('Hatco.PrecastManholeManager.Services.OpeningFitValidationService').GetMethod('HorizontalFits',[Reflection.BindingFlags]'NonPublic,Static')
+function Test-Horizontal([double]$center,[double]$width,[double]$length,[bool]$left,[bool]$right){ return [bool]$fit.Invoke($null,[object[]]@($center,$width,$length,$left,$right)) }
+Assert-That (!(Test-Horizontal -1.2 214.3 1100 $false $false)) 'Ordinary openings cannot bypass the wall-end margin'
+Assert-That (Test-Horizontal -1.2 214.3 1100 $true $false) 'Verified shared corner can cross the start of W2'
+Assert-That (Test-Horizontal 1098.8 214.3 1100 $false $true) 'Verified shared corner can cross the end of W4'
+Assert-That (!(Test-Horizontal -1.2 214.3 1100 $false $true)) 'Corner permission for the opposite end cannot authorize a cut'
+Assert-That (!(Test-Horizontal -500 214.3 1100 $true $false)) 'A cut wholly outside the wall is rejected even with corner permission'
+Assert-That (!(Test-Horizontal 550 1200 1100 $true $true)) 'Corner qualification cannot remove the complete wall width'
+Assert-That (Test-Horizontal 550 200 1100 $false $false) 'Normal in-wall openings remain valid'
+$near=$assembly.GetType('Hatco.PrecastManholeManager.Services.CornerOpeningService').GetMethod('NearEnd',[Reflection.BindingFlags]'NonPublic,Static')
+Assert-That ($near.Invoke($null,[object[]]@(-1.2,214.3,1100.0,0))) 'Corner candidate must intersect its physical end'
+Assert-That (!$near.Invoke($null,[object[]]@(550.0,214.3,1100.0,0))) 'Crossings midway along adjacent walls do not qualify as one corner'
+$aCut.CornerStartAllowed=$true
+$cornerMerge=Combine-Cuts @($aCut,$bCut)
+Assert-That ($cornerMerge[0].CornerStartAllowed -and !$cornerMerge[0].CornerEndAllowed) 'Merging preserves only the qualified wall-end permission'

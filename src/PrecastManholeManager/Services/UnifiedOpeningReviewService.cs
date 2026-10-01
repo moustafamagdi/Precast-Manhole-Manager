@@ -98,6 +98,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             Status = flags.Count == 0 ? "ACTUAL FIT PREVIEW" : "REVIEW";
             Notes = string.Join(" | ", flags);
+            if (Source.CornerStartAllowed || Source.CornerEndAllowed) Notes += " | VERIFIED SHARED CORNER - full projected opening crosses wall end";
             if (IsVirtual && Detection == "INSIDE WALL")
                 Notes += " | Endpoint already enters wall thickness.";
         }
@@ -227,9 +228,11 @@ namespace Hatco.PrecastManholeManager.Services
             foreach (UnifiedOpeningReviewRow row in all)
             {
                 row.Existing = row.Source.ExistingOpeningStatus;
-                row.Evaluate(doc, clearanceMm, result.Audit);
+                row.Source.ClearanceMm = clearanceMm;
             }
 
+            CornerOpeningService.Qualify(doc, footprint, all, log);
+            foreach (var row in all) row.Evaluate(doc, clearanceMm, result.Audit);
             result.Rows.AddRange(all.OrderBy(x => x.Wall)
                 .ThenBy(x => x.Detection)
                 .ThenBy(x => x.SourceId));

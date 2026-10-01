@@ -51,7 +51,7 @@ namespace Hatco.PrecastManholeManager.Commands
             var ask = new TaskDialog("Generate / Update All") {
                 MainInstruction = (sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + numbering.Rows.Count + " manholes unattended?",
                 MainContent = "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
-                    (!sheetsOnly ? "Each wall commits independently. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
+                    (!sheetsOnly ? "Each opening/overlapping group commits independently. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
                     (sheetsOnly ? "SHEETS ONLY: creates/reuses body views and reserved rows. No opening pass; existing physical cuts remain unchanged.\n" : "") +
                     (timingDiagnostic ? "TIMING DIAGNOSTIC: at most 3 new documentation attempts, no opening pass. Extra regeneration=" + extraRegeneration + ". Saves changes in the current RVT.\n" : "") +
                     (timingDiagnostic && cropOrderExperiment ? "EXPERIMENT: set plan crop bounds before activating the crop.\n" : "") +

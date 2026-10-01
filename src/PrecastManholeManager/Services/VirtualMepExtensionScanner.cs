@@ -414,7 +414,7 @@ namespace Hatco.PrecastManholeManager.Services
             return path;
         }
 
-        private bool TryConnectorEnvelope(Element element, Transform transform, XYZ tip, XYZ direction,
+        internal bool TryConnectorEnvelope(Element element, Transform transform, XYZ tip, XYZ direction,
             XYZ normal, XYZ tangent, double thickness, out double widthMm, out double heightMm)
         {
             widthMm = heightMm = 0;

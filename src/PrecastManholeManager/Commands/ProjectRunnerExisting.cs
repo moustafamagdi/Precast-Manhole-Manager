@@ -48,7 +48,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     "Eligible: " + eligible.Count + "; skipped: " + (source.Count - eligible.Count) + " (missing prepared views/row).\n" +
                     "Targets: " + string.Join(", ", eligible.Take(20).Select(x => x.ManholeName)) + (eligible.Count > 20 ? ", ..." : "") + "\n" +
                     "No new views or sheets; existing viewport positions are preserved.\n" +
-                    (!dimensionsOnly && !repairLowBase ? "Each wall commits independently. Failed walls remain in review. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
+                    (!dimensionsOnly && !repairLowBase ? "Each opening/overlapping group commits independently. Failed groups remain in review. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
                     (dimensionsOnly ? "Existing cuts remain unchanged.\n" : "Pipes and ducts only. Clearance per side: " + clearance + " mm. Includes verified end connectors touching/entering the wall or up to 150 mm before it (approach within 15 degrees). Current geometry is validated again, including recorded review cases. Unsafe cuts are skipped.\n") +
                     "Missing production views defer dimensions; they do not block openings. Hidden dimensions and annotation crop problems in existing views are reported for review.\n" +
                     "Saves in the CURRENT RVT every 10 items or 5 minutes, and at completion. No Synchronize with Central.\n" + doc.PathName,

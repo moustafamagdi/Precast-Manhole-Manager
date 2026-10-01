@@ -25,7 +25,7 @@ namespace Hatco.PrecastManholeManager.Commands
             var safeWalls = new HashSet<int>();
             var problems = new List<string>();
             var outcomes = new List<string>();
-            int newCuts = 0, updated = 0, unchanged = 0, candidateCount = 0, committedWalls = 0;
+            int newCuts = 0, updated = 0, unchanged = 0, candidateCount = 0, committedGroups = 0;
             foreach (var bodyWall in UnifiedOpeningReviewService.BuildManhole(foundation, footprint).Walls)
             {
                 int wallId = bodyWall.Wall.Id.IntegerValue, number = bodyWall.Number;
@@ -44,64 +44,82 @@ namespace Hatco.PrecastManholeManager.Commands
                         outcomes.Add("W" + number + ": no eligible crossing; existing cuts preserved");
                         continue;
                     }
-                    foreach (var row in rows)
-                    {
-                        if (row.Status != "ACTUAL FIT PREVIEW" && row.Source.ExistingOpeningStatus != "MANAGED")
-                            throw new InvalidOperationException("Source " + row.SourceId + ": " + row.Notes);
-                        string reason;
-                        if (!OpeningFitValidationService.TryValidate(doc, row.Source, out reason))
-                            throw new InvalidOperationException("Source " + row.SourceId + ": " + reason);
-                    }
                     double dx = bodyWall.Direction.X, dy = bodyWall.Direction.Y;
-                    var desired = CompoundOpeningService.Combine(rows.Select(r => r.Source), dx, dy, merge);
-                    foreach (var record in desired)
+                    var oldGroups = plan.ManagedOpeningIds.Select(pair => CompoundOpeningService.ReadMembers(
+                        doc.GetElement(new ElementId(pair.Value)) as Opening, pair.Key)).ToList();
+                    var components = CompoundOpeningService.Partition(rows.Select(r => r.Source), dx, dy, oldGroups);
+                    foreach (var component in components)
                     {
-                        string reason;
-                        if (!OpeningFitValidationService.TryValidate(doc, record, out reason))
-                            throw new InvalidOperationException("Combined opening fit: " + reason);
-                        log.Info("WALL OPENING PLAN W" + number + " Key=" + record.SourceKey +
-                            " Members=" + string.Join(",", CompoundOpeningService.Members(record)) +
-                            " Size=" + record.CutWidthMm + "x" + record.CutHeightMm);
-                    }
-                    var replacements = ManagedReplacements(doc, plan, desired, rows.Select(r => r.Source.SourceKey), dx, dy, merge);
-                    plan.ProposedRows.Clear();
-                    plan.ProposedRows.AddRange(desired.Select(r => new UnifiedOpeningReviewRow {
-                        Source = r, WallId = wallId, Wall = "W" + number, SourceId = r.LinkedElementId,
-                        Status = "ACTUAL FIT PREVIEW", OpeningSize = r.CutWidthMm.ToString("0.#") + " x " + r.CutHeightMm.ToString("0.#")
-                    }));
-                    using (var group = new TransactionGroup(doc, "HATCO - Open W" + number))
-                    {
-                        group.Start();
+                        string componentLabel = "W" + number + " Sources=" + string.Join("/", component.Select(r => r.LinkedElementId));
                         try
                         {
-                            using (var tx = new Transaction(doc, "HATCO - Refresh W" + number + " references"))
+                            plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log, wallId);
+                            var componentKeys = new HashSet<string>(component.Select(r => r.SourceKey));
+                            var componentRows = rows.Where(r => componentKeys.Contains(r.Source.SourceKey)).ToList();
+                            foreach (var row in componentRows)
                             {
-                                tx.Start(); TransactionFailureHandling.Configure(tx, log);
-                                OpeningDimensionService.RemoveOwned(doc, foundation, number);
-                                foreach (var pair in replacements)
-                                {
-                                    var removed = doc.Delete(new ElementId(pair.Value));
-                                    if (removed.Any(e => e.IntegerValue == foundation.Id.IntegerValue || footprint.Walls.Any(w => w.Id == e)))
-                                        throw new InvalidOperationException("Replacing a tool opening affected the body.");
-                                    plan.ManagedOpeningIds.Remove(pair.Key);
-                                }
-                                if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Opening replacement preparation rejected.");
+                                if (row.Status != "ACTUAL FIT PREVIEW" && row.Source.ExistingOpeningStatus != "MANAGED")
+                                    throw new InvalidOperationException("Source " + row.SourceId + ": " + row.Notes);
+                                string reason;
+                                if (!OpeningFitValidationService.TryValidate(doc, row.Source, out reason))
+                                    throw new InvalidOperationException("Source " + row.SourceId + ": " + reason);
                             }
-                            // Do not resolve joins to other walls from a partial-wall transaction.
-                            var applied = CleanSyncAtomicService.Apply(doc, plan, new CleanSyncApplyOptions {
-                                IncludeValidatedEndpoints = true, RequiredLinksVerified = true, ResolveManholeJoinFailures = false
-                            }, log);
-                            if (!applied.Committed) throw new InvalidOperationException(applied.Error);
-                            if (group.Assimilate() != TransactionStatus.Committed) throw new InvalidOperationException("Wall commit rejected.");
-                            newCuts += applied.NewOpenings; updated += applied.ManagedUpdated; unchanged += applied.ManagedUnchanged;
-                            committedWalls++;
-                            safeWalls.Add(number);
-                            outcomes.Add("W" + number + ": committed " + desired.Count + " cut(s); merged=" + desired.Count(r => r.MemberSourceKeys != null));
+                            var desired = CompoundOpeningService.Combine(component, dx, dy, merge);
+                            foreach (var record in desired)
+                            {
+                                string reason;
+                                if (!OpeningFitValidationService.TryValidate(doc, record, out reason))
+                                    throw new InvalidOperationException("Combined opening fit: " + reason);
+                                log.Info("WALL OPENING PLAN W" + number + " Key=" + record.SourceKey +
+                                    " Members=" + string.Join(",", CompoundOpeningService.Members(record)) +
+                                    " Size=" + record.CutWidthMm + "x" + record.CutHeightMm);
+                            }
+                            var replacements = ManagedReplacements(doc, plan, desired, component.Select(r => r.SourceKey), dx, dy, merge);
+                            plan.ProposedRows.Clear();
+                            plan.ProposedRows.AddRange(desired.Select(r => new UnifiedOpeningReviewRow {
+                                Source = r, WallId = wallId, Wall = "W" + number, SourceId = r.LinkedElementId,
+                                Status = "ACTUAL FIT PREVIEW", OpeningSize = r.CutWidthMm.ToString("0.#") + " x " + r.CutHeightMm.ToString("0.#")
+                            }));
+                            using (var group = new TransactionGroup(doc, "HATCO - Open W" + number))
+                            {
+                                group.Start();
+                                try
+                                {
+                                    using (var tx = new Transaction(doc, "HATCO - Refresh W" + number + " references"))
+                                    {
+                                        tx.Start(); TransactionFailureHandling.Configure(tx, log);
+                                        OpeningDimensionService.RemoveOwned(doc, foundation, number);
+                                        foreach (var pair in replacements)
+                                        {
+                                            var removed = doc.Delete(new ElementId(pair.Value));
+                                            if (removed.Any(e => e.IntegerValue == foundation.Id.IntegerValue || footprint.Walls.Any(w => w.Id == e)))
+                                                throw new InvalidOperationException("Replacing a tool opening affected the body.");
+                                            plan.ManagedOpeningIds.Remove(pair.Key);
+                                        }
+                                        if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Opening replacement preparation rejected.");
+                                    }
+                                    // Do not resolve joins to other walls from a partial-wall transaction.
+                                    var applied = CleanSyncAtomicService.Apply(doc, plan, new CleanSyncApplyOptions {
+                                        IncludeValidatedEndpoints = true, RequiredLinksVerified = true, ResolveManholeJoinFailures = false
+                                    }, log);
+                                    if (!applied.Committed) throw new InvalidOperationException(applied.Error);
+                                    if (group.Assimilate() != TransactionStatus.Committed) throw new InvalidOperationException("Opening group commit rejected.");
+                                    newCuts += applied.NewOpenings; updated += applied.ManagedUpdated; unchanged += applied.ManagedUnchanged;
+                                    committedGroups++;
+                                    safeWalls.Add(number);
+                                    outcomes.Add(componentLabel + ": committed " + desired.Count + " cut(s); merged=" + desired.Count(r => r.MemberSourceKeys != null));
+                                }
+                                catch
+                                {
+                                    if (group.GetStatus() == TransactionStatus.Started) group.RollBack();
+                                    throw;
+                                }
+                            }
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            if (group.GetStatus() == TransactionStatus.Started) group.RollBack();
-                            throw;
+                            problems.Add(componentLabel + ": " + ex.Message);
+                            log.Error("OPENING GROUP REVIEW " + componentLabel + "; independent groups retained", ex);
                         }
                     }
                 }
@@ -113,8 +131,8 @@ namespace Hatco.PrecastManholeManager.Commands
             }
             if (candidateCount == 0 && problems.Count == 0) problems.Add("No confirmed crossing or validated end connector within 150 mm; existing openings preserved.");
             bool dimensionsComplete = false, deferred = false;
-            string dimensionStatus = "Dimensions unchanged: no walls committed.";
-            if (committedWalls > 0)
+            string dimensionStatus = "Dimensions unchanged: no opening groups committed.";
+            if (committedGroups > 0)
             {
                 string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
                 var names = new HashSet<string>(new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>().Where(v => !v.IsTemplate).Select(v => v.Name));
@@ -126,7 +144,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
                 catch (Exception ex) { dimensionStatus = "Dimension review: " + ex.Message; log.Error(dimensionStatus, ex); }
             }
-            string summary = (problems.Count > 0 ? committedWalls > 0 ? "PARTIAL REVIEW" : "REVIEW" : "OPENINGS COMPLETE") +
+            string summary = (problems.Count > 0 ? committedGroups > 0 ? "PARTIAL REVIEW" : "REVIEW" : "OPENINGS COMPLETE") +
                 " | New=" + newCuts + " Updated=" + updated + " Unchanged=" + unchanged + "\n" + string.Join("\n", outcomes) +
                 "\n" + string.Join("\n", problems) + "\n" + dimensionStatus + "\nReview CSV: " + csv;
             // Sheet-note or registry errors must never undo successfully committed walls.
@@ -143,7 +161,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
             }
             catch (Exception ex) { summary += "\nSheet note review: " + ex.Message; log.Error("Opening sheet note", ex); }
-            return new ProductionManholeResult(committedWalls > 0, dimensionsComplete, summary) {
+            return new ProductionManholeResult(committedGroups > 0, dimensionsComplete, summary) {
                 DimensionsDeferred = deferred, OpeningsNeedReview = problems.Count > 0
             };
         }

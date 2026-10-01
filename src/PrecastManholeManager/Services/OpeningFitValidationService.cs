@@ -7,6 +7,14 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal static class OpeningFitValidationService
     {
+        internal static bool HorizontalFits(double center, double width, double length, bool cornerStart, bool cornerEnd)
+        {
+            if (double.IsNaN(center) || double.IsInfinity(center) || double.IsNaN(width) || double.IsInfinity(width) || width <= 0 || double.IsNaN(length) || double.IsInfinity(length) || length <= 0) return false;
+            double left = center - width / 2, right = center + width / 2;
+            if (right <= 1 || left >= length - 1 || (left <= 0 && right >= length)) return false;
+            return (left >= 5 || cornerStart) && (right <= length - 5 || cornerEnd);
+        }
+
         public static bool TryValidate(
             Document doc,
             PenetrationRecord record,
@@ -79,8 +87,8 @@ namespace Hatco.PrecastManholeManager.Services
             double wallLengthFt = line.Length;
             double alongFt = (center - a).DotProduct(tangent);
 
-            if (alongFt - halfWidthFt < edgeMarginFt ||
-                alongFt + halfWidthFt > wallLengthFt - edgeMarginFt)
+            if (!HorizontalFits(UnitUtil.FtToMm(alongFt), record.CutWidthMm, UnitUtil.FtToMm(wallLengthFt),
+                record.CornerStartAllowed, record.CornerEndAllowed))
             {
                 reason =
                     "Opening extends beyond wall horizontal limits. " +

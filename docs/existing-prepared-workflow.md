@@ -36,7 +36,7 @@ Connector cross-sections are projected onto the wall plane, including travel thr
 
 ## Independent walls and combined openings
 
-Each wall commits independently during Run Openings and the opening stage of Generate / Update All. A wall with an edited profile, manual/void cuts, unsafe fit or failed Revit transaction stays in review; successful walls remain committed. Dimensions belonging to a failed wall are preserved. Whole-base Repair retains its separate atomic behavior.
+Each independent opening or connected group commits separately during Run Openings and the opening stage of Generate / Update All. An unsafe fit or failed transaction preserves that group for review without blocking other groups on the same wall. An edited profile or manual/void cuts still block the affected wall. Existing combined-cut members stay in one transaction even after they move apart. Dimensions are refreshed from committed openings; whole-base Repair retains its separate atomic behavior.
 
 **Merge overlapping openings** is off by default. When enabled it combines intersecting opening rectangles on the same wall, including the existing under-5-mm separation tolerance. It takes the enclosing rectangle after per-side clearance and validates that entire cut against the wall. It also merges further openings reached by that rectangle. Different walls never combine.
 
@@ -52,3 +52,11 @@ Clean Scan recognizes a combined cut only when its physical rectangle covers the
 4. Add an edited profile or an unfit crossing to one wall: that wall and its existing cuts/dimensions remain unchanged; other walls finish.
 5. Test a group with one member missing/unloaded: preserve its cut and report review. Repeat with merge OFF: preserve the combined cut for review.
 6. Run Clean Scan after a successful merge: the resolved pair must no longer be reported as overlapping separate openings.
+
+## Shared corner openings
+
+For a detected source crossing two adjacent perpendicular wall ends of the recovered manhole, the tool verifies the common source and end proximity. It projects the straight pipe/duct connector cross-section through each wall thickness, includes the chosen clearance, and creates a separate native opening on each intersected wall. Only the verified end is permitted to extend beyond the normal 5 mm horizontal margin. Vertical limits and whole-wall-width protection remain enforced. No wall movement, profile reset or manual cut deletion is authorized by this feature.
+
+The full projected rectangle crosses the wall end; it is not shortened to leave a concrete sliver at the corner. Revit acceptance of these native end cuts and their associative dimensions must be verified in the live model. Rejected groups stay in review while independent groups remain committed. Sources that cannot be verified/projected retain the normal fit restrictions.
+
+Acceptance: foundation 4445337 / source 32848953 should attempt both W2 and W4 corner cuts. The independent sources 32810164, 32810225 and 32848983 must proceed even if a corner group fails. Rerun to verify reuse, adjust clearance to verify resizing, and inspect both wall ends in 3D. If same-wall envelopes overlap, enable Merge overlapping openings. No merge toggle is required merely because one source crosses two walls.

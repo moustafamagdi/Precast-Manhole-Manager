@@ -65,6 +65,23 @@ namespace Hatco.PrecastManholeManager.Services
             return result;
         }
 
+        internal static List<List<PenetrationRecord>> Partition(IEnumerable<PenetrationRecord> sources,
+            double dx, double dy, IEnumerable<string[]> existingGroups)
+        {
+            var groups = sources.OrderBy(r => r.SourceKey, StringComparer.Ordinal).Select(r => new List<PenetrationRecord> { r }).ToList();
+            var old = existingGroups.ToList();
+            for (int i = 0; i < groups.Count; i++)
+            for (int j = i + 1; j < groups.Count; j++)
+            {
+                var a = groups[i].Aggregate((x, y) => Union(x, y, dx, dy));
+                var b = groups[j].Aggregate((x, y) => Union(x, y, dx, dy));
+                bool sharedOldCut = old.Any(keys => groups[i].Any(r => keys.Contains(r.SourceKey)) && groups[j].Any(r => keys.Contains(r.SourceKey)));
+                if (!Overlaps(a, b, dx, dy) && !sharedOldCut) continue;
+                groups[i].AddRange(groups[j]); groups.RemoveAt(j); i = -1; break;
+            }
+            return groups;
+        }
+
         private static bool Finite(double n) => !double.IsNaN(n) && !double.IsInfinity(n);
 
         internal static bool Contains(PenetrationRecord outer, PenetrationRecord inner, double dx, double dy)
@@ -92,6 +109,7 @@ namespace Hatco.PrecastManholeManager.Services
                 var center = (corners[0] + corners[1]) / 2;
                 var delta = corners[1] - corners[0];
                 var actual = new PenetrationRecord { HostWallId = data.HostWallId,
+                    CornerStartAllowed = a.CornerStartAllowed || b.CornerStartAllowed, CornerEndAllowed = a.CornerEndAllowed || b.CornerEndAllowed,
                     Xmm = UnitUtil.FtToMm(center.X), Ymm = UnitUtil.FtToMm(center.Y), Zmm = UnitUtil.FtToMm(center.Z),
                     CutWidthOverrideMm = UnitUtil.FtToMm(Math.Abs(delta.DotProduct(direction))),
                     CutHeightOverrideMm = UnitUtil.FtToMm(Math.Abs(delta.Z)) };
@@ -115,6 +133,8 @@ namespace Hatco.PrecastManholeManager.Services
             using (var sha = SHA256.Create()) hash = BitConverter.ToString(sha.ComputeHash(Encoding.UTF8.GetBytes(string.Join("\n", members)))).Replace("-", "");
             return new PenetrationRecord {
                 HostWallId = a.HostWallId, WallNumber = a.WallNumber, Shape = "Rectangular",
+                CornerStartAllowed = a.CornerStartAllowed || b.CornerStartAllowed,
+                CornerEndAllowed = a.CornerEndAllowed || b.CornerEndAllowed,
                 LinkInstanceId = a.LinkInstanceId, LinkName = "Combined sources", LinkedElementId = a.LinkedElementId,
                 LinkedUniqueId = hash, SourceKeyOverride = "GROUP|" + a.HostWallId + "|" + hash, MemberSourceKeys = members,
                 Category = "Combined Pipe/Duct", Notes = string.Join("; ", members), ClearanceMm = a.ClearanceMm,
