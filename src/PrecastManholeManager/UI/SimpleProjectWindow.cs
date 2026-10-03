@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview, CompleteSelected, CompletePicked
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview, CompleteSelected, CompletePicked, CheckDrawingsSelected, CheckDrawingsAll
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -144,14 +144,14 @@ namespace Hatco.PrecastManholeManager.UI
             var automate = Button("Full Automation - All", 210, automationRow);
             var automationMerge = new CheckBox { Content = "Merge overlapping openings", Margin = new Thickness(0, 8, 0, 0) };
             automationRow.Children.Add(automationMerge);
-            automate.ToolTip = "All manholes: sheets, create/update openings, recheck, dimensions and presentation. Saves current RVT. No automatic base repair, profile reset or moved-view refresh.";
+            automate.ToolTip = "All manholes: sheets, create/update openings, recheck, dimensions, presentation and drawing checks. Saves current RVT. No automatic base repair, profile reset or moved-view refresh.";
             automate.Click += (sender, args) => { AutomationMergeOpenings = automationMerge.IsChecked == true; Choose(ProjectAction.FullAutomation, false); };
             drawings.Children.Add(new TextBlock { Text = "Full Automation includes opening changes and checkpoints in the current RVT.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
             var completeScope = Choice(drawings, "Complete one:", "Selected row", "Pick one base in Revit");
             var complete = Button("Complete Manhole", 210, drawings);
             complete.ToolTip = "Prepare/reuse this manhole's sheet and views, create/update its openings, recheck, then update dimensions and presentation. Saves current RVT.";
             complete.Click += (sender, args) => { AutomationMergeOpenings = automationMerge.IsChecked == true; Choose(completeScope.SelectedIndex == 0 ? ProjectAction.CompleteSelected : ProjectAction.CompletePicked, completeScope.SelectedIndex == 0); };
-            var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All");
+            var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All", "Check drawings - Selected", "Check drawings - All");
             drawingTask.Width = 350;
             var drawingHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
             drawings.Children.Add(drawingHint);
@@ -161,11 +161,13 @@ namespace Hatco.PrecastManholeManager.UI
                 "Prepare/reuse the selected manhole's sheet and five views. No opening pass.",
                 "Rebuild tool dimensions for all prepared manholes. Manual dimensions are preserved.",
                 "Rebuild tool dimensions for the selected manhole. Manual dimensions are preserved.",
-                "Keep only each plan's own W1-W4 markers and set manhole viewports to NO BUBBLE NTS. Keep sheet positions." };
+                "Keep only each plan's own W1-W4 markers and set manhole viewports to NO BUBBLE NTS. Keep sheet positions.",
+                "Read-only: check exterior views, placement and existing dimensions for the selected manhole. Updates review only.",
+                "Read-only: check drawings for every manhole. May take time; stop is available between manholes." };
             drawingHint.Text = drawingHints[0];
             drawingTask.SelectionChanged += (sender, args) => drawingHint.Text = drawingHints[drawingTask.SelectedIndex];
             var runDrawings = Button("Run Drawing Task", 195, drawings);
-            runDrawings.Click += (sender, args) => Choose(new[] { ProjectAction.SheetsAndDimensions, ProjectAction.SheetsAll, ProjectAction.SheetOnly, ProjectAction.ExistingDimensions, ProjectAction.DimensionOne, ProjectAction.CleanViewPresentation }[drawingTask.SelectedIndex], drawingTask.SelectedIndex == 2 || drawingTask.SelectedIndex == 4);
+            runDrawings.Click += (sender, args) => Choose(new[] { ProjectAction.SheetsAndDimensions, ProjectAction.SheetsAll, ProjectAction.SheetOnly, ProjectAction.ExistingDimensions, ProjectAction.DimensionOne, ProjectAction.CleanViewPresentation, ProjectAction.CheckDrawingsSelected, ProjectAction.CheckDrawingsAll }[drawingTask.SelectedIndex], drawingTask.SelectedIndex == 2 || drawingTask.SelectedIndex == 4 || drawingTask.SelectedIndex == 6);
 
             var advanced = TaskPanel(tabs, "Setup & Advanced", "Numbering, exports and optional diagnostic tools. Use Drawings for normal sheet preparation.");
             var advancedButtons = new WrapPanel(); advanced.Children.Add(advancedButtons);

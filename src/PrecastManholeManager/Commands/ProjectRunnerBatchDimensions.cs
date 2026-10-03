@@ -20,7 +20,7 @@ namespace Hatco.PrecastManholeManager.Commands
             log.WriteHeader("BATCH STAGE 2 - DIMENSIONS - INCLUDING REVIEW MANHOLES");
             foreach (var item in items)
             {
-                progress.Update(processed, items.Count, (fullAutomation ? "Full automation 4/5 - dimensions: " : "Stage 2/2 - dimensions: ") + item.ManholeName +
+                progress.Update(processed, items.Count, (fullAutomation ? "Full automation 4/6 - dimensions: " : "Stage 2/2 - dimensions: ") + item.ManholeName +
                     "\nSaved through dimension item " + savedThrough);
                 if (progress.CancelRequested) break;
                 Element foundation = null;

@@ -23,7 +23,7 @@ namespace Hatco.PrecastManholeManager.Commands
             {
                 if (timingDiagnostic && diagnosticAttempts >= 3) break;
                 progress.Update(processed, items.Count,
-                    (fullAutomation ? "Full automation 1/5 - sheets and views: " : "Stage 1/2 - preparing sheets and views: ") + item.ManholeName);
+                    (fullAutomation ? "Full automation 1/6 - sheets and views: " : "Stage 1/2 - preparing sheets and views: ") + item.ManholeName);
                 if (progress.CancelRequested) break;
                 Element foundation = null;
                 BatchSheetSlot slot = null;

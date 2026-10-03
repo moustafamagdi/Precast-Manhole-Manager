@@ -4,7 +4,7 @@ using System.Linq;
 
 namespace Hatco.PrecastManholeManager.Services
 {
-    internal enum ReviewDomain { Legacy, Geometry, Openings, Views, Layout, Dimensions, Presentation }
+    internal enum ReviewDomain { Legacy, Geometry, Openings, Views, Layout, Dimensions, Presentation, DrawingValidation }
 
     // Domain results are evidence from an operation, not a live certification of the model.
     internal static class ReviewState

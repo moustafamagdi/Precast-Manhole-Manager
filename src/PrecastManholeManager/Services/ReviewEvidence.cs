@@ -13,13 +13,23 @@ namespace Hatco.PrecastManholeManager.Services
         internal static string ForDomain(Document doc, Element foundation, IEnumerable<int> walls, ReviewDomain domain)
         {
             var elements = walls.Select(id => doc.GetElement(new ElementId(id))).Where(x => x != null).Concat(new[] { foundation }).ToList();
-            if (domain == ReviewDomain.Dimensions || domain == ReviewDomain.Views || domain == ReviewDomain.Layout || domain == ReviewDomain.Presentation)
+            if (domain == ReviewDomain.Dimensions || domain == ReviewDomain.Views || domain == ReviewDomain.Layout || domain == ReviewDomain.Presentation || domain == ReviewDomain.DrawingValidation)
             {
                 string prefix = "MH_" + foundation.Id.IntegerValue + "_";
                 var views = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
                     .Where(v => !v.IsTemplate && v.Name.StartsWith(prefix, StringComparison.Ordinal)).ToList();
                 elements.AddRange(views);
                 elements.AddRange(views.Select(v => doc.GetElement(v.ViewTemplateId)).Where(x => x != null));
+                if (domain == ReviewDomain.DrawingValidation)
+                {
+                    var viewIds = new HashSet<ElementId>(views.Select(v => v.Id));
+                    elements.AddRange(new FilteredElementCollector(doc).OfClass(typeof(Dimension)).Cast<Dimension>().Where(d => viewIds.Contains(d.OwnerViewId)));
+                    var ports = new FilteredElementCollector(doc).OfClass(typeof(Viewport)).Cast<Viewport>().ToList();
+                    var sheets = new HashSet<ElementId>(ports.Where(p => viewIds.Contains(p.ViewId)).Select(p => p.SheetId));
+                    // Neighbor moves can change overlap without changing the target viewport.
+                    elements.AddRange(ports.Where(p => sheets.Contains(p.SheetId)));
+                    elements.AddRange(sheets.Select(id => doc.GetElement(id)).Where(e => e != null));
+                }
             }
             return string.Join("|", elements.OrderBy(x => x.UniqueId).Select(x => x.UniqueId + ":" + x.VersionGuid));
         }

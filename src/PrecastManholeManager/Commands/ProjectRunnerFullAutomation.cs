@@ -22,7 +22,7 @@ namespace Hatco.PrecastManholeManager.Commands
             DateTime lastSave = DateTime.Now;
             foreach (var item in items)
             {
-                progress.Update(attempted, items.Count, "Full automation 2/5 - create/update openings: " + item.ManholeName);
+                progress.Update(attempted, items.Count, "Full automation 2/6 - create/update openings: " + item.ManholeName);
                 if (progress.CancelRequested) break;
                 Element foundation = null;
                 string details, status;
@@ -52,7 +52,7 @@ namespace Hatco.PrecastManholeManager.Commands
             doc.Save(new SaveOptions());
             foreach (var item in items)
             {
-                progress.Update(checkedCount, items.Count, "Full automation 3/5 - verify openings and services: " + item.ManholeName);
+                progress.Update(checkedCount, items.Count, "Full automation 3/6 - verify openings and services: " + item.ManholeName);
                 if (progress.CancelRequested) break;
                 Element foundation = null;
                 try
@@ -78,7 +78,7 @@ namespace Hatco.PrecastManholeManager.Commands
             string presentation = "Presentation not started.";
             if (!progress.CancelRequested)
                 presentation = ManholeViewPresentationService.ApplyAll(doc, log, (done, total) => {
-                    progress.Update(done, total, "Full automation 5/5 - plan marks and viewport types");
+                    progress.Update(done, total, "Full automation 5/6 - plan marks and viewport types");
                     if (!progress.CancelRequested && (done > 0 && done % 10 == 0 || DateTime.Now - lastSave >= TimeSpan.FromMinutes(5)))
                     {
                         doc.Save(new SaveOptions()); lastSave = DateTime.Now;
@@ -87,8 +87,9 @@ namespace Hatco.PrecastManholeManager.Commands
                     return !progress.CancelRequested;
                 }, presentationScope);
             doc.Save(new SaveOptions());
+            string drawingChecks = progress.CancelRequested ? "Drawing checks not started." : RunDrawingAudit(doc, items, log, progress, fullAutomation: true);
             return "Opening attempts: " + attempted + "/" + items.Count + "; opening review/errors: " + openingReview +
-                "\nGeometry checks: " + checkedCount + "; check errors: " + checksFailed + "\n" + dimensions + "\n" + presentation;
+                "\nGeometry checks: " + checkedCount + "; check errors: " + checksFailed + "\n" + dimensions + "\n" + presentation + "\n" + drawingChecks;
         }
 
         private static void TryRegisterAutomationIssue(Document doc, Element foundation, string reason, DiagnosticLogger log)

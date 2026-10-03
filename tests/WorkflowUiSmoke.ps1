@@ -13,6 +13,12 @@ $tabs=$root.Children[0].Children | Where-Object { $_ -is [Windows.Controls.TabCo
 if($tabs.Items.Count -ne 4){throw 'Expected four workflow tabs'}
 $drawingButtons=@($tabs.Items[2].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.WrapPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
 if(!($drawingButtons | Where-Object {$_.Content -eq 'Full Automation - All'})){throw 'Full automation button is missing'}
+$drawingChoices=@($tabs.Items[2].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.StackPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.ComboBox]})
+$drawingTask=$drawingChoices | Where-Object {$_.Items.Contains('Check drawings - Selected')}
+if(!$drawingTask -or !$drawingTask.Items.Contains('Check drawings - All')){throw 'Read-only drawing checks are missing'}
+$drawingTask.SelectedIndex=6
+$drawingTask.SelectedIndex=7
+$drawingTask.SelectedIndex=0
 $reviewButtons=@($tabs.Items[0].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.WrapPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
 if(!($reviewButtons | Where-Object {$_.Content -eq 'Ignore / Restore Review'})){throw 'Review acknowledgment button is missing'}
 $openingPanel=$tabs.Items[1].Content.Content

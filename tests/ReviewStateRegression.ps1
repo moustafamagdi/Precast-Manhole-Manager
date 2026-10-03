@@ -33,6 +33,11 @@ Resolve 'Openings'
 Assert ($opening.Status -eq 'RESOLVED' -and $dim.Status -eq 'OPEN' -and $layout.Status -eq 'OPEN' -and $legacy.Status -eq 'OPEN' -and $other.Status -eq 'OPEN') 'Opening success preserves dimensions, layout, legacy and other manholes'
 Resolve 'Dimensions'
 Assert ($dim.Status -eq 'RESOLVED' -and $layout.Status -eq 'OPEN') 'Dimension success does not resolve layout'
+$drawing = Issue 'DrawingValidation'; $list.Add($drawing)
+Resolve 'Dimensions'
+Assert ($drawing.Status -eq 'OPEN') 'Dimension generation cannot resolve the independent drawing audit'
+Resolve 'DrawingValidation'
+Assert ($drawing.Status -eq 'RESOLVED' -and $layout.Status -eq 'OPEN' -and $legacy.Status -eq 'OPEN') 'Drawing audit success retains unrelated layout and legacy issues'
 Update $opening
 Accept $opening
 Update $opening

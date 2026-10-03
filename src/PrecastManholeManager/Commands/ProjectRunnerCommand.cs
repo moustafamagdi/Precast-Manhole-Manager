@@ -92,6 +92,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                 finally { progress.Finish(); }
                                 TaskDialog.Show("Manhole View Presentation", summary);
                             }
+                            else if (window.Action == ProjectAction.CheckDrawingsSelected || window.Action == ProjectAction.CheckDrawingsAll)
+                                CheckDrawings(input.Application, window.Action == ProjectAction.CheckDrawingsSelected ? window.SelectedManhole : null, log);
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
                             else if (window.Action == ProjectAction.CompleteSelected || window.Action == ProjectAction.CompletePicked)
