@@ -455,3 +455,11 @@ Assert-That (!$presentationScope.Invoke($null,[object[]]@('MH_1234_PROD_2D_PLAN'
 $oneScope.Clear()
 Assert-That (!$presentationScope.Invoke($null,[object[]]@('MH_123_PROD_2D_PLAN',$oneScope.PSObject.BaseObject))) 'Empty scope never expands to every manhole'
 Assert-That ($presentationScope.Invoke($null,[object[]]@('MH_123_PROD_2D_PLAN',$null))) 'Unscoped presentation keeps full-run behavior'
+
+$spanEdge=$assembly.GetType('Hatco.PrecastManholeManager.Services.DuctEdgeOpeningService').GetMethod('AdjustedCenterInSpan',[Reflection.BindingFlags]'NonPublic,Static')
+function Span-Center([double]$c,[double]$w,[double]$l,[double]$s,[double]$e){return [double]$spanEdge.Invoke($null,[object[]]@($c,$w,$l,$s,$e))}
+Assert-That ((Span-Center 400 800 1700 101 1599) -eq 501) 'Full 800 mm opening shifts beyond the adjacent 200 mm wall join without shrinking'
+Assert-That ((Span-Center 650 705 1000 101 899) -eq 546.5) 'Full 705 mm opening shifts inward from the opposite joined end'
+Assert-That ((Span-Center 500 705 1000 101 899) -eq 500) 'Opening already within usable wall remains at its original center'
+Assert-That ([double]::IsNaN((Span-Center 500 900 1000 101 899))) 'Opening wider than usable wall cannot be silently reduced'
+Assert-That ([double]::IsNaN((Span-Center -500 800 1700 101 1599))) 'A service with no wall overlap is not moved arbitrarily'

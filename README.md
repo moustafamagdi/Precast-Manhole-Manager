@@ -54,3 +54,5 @@ Pure regression checks do not replace Revit integration testing of geometry, dim
 - [Code structure and compatibility boundaries](docs/CODE_STRUCTURE.md)
 - [Runner behavior and implementation history](docs/SIMPLE_PROJECT_RUNNER.md)
 - [Legacy workflows and earlier milestones](docs/LEGACY_WORKFLOWS.md) — historical context, not the current production specification.
+
+Pipe/duct openings near wall ends retain their full projected size and clearance and shift along the wall into its usable span. Perpendicular native wall-end joins reserve the neighboring wall half-thickness (plus a 1 mm separation), avoiding cuts through the join. Source services are not moved. The review report records the signed site-adjustment distance along the host wall axis. Openings too large for the usable span stay in review rather than being clipped.

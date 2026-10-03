@@ -100,7 +100,7 @@ namespace Hatco.PrecastManholeManager.Services
 
             Status = flags.Count == 0 ? "ACTUAL FIT PREVIEW" : "REVIEW";
             Notes = string.Join(" | ", flags);
-            if (Source.EdgeAligned) Notes += " | DUCT SITE ADJUSTMENT: move along wall " + Source.EdgeShiftMm.ToString("0.#") + " mm; full opening starts at wall end";
+            if (Source.EdgeAligned) Notes += " | PIPE/DUCT SITE ADJUSTMENT: move along wall " + Source.EdgeShiftMm.ToString("0.#") + " mm; full opening starts at usable wall end; source element unchanged";
             if (Source.CornerStartAllowed || Source.CornerEndAllowed) Notes += " | VERIFIED SHARED CORNER - projected opening clipped to host wall end";
             if (IsVirtual && Detection == "INSIDE WALL")
                 Notes += " | Endpoint already enters wall thickness.";

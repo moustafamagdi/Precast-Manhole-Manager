@@ -34,6 +34,12 @@ namespace Hatco.PrecastManholeManager.Services
                 return false;
             }
 
+            if (!string.IsNullOrWhiteSpace(record.EdgeFitReview))
+            {
+                reason = record.EdgeFitReview;
+                return false;
+            }
+
             if (record.CutWidthMm <= 0 || record.CutHeightMm <= 0)
             {
                 reason = "Opening size is unresolved.";

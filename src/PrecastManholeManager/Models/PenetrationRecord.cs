@@ -152,6 +152,7 @@ namespace Hatco.PrecastManholeManager.Models
             ProjectedHeightMm > 0 ? ProjectedHeightMm + 2 * ClearanceMm :
             (Shape == "Round" ? OpeningDiameterMm : OpeningHeightMm);
         public bool EdgeAligned { get; set; }
+        public string EdgeFitReview { get; set; }
         public double EdgeShiftMm { get; set; }
         public bool CornerStartAllowed { get; set; }
         public bool CornerEndAllowed { get; set; }

@@ -135,7 +135,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                     committedGroups++;
                                     foreach (var shifted in component.Where(r => r.EdgeAligned && Math.Abs(r.EdgeShiftMm) > 0.1))
                                     {
-                                        string site = "W" + number + " Source=" + shifted.LinkedElementId + ": OPENING COMMITTED - duct site adjustment along wall " + shifted.EdgeShiftMm.ToString("0.#") + " mm required.";
+                                        string site = "W" + number + " Source=" + shifted.LinkedElementId + ": OPENING COMMITTED - pipe/duct site adjustment along wall " + shifted.EdgeShiftMm.ToString("0.#") + " mm required.";
                                         problems.Add(site); log.Warn(site);
                                     }
                                     safeWalls.Add(number);
