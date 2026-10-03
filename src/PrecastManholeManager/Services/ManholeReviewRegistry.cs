@@ -21,6 +21,10 @@ namespace Hatco.PrecastManholeManager.Services
         public int ViewId { get; set; }
         public string ViewName { get; set; }
         public string WallIds { get; set; }
+        public ReviewDomain Domain { get; set; } = ReviewDomain.Legacy;
+        public string Evidence { get; set; } = "";
+        public string AcceptedBy { get; set; } = "";
+        public string AcceptanceNote { get; set; } = "";
         public string Display =>
             "Foundation " + FoundationId + " | " + Severity + " | " + Reason;
     }
@@ -42,20 +46,15 @@ namespace Hatco.PrecastManholeManager.Services
             return normalize(previous) == normalize(current);
         }
 
-        public static void ToggleIgnored(Document doc, Element foundation, DiagnosticLogger log)
+        public static void Resolve(Document doc, Element foundation, ReviewDomain domain)
         {
             lock (Gate)
             {
                 string path = RegisterPath(doc);
                 var rows = LoadAt(path);
-                var row = rows.FirstOrDefault(x => x.FoundationUniqueId == foundation.UniqueId);
-                if (row == null || (row.Status != "OPEN" && row.Status != "IGNORED"))
-                    throw new InvalidOperationException("Select a manhole with an OPEN or IGNORED review first.");
-                row.Status = row.Status == "IGNORED" ? "OPEN" : "IGNORED";
-                row.UpdatedUtc = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture);
+                if (!rows.Any(x => x.FoundationUniqueId == foundation.UniqueId && x.Domain == domain && x.Status != "RESOLVED")) return;
+                ReviewState.Resolve(rows, foundation.UniqueId, domain);
                 SaveAt(path, rows);
-                ExportReadableCsv(doc, rows);
-                log.Info("USER REVIEW " + row.Status + " Foundation=" + row.FoundationId + " User=" + Environment.UserName + " Reason=" + row.Reason);
             }
         }
 
@@ -99,7 +98,8 @@ namespace Hatco.PrecastManholeManager.Services
 
         public static void Upsert(Document doc, Element foundation,
             string reason, IEnumerable<int> wallIds,
-            string severity, DiagnosticLogger log)
+            string severity, DiagnosticLogger log, ReviewDomain domain = ReviewDomain.Legacy,
+            bool replace = false, string evidence = "")
         {
             if (foundation == null) return;
             lock (Gate)
@@ -107,50 +107,23 @@ namespace Hatco.PrecastManholeManager.Services
                 string path = RegisterPath(doc);
                 List<ManholeReviewIssue> issues = LoadAt(path);
                 var row = issues.FirstOrDefault(x =>
-                    x.FoundationUniqueId == foundation.UniqueId);
+                    x.FoundationUniqueId == foundation.UniqueId && x.Domain == domain);
                 if (row == null)
                 {
                     row = new ManholeReviewIssue
                     {
                         FoundationUniqueId = foundation.UniqueId,
+                        Domain = domain,
                         Status = "OPEN"
                     };
                     issues.Add(row);
                 }
                 row.FoundationId = foundation.Id.IntegerValue;
                 string newReason = reason ?? "Review required";
-                if (row.Status == "IGNORED")
-                {
-                    if (SameReviewReason(row.Reason, newReason))
-                    {
-                        log?.Info("IGNORED review unchanged Foundation=" + row.FoundationId);
-                        return;
-                    }
-                    // Acknowledging an old warning must never suppress a different failure.
-                    row.Status = "OPEN";
-                    row.Reason = newReason;
-                }
-                // Preserve the earlier hard failure even when a later broad
-                // audit only sees "edited profile + in-place insert".
-                if (string.IsNullOrWhiteSpace(row.Reason))
-                    row.Reason = newReason;
-                else if (row.Reason.IndexOf(newReason,
-                    StringComparison.OrdinalIgnoreCase) < 0)
-                {
-                    string combined = row.Reason + " | " + newReason;
-                    row.Reason = combined.Length <= 1800
-                        ? combined : row.Reason;
-                }
-                if (row.Severity != "BLOCKED" ||
-                    string.Equals(severity, "BLOCKED",
-                        StringComparison.OrdinalIgnoreCase))
-                    row.Severity = severity ?? "REVIEW";
-                row.WallIds = string.Join(",",
-                    (wallIds ?? Enumerable.Empty<int>()).Distinct());
-                row.UpdatedUtc = DateTime.UtcNow.ToString("O",
-                    CultureInfo.InvariantCulture);
-                if (row.Status == "RESOLVED")
-                    row.Status = "OPEN";
+                var affected = (wallIds ?? Enumerable.Empty<int>()).Distinct().OrderBy(x => x).ToList();
+                if (string.IsNullOrEmpty(evidence)) evidence = ReviewEvidence.ForDomain(doc, foundation, affected, domain);
+                ReviewState.Update(row, newReason, severity ?? "REVIEW",
+                    string.Join(",", affected), evidence, replace);
                 SaveAt(path, issues);
                 log?.Warn("ISSUE REGISTERED Foundation=" +
                     row.FoundationId + " Reason=" + row.Reason +
@@ -163,8 +136,9 @@ namespace Hatco.PrecastManholeManager.Services
         {
             string path = Path.ChangeExtension(RegisterPath(doc), ".csv");
             var sb = new StringBuilder();
-            sb.AppendLine("FoundationId,Status,Severity,Reason,WallIds,ReviewViewId,ReviewViewName,UpdatedUtc,FoundationUniqueId");
-            foreach (ManholeReviewIssue issue in values.OrderBy(x =>
+            sb.AppendLine("FoundationId,Status,Severity,Reason,WallIds,ReviewViewId,ReviewViewName,UpdatedUtc,FoundationUniqueId,Domain,AcceptedBy,AcceptanceNote,Readiness");
+            var all = values.ToList();
+            foreach (ManholeReviewIssue issue in all.OrderBy(x =>
                 x.FoundationId))
                 sb.AppendLine(string.Join(",", new[]
                 {
@@ -173,7 +147,8 @@ namespace Hatco.PrecastManholeManager.Services
                     Csv(issue.Reason), Csv(issue.WallIds),
                     issue.ViewId.ToString(CultureInfo.InvariantCulture),
                     Csv(issue.ViewName), Csv(issue.UpdatedUtc),
-                    Csv(issue.FoundationUniqueId)
+                    Csv(issue.FoundationUniqueId), issue.Domain.ToString(), Csv(issue.AcceptedBy), Csv(issue.AcceptanceNote),
+                    Csv(ReviewState.Readiness(all.Where(x => x.FoundationUniqueId == issue.FoundationUniqueId)))
                 }));
             File.WriteAllText(path, sb.ToString(), new UTF8Encoding(true));
             return path;
@@ -184,6 +159,18 @@ namespace Hatco.PrecastManholeManager.Services
             string quote = ((char)34).ToString();
             return quote + (s ?? string.Empty).Replace(quote, quote + quote) +
                 quote;
+        }
+
+        public static string ExportReadiness(Document doc, string path, ISet<string> scope = null)
+        {
+            var items = SimpleProjectScanService.LoadFast(doc).Where(x => scope == null || scope.Contains(x.UniqueId)).ToList();
+            var report = new StringBuilder("FoundationId,Manhole,ReviewStatus,DeliveryReadiness,Issues\r\n");
+            foreach (var item in items)
+                report.AppendLine(item.FoundationId + "," + Csv(item.ManholeName) + "," + Csv(item.State) + "," + Csv(item.Readiness) + "," + Csv(item.Problem));
+            File.WriteAllText(path, report.ToString(), new UTF8Encoding(true));
+            ExportReadableCsv(doc, Load(doc));
+            return "Review snapshot: " + items.Count(x => x.State == "REVIEW") + " require review; " +
+                items.Count(x => x.State == "IGNORED") + " manually accepted. Delivery is not certified by phase completion.\nReadiness report: " + path;
         }
 
         public static void Save(Document doc,
@@ -205,23 +192,32 @@ namespace Hatco.PrecastManholeManager.Services
                 try
                 {
                     string[] p = line.Split('\t');
-                    if (p.Length != 10) continue;
+                    if (p.Length != 10 && p.Length != 14) throw new FormatException("Unexpected column count.");
+                    if ((p.Length == 10 && p[9] != "1") || (p.Length == 14 && p[9] != "2")) throw new FormatException("Unsupported review schema version.");
+                    if (p.Length == 14 && !Enum.IsDefined(typeof(ReviewDomain), p[10])) throw new FormatException("Unknown review domain.");
+                    string status = Dec(p[3]);
+                    if (status != "OPEN" && status != "IGNORED" && status != "RESOLVED") throw new FormatException("Unknown review status.");
                     rows.Add(new ManholeReviewIssue
                     {
                         FoundationUniqueId = Dec(p[0]),
                         FoundationId = int.Parse(p[1],
                             CultureInfo.InvariantCulture),
                         Severity = Dec(p[2]),
-                        Status = Dec(p[3]),
+                        Status = status,
                         Reason = Dec(p[4]),
                         WallIds = Dec(p[5]),
                         UpdatedUtc = Dec(p[6]),
                         ViewId = int.Parse(p[7],
                             CultureInfo.InvariantCulture),
-                        ViewName = Dec(p[8])
+                        ViewName = Dec(p[8]),
+                        // Old reasons can mix domains. Never guess and silently clear them.
+                        Domain = p.Length == 14 ? (ReviewDomain)Enum.Parse(typeof(ReviewDomain), p[10]) : ReviewDomain.Legacy,
+                        Evidence = p.Length == 14 ? Dec(p[11]) : "",
+                        AcceptedBy = p.Length == 14 ? Dec(p[12]) : "",
+                        AcceptanceNote = p.Length == 14 ? Dec(p[13]) : ""
                     });
                 }
-                catch { /* Preserve good records despite malformed lines. */ }
+                catch (Exception ex) { throw new InvalidDataException("Review register contains an unreadable row; original file retained: " + path, ex); }
             }
             return rows;
         }
@@ -229,7 +225,7 @@ namespace Hatco.PrecastManholeManager.Services
         private static void SaveAt(string path, List<ManholeReviewIssue> rows)
         {
             var sb = new StringBuilder();
-            sb.AppendLine("UniqueId\tId\tSeverity\tStatus\tReason\tWalls\tUpdatedUtc\tViewId\tViewName\tVersion");
+            sb.AppendLine("UniqueId\tId\tSeverity\tStatus\tReason\tWalls\tUpdatedUtc\tViewId\tViewName\tVersion\tDomain\tEvidence\tAcceptedBy\tAcceptanceNote");
             foreach (ManholeReviewIssue row in rows.OrderBy(x =>
                 x.FoundationId))
             {
@@ -240,10 +236,17 @@ namespace Hatco.PrecastManholeManager.Services
                     Enc(row.Severity), Enc(row.Status), Enc(row.Reason),
                     Enc(row.WallIds), Enc(row.UpdatedUtc),
                     row.ViewId.ToString(CultureInfo.InvariantCulture),
-                    Enc(row.ViewName), "1"
+                    Enc(row.ViewName), "2", row.Domain.ToString(), Enc(row.Evidence), Enc(row.AcceptedBy), Enc(row.AcceptanceNote)
                 }));
             }
             string temp = path + ".tmp";
+            if (File.Exists(path))
+            {
+                // Validate before replacement; a malformed source is never silently discarded.
+                LoadAt(path);
+                if (File.ReadLines(path).FirstOrDefault()?.Split('\t').Length == 10 && !File.Exists(path + ".v1.bak"))
+                    File.Copy(path, path + ".v1.bak");
+            }
             File.WriteAllText(temp, sb.ToString(), new UTF8Encoding(true));
             if (File.Exists(path))
                 File.Replace(temp, path, null);

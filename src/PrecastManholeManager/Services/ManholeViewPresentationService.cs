@@ -67,7 +67,11 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                     completed++;
                 }
-                catch (Exception ex) { failed++; log.Error("PLAN MARKS REVIEW " + plan.Name, ex); }
+                catch (Exception ex)
+                {
+                    failed++; log.Error("PLAN MARKS REVIEW " + plan.Name, ex);
+                    RegisterPresentationIssue(doc, plan.Name, "Plan marks: " + ex.Message, log);
+                }
             }
             var allPorts = new FilteredElementCollector(doc).OfClass(typeof(Viewport)).Cast<Viewport>()
                 .Where(p => ViewName.IsMatch(doc.GetElement(p.ViewId)?.Name ?? "") && InScope(doc.GetElement(p.ViewId)?.Name, scope)).ToList();
@@ -76,6 +80,8 @@ namespace Hatco.PrecastManholeManager.Services
             catch (InvalidOperationException)
             {
                 log.Warn("VIEWPORT TYPE REVIEW: Missing NO BUBBLE NTS.");
+                foreach (var port in allPorts) RegisterPresentationIssue(doc, doc.GetElement(port.ViewId)?.Name,
+                    "Missing viewport type NO BUBBLE NTS.", log);
                 return "Plans processed: " + completed + "; failed: " + failed + ". Load viewport type NO BUBBLE NTS and run again.";
             }
             var ports = allPorts.Where(p => p.GetTypeId() != type.Id).ToList();
@@ -92,11 +98,30 @@ namespace Hatco.PrecastManholeManager.Services
                     }
                     changed += group.Count();
                 }
-                catch (Exception ex) { failed++; log.Error("VIEWPORT TYPE REVIEW Sheet=" + group.Key, ex); }
+                catch (Exception ex)
+                {
+                    failed++; log.Error("VIEWPORT TYPE REVIEW Sheet=" + group.Key, ex);
+                    foreach (var port in group) RegisterPresentationIssue(doc, doc.GetElement(port.ViewId)?.Name,
+                        "Viewport type: " + ex.Message, log);
+                }
             }
             string result = "Plans processed: " + completed + "; viewports changed to NO BUBBLE NTS: " + changed + "; failures: " + failed + ".";
             log.Info(result);
             return result;
+        }
+
+        private static void RegisterPresentationIssue(Document doc, string viewName, string reason, DiagnosticLogger log)
+        {
+            try
+            {
+                int id;
+                var parts = (viewName ?? "").Split('_');
+                if (parts.Length < 2 || !int.TryParse(parts[1], out id)) return;
+                var foundation = doc.GetElement(new ElementId(id));
+                if (foundation != null) ManholeReviewRegistry.Upsert(doc, foundation, reason, null,
+                    "PRESENTATION REVIEW", log, ReviewDomain.Presentation);
+            }
+            catch (Exception ex) { log.Error("Presentation issue retained in log; register unavailable", ex); }
         }
     }
 }

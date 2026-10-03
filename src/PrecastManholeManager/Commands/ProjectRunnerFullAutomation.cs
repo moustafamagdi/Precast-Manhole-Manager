@@ -59,8 +59,8 @@ namespace Hatco.PrecastManholeManager.Commands
                 {
                     foundation = Resolve(doc, item);
                     string details = ManholeRecheckService.Run(doc, foundation, clearance, log);
-                    var issue = ManholeReviewRegistry.Load(doc).FirstOrDefault(x => x.FoundationUniqueId == item.UniqueId);
-                    WriteBatchRow(writer, item, null, "FINAL CHECK " + (issue?.Status ?? "PASSED"), details);
+                    var state = ReviewState.Status(ManholeReviewRegistry.Load(doc).Where(x => x.FoundationUniqueId == item.UniqueId));
+                    WriteBatchRow(writer, item, null, "FINAL CHECK " + state, details);
                 }
                 catch (Exception ex)
                 {
@@ -93,7 +93,7 @@ namespace Hatco.PrecastManholeManager.Commands
 
         private static void TryRegisterAutomationIssue(Document doc, Element foundation, string reason, DiagnosticLogger log)
         {
-            try { if (foundation != null) ManholeReviewRegistry.Upsert(doc, foundation, reason, null, "AUTOMATION REVIEW", log); }
+            try { if (foundation != null) ManholeReviewRegistry.Upsert(doc, foundation, reason, null, "AUTOMATION REVIEW", log, ReviewDomain.Openings); }
             catch (Exception ex) { log.Error("Review register unavailable; issue retained in run report", ex); }
         }
     }

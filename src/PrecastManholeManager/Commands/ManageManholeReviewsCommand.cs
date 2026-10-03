@@ -80,7 +80,7 @@ namespace Hatco.PrecastManholeManager.Commands
 
                     int created = 0, skipped = 0;
                     View3D firstView = null;
-                    foreach (ManholeReviewIssue issue in window.SelectedIssues)
+                    foreach (ManholeReviewIssue issue in window.SelectedIssues.GroupBy(x => x.FoundationUniqueId).Select(x => x.First()))
                     {
                         Element foundation = doc.GetElement(
                             new ElementId(issue.FoundationId));
@@ -231,7 +231,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             string.Join("; ", reasons.Distinct()),
                             wallIds, footprint.Accepted
                                 ? "REQUIRES CLEANUP" : "GEOMETRY",
-                            log);
+                            log, footprint.Accepted ? ReviewDomain.Openings : ReviewDomain.Geometry);
                     }
                     else
                         clean++;
@@ -241,7 +241,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     flagged++;
                     ManholeReviewRegistry.Upsert(doc, foundation,
                         "SCAN ERROR: " + ex.Message, null,
-                        "ERROR", log);
+                        "ERROR", log, ReviewDomain.Geometry);
                 }
             }
             log.Info("REVIEW AUDIT SUMMARY Flagged=" + flagged +

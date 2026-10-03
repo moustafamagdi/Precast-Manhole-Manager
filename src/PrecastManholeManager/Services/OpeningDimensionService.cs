@@ -116,7 +116,7 @@ namespace Hatco.PrecastManholeManager.Services
             bool bodyComplete = true;
             string bodyStatus = onlyWalls != null && onlyWalls.Count < 4 ? "Body dimensions retained; some walls still need review." :
                 GenerateBody(doc, foundation, footprint, sections, type, log, out bodyComplete);
-            completed?.Invoke(failed == 0 && bodyComplete);
+            completed?.Invoke(failed == 0 && bodyComplete && (onlyWalls == null || onlyWalls.Count == 4));
             return "Dimensions: " + created + " strings created; " + failed + " wall(s) need review." +
                 (diagnostics.Count == 0 ? "" : "\n" + string.Join("\n", diagnostics)) +
                 "\n" + bodyStatus;

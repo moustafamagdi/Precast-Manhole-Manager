@@ -13,6 +13,7 @@ namespace Hatco.PrecastManholeManager.Commands
         private static void PrepareSelectedSheet(UIDocument uidoc, SimpleManholeItem item, DiagnosticLogger log)
         {
             var doc = uidoc.Document;
+            WorkflowPreflightService.Require(doc, log, true, false, false, 0);
             var foundation = Resolve(doc, item);
             if (string.IsNullOrWhiteSpace(ManholeIdentityStore.Read(foundation)))
                 throw new InvalidOperationException("Assign Internal MH IDs in Setup & Advanced first, then prepare this sheet.");
@@ -22,6 +23,7 @@ namespace Hatco.PrecastManholeManager.Commands
             bool ready = slot != null && BatchSheetLayoutService.HasPreparedViews(doc, foundation, slot);
             if (!ready)
             {
+                var layoutWarnings = new List<string>();
                 var titleblock = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_TitleBlocks)
                     .OfClass(typeof(FamilySymbol)).Cast<FamilySymbol>()
                     .OrderByDescending(t => t.Name.IndexOf("A0", StringComparison.OrdinalIgnoreCase) >= 0 ? 2 :
@@ -35,11 +37,15 @@ namespace Hatco.PrecastManholeManager.Commands
                         new HashSet<string> { foundation.UniqueId });
                     slot = BatchSheetLayoutService.Find(doc, foundation);
                     var views = DraftManholeSheetService.Generate(doc, foundation, footprint, log, forProduction: true);
-                    BatchSheetLayoutService.Place(doc, foundation, slot, views.Views, new List<UnifiedOpeningReviewRow>(), log);
+                    layoutWarnings = BatchSheetLayoutService.Place(doc, foundation, slot, views.Views, new List<UnifiedOpeningReviewRow>(), log);
                     BatchSheetLayoutService.SetStatus(doc, foundation, slot, "DOCUMENTATION ONLY - opening status not checked.");
                     if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Could not commit the selected sheet.");
                 }
+                if (layoutWarnings.Count > 0) ManholeReviewRegistry.Upsert(doc, foundation,
+                    string.Join("; ", layoutWarnings), null, "LAYOUT REVIEW", log, ReviewDomain.Layout);
+                else ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Layout);
             }
+            ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Views);
             uidoc.RequestViewChange(slot.Sheet);
             TaskDialog.Show("Prepare Sheet", (ready ? "Existing views and row reused." : "PLAN and W1-W4 prepared in the reserved six-row sheet.") +
                 "\nNo opening detection or cutting was required.\nSheet: " + slot.Sheet.SheetNumber +

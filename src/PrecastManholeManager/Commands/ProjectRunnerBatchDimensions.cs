@@ -57,9 +57,9 @@ namespace Hatco.PrecastManholeManager.Commands
                 log.Info("PERF BATCH_DIMENSIONS Foundation=" + item.FoundationId + " Status=" + status +
                     " Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
                 // Reporting failure cannot undo dimension commits or stop later manholes.
-                if (status != "DIMENSIONS COMPLETE" && foundation != null)
+                if (foundation != null)
                 {
-                    try { ManholeReviewRegistry.Upsert(doc, foundation, details, null, "DIMENSION REVIEW", log); }
+                    try { if (status == "DIMENSIONS COMPLETE") ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Dimensions); else ManholeReviewRegistry.Upsert(doc, foundation, details, null, "DIMENSION REVIEW", log, ReviewDomain.Dimensions, replace: true); }
                     catch (Exception ex) { log.Error("Dimension review registry update failed; see run report", ex); }
                 }
                 // Keep opening REVIEW states: successful dimensions do not certify openings.

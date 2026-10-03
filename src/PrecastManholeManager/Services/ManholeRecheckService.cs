@@ -48,8 +48,8 @@ namespace Hatco.PrecastManholeManager.Services
                     log.Info("CLEAN SCAN " + (passed + review + errors + ignored + 1) + "/" + items.Count +
                         " Foundation=" + item.FoundationId);
                     details = Run(doc, foundation, clearanceMm, log);
-                    var current = ManholeReviewRegistry.Load(doc).FirstOrDefault(x => x.FoundationUniqueId == foundation.UniqueId);
-                    status = current?.Status == "IGNORED" ? "IGNORED" : current?.Status == "OPEN" ? "REVIEW" : "RECHECK PASSED";
+                    var current = ReviewState.Status(ManholeReviewRegistry.Load(doc).Where(x => x.FoundationUniqueId == foundation.UniqueId));
+                    status = current == "IGNORED" ? "IGNORED" : current == "OPEN" ? "REVIEW" : "RECHECK PASSED";
                     if (status == "IGNORED") ignored++; else if (status == "REVIEW") review++; else passed++;
                 }
                 catch (Exception ex)
@@ -60,7 +60,7 @@ namespace Hatco.PrecastManholeManager.Services
                     log.Error("CLEAN SCAN FAILED Foundation=" + item.FoundationId, ex);
                     if (foundation != null && foundation.UniqueId == item.UniqueId)
                         ManholeReviewRegistry.Upsert(doc, foundation, "Clean scan error: " + ex.Message,
-                            null, "ERROR", log);
+                            null, "ERROR", log, ReviewDomain.Openings);
                 }
                 report.AppendLine(item.FoundationId + "," + Csv(item.ManholeName) + "," + status + "," + Csv(details));
             }
@@ -70,7 +70,7 @@ namespace Hatco.PrecastManholeManager.Services
             return (reviewOnly ? "Review recheck completed for " : "Clean scan completed for ") + items.Count + " manholes.\nPassed: " + passed +
                 "\nIgnored by user: " + ignored + "\nStill require review: " + review + "\nScan errors: " + errors +
                 (unavailable > 0 ? "\nReview records not found among current manholes: " + unavailable + " (kept OPEN)." : "") +
-                "\nRepaired issues have been resolved. No openings, walls or views were changed." +
+                "\nOnly verified geometry/opening issues were resolved. Other domains and legacy issues are retained. No model elements were changed." +
                 "\nProduction prerequisites still apply to passed manholes.\nReport: " + path;
         }
 
@@ -84,11 +84,13 @@ namespace Hatco.PrecastManholeManager.Services
             var reasons = new List<string>();
             string csv = "";
             int actualCount = 0;
+            string evidence = "";
             if (!footprint.Accepted) reasons.Add("Wall footprint: " + footprint.Reason);
             else
             {
                 var review = UnifiedOpeningReviewService.Collect(doc, foundation, footprint, log, clearanceMm, 150, VirtualMepExtensionScanner.ProductionMaxApproachDeg);
                 csv = UnifiedOpeningReviewService.ExportCsv(review);
+                evidence = ReviewEvidence.Capture(doc, foundation, footprint.Walls, clearanceMm, review.Rows);
                 var plan = CleanSyncPlanService.Build(doc, foundation.Id.IntegerValue, footprint, review, log);
                 reasons.AddRange(ProductionPreflightService.PhysicalBlockers(plan));
                 var actual = review.Rows.Where(r => !r.IsVirtual || r.EndpointQualified).ToList();
@@ -144,38 +146,26 @@ namespace Hatco.PrecastManholeManager.Services
                 }
             }
             reasons = reasons.Distinct().ToList();
-            if (reasons.Count > 0)
+            if (!footprint.Accepted)
+                ManholeReviewRegistry.Upsert(doc, foundation, string.Join("; ", reasons), null, "GEOMETRY REVIEW", log,
+                    ReviewDomain.Geometry, replace: true);
+            else
             {
-                ManholeReviewRegistry.Upsert(doc, foundation, string.Join("; ", reasons),
-                    footprint.Accepted ? footprint.Walls.Select(w => w.Id.IntegerValue) : null, "RECHECK", log);
-                var currentIssues = ManholeReviewRegistry.Load(doc);
-                foreach (var current in currentIssues.Where(x => x.FoundationUniqueId == foundation.UniqueId))
-                {
-                    log.Info("RECHECK PREVIOUS REASONS: " + current.Reason);
-                    current.Reason = string.Join("; ", reasons);
-                }
-                ManholeReviewRegistry.Save(doc, currentIssues);
-                ManholeReviewRegistry.ExportReadableCsv(doc, currentIssues);
-                bool ignored = currentIssues.Any(x => x.FoundationUniqueId == foundation.UniqueId && x.Status == "IGNORED");
-                return (ignored ? "IGNORED by user (same reasons):\n" : "Still requires REVIEW:\n") + string.Join("\n", reasons) +
-                    "\n\nIf the wall still has an edited sketch, use Reset Profile before rechecking." +
-                    "\nReview CSV: " + csv;
+                ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Geometry);
+                if (reasons.Count > 0)
+                    ManholeReviewRegistry.Upsert(doc, foundation, string.Join("; ", reasons),
+                        footprint.Walls.Select(w => w.Id.IntegerValue), "OPENINGS REVIEW", log,
+                        ReviewDomain.Openings, replace: true, evidence: evidence);
+                else ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Openings);
             }
             var issues = ManholeReviewRegistry.Load(doc);
-            foreach (var issue in issues.Where(x => x.FoundationUniqueId == foundation.UniqueId))
-            {
-                log.Info("RECHECK RESOLVED Foundation=" + foundation.Id.IntegerValue + " PreviousReason=" + issue.Reason);
-                issue.Status = "RESOLVED";
-                issue.Severity = "RECHECK PASSED";
-                issue.UpdatedUtc = DateTime.UtcNow.ToString("O");
-            }
-            ManholeReviewRegistry.Save(doc, issues);
             ManholeReviewRegistry.ExportReadableCsv(doc, issues);
-            return "Recheck passed. This manhole is no longer in the OPEN review queue.\n" +
-                "Actual crossings: " + actualCount + " | Clearance per side: " + clearanceMm + " mm." +
-                "\nYou can now run Generate Selected Manhole; its final production checks still apply." +
+            var own = issues.Where(x => x.FoundationUniqueId == foundation.UniqueId).ToList();
+            return (reasons.Count == 0 ? "Geometry/opening check passed." : "Geometry/opening check found issues:\n" + string.Join("\n", reasons)) +
+                "\nOther review domains and legacy issues are retained. This check does not certify drawings or delivery." +
+                "\nOverall: " + ReviewState.Readiness(own) + "\n" + ReviewState.Describe(own) +
+                "\nActual crossings: " + actualCount + " | Clearance per side: " + clearanceMm + " mm." +
                 "\nNo model geometry was changed.\nReview CSV: " + csv;
         }
-
     }
 }

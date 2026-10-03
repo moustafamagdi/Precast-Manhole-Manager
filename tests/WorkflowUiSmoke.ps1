@@ -36,3 +36,27 @@ for($i=0;$i -lt 4;$i++) {
  $stream=[IO.File]::Create((Join-Path $OutputDirectory "tab-$i.png")); $encoder.Save($stream); $stream.Dispose()
 }
 'PASS: Four workflow tabs, picking default, missing-only mode and profile-reset guard; all tabs rendered.'
+
+$registry=$a.GetType('Hatco.PrecastManholeManager.Services.ManholeReviewRegistry')
+$issueType=$a.GetType('Hatco.PrecastManholeManager.Services.ManholeReviewIssue')
+$values=[Activator]::CreateInstance($registry.GetMethod('SaveAt',[Reflection.BindingFlags]'NonPublic,Static').GetParameters()[1].ParameterType)
+$domainType=$a.GetType('Hatco.PrecastManholeManager.Services.ReviewDomain')
+foreach($domain in @('Openings','Dimensions','Legacy')) {
+ $issue=[Activator]::CreateInstance($issueType,$true)
+ $issue.FoundationId=123; $issue.FoundationUniqueId='sample'; $issue.Status='OPEN'
+ $issue.Domain=[Enum]::Parse($domainType,$domain); $issue.Reason='Example issue for independent review'
+ $values.Add($issue)
+}
+$reviewType=$a.GetType('Hatco.PrecastManholeManager.UI.ManholeReviewManagerWindow')
+$review=$reviewType.GetConstructors()[0].Invoke([object[]]@($values.PSObject.BaseObject,'Test register (not a real project)',$true))
+$reviewGrid=$review.Content.Children | Where-Object {$_ -is [Windows.Controls.DataGrid]}
+if(!($reviewGrid.Columns | Where-Object {$_.Header -eq 'Domain'})){throw 'Review domains must be visible'}
+$footerButtons=@($review.Content.Children | Where-Object {$_ -is [Windows.Controls.StackPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
+if($footerButtons | Where-Object {$_.Content -eq 'Mark Selected Resolved'}){throw 'Acceptance must not pretend to resolve an issue'}
+if(!($footerButtons | Where-Object {$_.Content -eq 'Accept Selected (Ignore)'})){throw 'Explicit acceptance action is missing'}
+$review.Content.Measure([Windows.Size]::new(1160,610)); $review.Content.Arrange([Windows.Rect]::new(0,0,1160,610)); $review.Content.UpdateLayout()
+$bmp=[Windows.Media.Imaging.RenderTargetBitmap]::new(1160,610,96,96,[Windows.Media.PixelFormats]::Pbgra32)
+$bmp.Render($review.Content)
+$encoder=[Windows.Media.Imaging.PngBitmapEncoder]::new(); $encoder.Frames.Add([Windows.Media.Imaging.BitmapFrame]::Create($bmp))
+$stream=[IO.File]::Create((Join-Path $OutputDirectory 'review-domains.png')); $encoder.Save($stream); $stream.Dispose()
+'PASS: Domain-specific review window renders with acceptance instead of manual resolution.'

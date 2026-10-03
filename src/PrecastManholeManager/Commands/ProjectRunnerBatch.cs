@@ -27,6 +27,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 throw new InvalidOperationException("Save the current model to its intended RVT path before running. The tool saves in place and does not create another RVT.");
             if (double.IsNaN(clearance) || double.IsInfinity(clearance) || clearance < 0)
                 throw new InvalidOperationException("Invalid clearance.");
+            WorkflowPreflightService.Require(doc, log, drawings: true, dimensions: !sheetsOnly || dimensionsAfterSheets || fullAutomation, openings: !sheetsOnly || fullAutomation, clearance: clearance);
             var templates = new FilteredElementCollector(doc).OfClass(typeof(View)).Cast<View>()
                 .Where(v=>v.IsTemplate).Select(v=>v.Name).ToList();
             foreach (string name in (sheetsOnly ? new[] { "MH_PLAN", "MH_SEC" } : new[] { "MH_PLAN", "MH_SEC", "MH_3D" }))
@@ -176,15 +177,15 @@ namespace Hatco.PrecastManholeManager.Commands
                             catch (Exception ex)
                             {
                                 status += " / 3D REVIEW"; details += "\n3D: " + ex.Message;
+                                ManholeReviewRegistry.Upsert(doc, foundation, ex.Message, null, "3D REVIEW", log, ReviewDomain.Presentation);
                                 log.Error("Production 3D failed; opening commits retained", ex);
                             }
                             committed++;
                             if (!result.DimensionsComplete) dimensionReview++;
-                            var issues = ManholeReviewRegistry.Load(doc);
-                            foreach (var issue in issues.Where(x=>x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN" && !result.OpeningsNeedReview))
-                            { issue.Status = "RESOLVED"; issue.Severity = "BATCH PRODUCTION PASSED"; }
-                            ManholeReviewRegistry.Save(doc,issues);
-                            if (status != "COMPLETE") ManholeReviewRegistry.Upsert(doc, foundation, details, null, result.OpeningsNeedReview ? "OPENINGS REVIEW" : "BATCH REVIEW", log);
+                            if (result.OpeningsNeedReview) ManholeReviewRegistry.Upsert(doc, foundation, details, null, "OPENINGS REVIEW", log, ReviewDomain.Openings);
+                            if (!result.DimensionsComplete) ManholeReviewRegistry.Upsert(doc, foundation, details, null, "DIMENSION REVIEW", log, ReviewDomain.Dimensions);
+                            else ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Dimensions);
+                            if (result.LayoutNeedsReview) ManholeReviewRegistry.Upsert(doc, foundation, details, null, "LAYOUT REVIEW", log, ReviewDomain.Layout);
                             if (status != "COMPLETE")
                             {
                                 using (var tx = new Transaction(doc,"HATCO - Mark Dimension Review"))
@@ -200,7 +201,7 @@ namespace Hatco.PrecastManholeManager.Commands
                             status = modelCommitted ? "COMMITTED - REPORT REVIEW" : "REVIEW";
                             details = ex.Message; review++;
                             log.Error("BATCH MANHOLE FAILED " + item.ManholeName,ex);
-                            ManholeReviewRegistry.Upsert(doc,foundation,details,null,"BATCH REVIEW",log);
+                            ManholeReviewRegistry.Upsert(doc,foundation,details,null,"BATCH REVIEW",log, modelCommitted ? ReviewDomain.Layout : ReviewDomain.Openings);
                             using (var tx = new Transaction(doc,"HATCO - Mark Reserved Review Row"))
                             {
                                 tx.Start(); TransactionFailureHandling.Configure(tx,log);
@@ -227,13 +228,16 @@ namespace Hatco.PrecastManholeManager.Commands
                     progress.Finish();
                 }
             }
+            string readiness;
+            try { readiness = ManholeReviewRegistry.ExportReadiness(doc, Path.Combine(folder, "Readiness.csv"), targetIds); }
+            catch (Exception ex) { readiness = "Readiness report unavailable: " + ex.Message; runFailed = true; log.Error(readiness, ex); }
             string summary = (stopped.Length == 0 ? "Run completed." : stopped) +
                 "\nManholes with prepared views: " + documented.Count + " / " + targetCount +
                 (fullAutomation ? "\n" + automationSummary : sheetsOnly ? "\nOpening stage: not requested." : "\nProcessed openings: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
                 "\nReview: " + review + "\nSaved through item: " + savedThrough +
                 "\nCommitted with dimension review: " + dimensionReview) +
                 (dimensionsAfterSheets ? "\n" + dimensionSummary : "") +
-                "\nRVT: " + output + "\nReport: " + report + "\nLog: " + log.LogPath;
+                "\n" + readiness + "\nRVT: " + output + "\nReport: " + report + "\nLog: " + log.LogPath;
             File.WriteAllText(summaryPath,summary);
             log.Info("BATCH RUN RESULTS: " + summary);
             if (runFailed) TaskDialog.Show("Run needs attention", summary);

@@ -58,7 +58,18 @@ namespace Hatco.PrecastManholeManager.Commands
                                     ".\nNo openings were changed.");
                             }
                             else if (window.Action == ProjectAction.ToggleIgnoreReview)
-                                ManholeReviewRegistry.ToggleIgnored(doc, Resolve(doc, window.SelectedManhole), log);
+                            {
+                                var foundation = Resolve(doc, window.SelectedManhole);
+                                var issues = ManholeReviewRegistry.Load(doc);
+                                var own = issues.Where(x => x.FoundationUniqueId == foundation.UniqueId).ToList();
+                                var reviews = new ManholeReviewManagerWindow(own, ManholeReviewRegistry.RegisterPath(doc), statusOnly: true);
+                                if (reviews.ShowDialog() == true && reviews.StatusModified)
+                                {
+                                    ManholeReviewRegistry.Save(doc, issues);
+                                    ManholeReviewRegistry.ExportReadableCsv(doc, issues);
+                                    log.Info("USER REVIEW Foundation=" + foundation.Id + " " + ReviewState.Describe(own));
+                                }
+                            }
                             else if (window.Action == ProjectAction.RecheckReviewOnly)
                                 TaskDialog.Show("Recheck Review Only", ManholeRecheckService.RunAll(doc, window.ClearanceMm, log, true));
                             else if (window.Action == ProjectAction.CleanScan)
@@ -155,9 +166,11 @@ namespace Hatco.PrecastManholeManager.Commands
                             else if (window.Action == ProjectAction.DimensionOne)
                             {
                                 var foundation = Resolve(doc, window.SelectedManhole);
+                                WorkflowPreflightService.Require(doc, log, false, true, false, window.ClearanceMm);
                                 bool complete = false;
                                 string result = OpeningDimensionService.Generate(doc, foundation, log, ok => complete = ok);
-                                if (!complete) ManholeReviewRegistry.Upsert(doc, foundation, result, null, "DIMENSION REVIEW", log);
+                                if (!complete) ManholeReviewRegistry.Upsert(doc, foundation, result, null, "DIMENSION REVIEW", log, ReviewDomain.Dimensions, replace: true);
+                                else ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Dimensions);
                                 TaskDialog.Show("Opening Dimensions", result);
                             }
                             else if (window.Action == ProjectAction.SixRowLayoutSheet)
@@ -286,7 +299,7 @@ namespace Hatco.PrecastManholeManager.Commands
             {
                 ManholeReviewRegistry.Upsert(doc, foundation,
                     "Cannot identify four-wall footprint: " +
-                    footprint.Reason, null, "GEOMETRY", log);
+                    footprint.Reason, null, "GEOMETRY", log, ReviewDomain.Geometry);
                 TaskDialog.Show("Review Manhole",
                     "Footprint needs review for foundation " +
                     row.FoundationId + ".\n" + footprint.Reason +
@@ -308,7 +321,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     " row(s) require review. " +
                     "See unified review CSV; no cuts were created.",
                     footprint.Walls.Select(w => w.Id.IntegerValue),
-                    "OPENINGS REVIEW", log);
+                    "OPENINGS REVIEW", log, ReviewDomain.Openings);
 
             TaskDialog.Show("Review Manhole " + row.FoundationId,
                 "Actual penetrations: " + review.ActualCount +
@@ -387,7 +400,7 @@ namespace Hatco.PrecastManholeManager.Commands
             {
                 ManholeReviewRegistry.Upsert(doc, foundation,
                     "Draft cannot validate footprint: " + footprint.Reason,
-                    null, "GEOMETRY", log);
+                    null, "GEOMETRY", log, ReviewDomain.Geometry);
                 throw new InvalidOperationException(
                     "Four-wall footprint needs review: " + footprint.Reason);
             }

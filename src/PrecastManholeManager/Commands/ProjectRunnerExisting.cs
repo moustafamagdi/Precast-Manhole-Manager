@@ -24,6 +24,7 @@ namespace Hatco.PrecastManholeManager.Commands
             if (doc.IsReadOnly || doc.IsLinked || doc.IsModifiable || doc.IsModelInCloud ||
                 doc.IsDetached || string.IsNullOrWhiteSpace(doc.PathName))
                 throw new InvalidOperationException("Open an editable, saved local RVT. This operation saves the current file in place.");
+            WorkflowPreflightService.Require(doc, log, drawings: false, dimensions: dimensionsOnly, openings: !dimensionsOnly, clearance: clearance);
             var source = scopedItems ?? (selected == null ? SimpleProjectScanService.LoadFast(doc) :
                 new System.Collections.Generic.List<SimpleManholeItem> { selected });
             var eligible = new System.Collections.Generic.List<SimpleManholeItem>();
@@ -111,7 +112,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                     var foundation = Resolve(doc, item);
                                     details += "\n" + ManholeRecheckService.Run(doc, foundation, clearance, log);
                                     openingsReview = result.OpeningsNeedReview || ManholeReviewRegistry.Load(doc).Any(x =>
-                                        x.FoundationUniqueId == foundation.UniqueId && x.Status == "OPEN");
+                                        x.FoundationUniqueId == foundation.UniqueId && (x.Domain == ReviewDomain.Openings || x.Domain == ReviewDomain.Geometry) && x.Status == "OPEN");
                                     dimensionsDeferred = true;
                                     ok = !openingsReview;
                                 }
@@ -128,18 +129,11 @@ namespace Hatco.PrecastManholeManager.Commands
                         writer.WriteLine(item.FoundationId + "," + status + ",\"" + details.Replace("\"", "\"\"") + "\"");
                         // Make failed opening/dimension/repair outcomes discoverable by
                         // the model-specific Review list and batch review-view action.
-                        if (status == "REVIEW" || status == "DIMENSION REVIEW" || status == "OPENINGS REVIEW")
+                        if (status == "REVIEW" || ((dimensionsOnly || repairLowBase) && (status == "DIMENSION REVIEW" || status == "OPENINGS REVIEW")))
                             ManholeReviewRegistry.Upsert(doc, Resolve(doc, item), details, null,
-                                repairLowBase ? "BASE REPAIR" : status, log);
-                        if (!dimensionsOnly && (status == "COMPLETE" || status == "OPENINGS COMPLETE"))
-                        {
-                            var issues = ManholeReviewRegistry.Load(doc);
-                            var uid = Resolve(doc, item).UniqueId;
-                            foreach (var issue in issues.Where(x => x.FoundationUniqueId == uid &&
-                                (status == "COMPLETE" || x.Severity == "OPENINGS REVIEW" || x.Severity == "REVIEW" || x.Severity == "RECHECK")))
-                            { issue.Status = "RESOLVED"; issue.Severity = "OPENINGS PASSED"; issue.UpdatedUtc = DateTime.UtcNow.ToString("O"); }
-                            ManholeReviewRegistry.Save(doc, issues);
-                        }
+                                repairLowBase ? "BASE REPAIR" : status, log, dimensionsOnly || status == "DIMENSION REVIEW" ? ReviewDomain.Dimensions : ReviewDomain.Openings);
+                        if ((dimensionsOnly || repairLowBase) && status == "COMPLETE")
+                            ManholeReviewRegistry.Resolve(doc, Resolve(doc, item), ReviewDomain.Dimensions);
                         if (done % 10 == 0 || (DateTime.Now - saved).TotalMinutes >= 5)
                         {
                             doc.Save(new SaveOptions()); saved = DateTime.Now;
@@ -153,6 +147,8 @@ namespace Hatco.PrecastManholeManager.Commands
                     finally { app.Application.FailuresProcessing -= handler; progress.Finish(); }
                 }
             }
+            log.Info(ManholeReviewRegistry.ExportReadiness(doc, Path.ChangeExtension(log.LogPath, ".readiness.csv"),
+                new System.Collections.Generic.HashSet<string>(eligible.Select(x => x.UniqueId))));
             log.Info("EXISTING RUN RESULTS: Processed: " + done + " / " + eligible.Count +
                 "\nComplete: " + complete + "\nNeeds review: " + review + "\nNo repair needed: " + skipped +
                 "\nSaved in the current RVT.\nReport: " + report);

@@ -178,7 +178,7 @@ namespace Hatco.PrecastManholeManager.Services
             else if (log == null) slot.Note.Text = text;
             else PerformanceMeasurement.Call(log, "TextNote.Text", foundation.Id.ToString(), () => { slot.Note.Text = text; });
         }
-        internal static void Place(Document doc, Element foundation, BatchSheetSlot slot,
+        internal static List<string> Place(Document doc, Element foundation, BatchSheetSlot slot,
             IList<View> views, IList<UnifiedOpeningReviewRow> actual, DiagnosticLogger log)
         {
             var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -213,14 +213,17 @@ namespace Hatco.PrecastManholeManager.Services
                 .Select(r=>"W" + r.Source.WallNumber + " " + r.OpeningSize + " / source " + r.SourceId)), log);
             log.Info("PERF VIEWPORT_CREATION_AND_SETUP Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
             var arrangeTimer = System.Diagnostics.Stopwatch.StartNew();
-            foreach (string warning in Arrange(doc, foundation, slot, log))
+            var warnings = Arrange(doc, foundation, slot, log);
+            foreach (string warning in warnings)
                 log.Warn("BATCH LAYOUT REVIEW: " + warning);
             log.Info("PERF ROW_ARRANGE Seconds=" + arrangeTimer.Elapsed.TotalSeconds.ToString("0.000"));
             log.Info("BATCH ROW PLACED Foundation=" + foundation.Id.IntegerValue + " Sheet=" + slot.Sheet.SheetNumber + " Row=" + (slot.Row + 1));
             log.Info("PERF PLACE_AND_ARRANGE Seconds=" + timer.Elapsed.TotalSeconds.ToString("0.000"));
+            return warnings;
         }
         internal static bool HasPreparedViews(Document doc, Element foundation, BatchSheetSlot slot)
         {
+            if (slot?.Sheet == null) return false;
             string prefix = "MH_" + foundation.Id.IntegerValue + "_PROD_2D";
             var views = slot.Sheet.GetAllViewports().Select(id => doc.GetElement(id) as Viewport)
                 .Where(p => p != null).Select(p => doc.GetElement(p.ViewId) as View).ToList();

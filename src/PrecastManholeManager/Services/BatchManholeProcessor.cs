@@ -160,7 +160,7 @@ namespace Hatco.PrecastManholeManager.Services
                             result.NeedsReview++;
                             ManholeReviewRegistry.Upsert(doc, foundation,
                                 "Virtual footprint: " + virtualFootprint.Reason,
-                                null, "GEOMETRY", log);
+                                null, "GEOMETRY", log, ReviewDomain.Geometry);
                             log?.Warn("BATCH VIRTUAL REVIEW Foundation=" + foundation.Id.IntegerValue +
                                       " Reason=" + virtualFootprint.Reason);
                             continue;
@@ -176,7 +176,7 @@ namespace Hatco.PrecastManholeManager.Services
                                 "Detection: " + (manhole.Warning ??
                                     "invalid wall footprint"),
                                 manhole.Walls.Select(x => x.Wall.Id.IntegerValue),
-                                "GEOMETRY", log);
+                                "GEOMETRY", log, ReviewDomain.Geometry);
                         log?.Warn(
                             "Foundation " + foundation.Id.IntegerValue +
                             " skipped. Valid=" + manhole.IsValid +
@@ -245,7 +245,7 @@ namespace Hatco.PrecastManholeManager.Services
                                 " UnknownVoids=" + audit.VoidUnknownWalls +
                                 " ManualNative=" + audit.NativeUnmanaged,
                             manhole.Walls.Select(w => w.Wall.Id.IntegerValue),
-                            "REQUIRES CLEANUP", log);
+                            "REQUIRES CLEANUP", log, ReviewDomain.Openings);
                         log?.Warn("BATCH PREVIEW ONLY: existing manual cuts on this manhole registered for isolated review. Other manholes continue.");
                     }
 

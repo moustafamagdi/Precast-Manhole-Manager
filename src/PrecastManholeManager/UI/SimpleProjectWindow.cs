@@ -104,7 +104,7 @@ namespace Hatco.PrecastManholeManager.UI
             var inspect = Button("Inspect Selected", 160, reviewButtons);
             inspect.Click += (sender, args) => Choose(ProjectAction.ReviewOne, true);
             var ignore = Button("Ignore / Restore Review", 195, reviewButtons);
-            ignore.ToolTip = "Selected row: OPEN becomes IGNORED; IGNORED is restored to OPEN. Same reasons remain ignored; changed reasons reopen. Geometry checks are never bypassed. Uncheck the review-only filter to see ignored rows.";
+            ignore.ToolTip = "Choose which review domain to accept or restore, with a reason. Acceptance is not a verified repair. Other domains stay unchanged.";
             ignore.Click += (sender, args) => Choose(ProjectAction.ToggleIgnoreReview, true);
             var reviewViewScope = Choice(reviewPanel, "3D views:", "Selected row", "All review cases");
             var reviewView = Button("Create / Open Review 3D", 225, reviewPanel);
@@ -245,6 +245,7 @@ namespace Hatco.PrecastManholeManager.UI
             AddColumn("Internal MH ID", "ManholeName", 152);
             AddColumn("Foundation", "FoundationId", 100);
             AddColumn("Status", "State", 155);
+            AddColumn("Delivery readiness", "Readiness", 245);
             AddColumn("Reason / what needs review", "Problem", 330);
             AddColumn("Type", "TypeName", 204);
             AddColumn("3D view", "ViewName", 185);

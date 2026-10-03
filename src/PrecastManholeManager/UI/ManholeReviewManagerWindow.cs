@@ -14,6 +14,8 @@ namespace Hatco.PrecastManholeManager.UI
         public ManholeReviewIssue Issue { get; set; }
         public int FoundationId => Issue.FoundationId;
         public string Severity => Issue.Severity;
+        public string Domain => Issue.Domain.ToString();
+        public string Acceptance => Issue.AcceptedBy + ": " + Issue.AcceptanceNote;
         public string Status => Issue.Status;
         public string Reason => Issue.Reason;
         public string View => Issue.ViewName ?? "";
@@ -31,9 +33,9 @@ namespace Hatco.PrecastManholeManager.UI
         public bool StatusModified { get; private set; }
 
         public ManholeReviewManagerWindow(
-            IList<ManholeReviewIssue> issues, string registerPath)
+            IList<ManholeReviewIssue> issues, string registerPath, bool statusOnly = false)
         {
-            Title = "Precast Manhole Manager - Isolated Review Queue";
+            Title = "Manhole Manager - Review by domain";
             Width = 1190;
             Height = 650;
             MinWidth = 870;
@@ -43,7 +45,7 @@ namespace Hatco.PrecastManholeManager.UI
 
             _items = issues.OrderByDescending(x => x.UpdatedUtc)
                 .Select(x => new ReviewViewListItem { Issue = x }).ToList();
-            var root = new DockPanel { Margin = new Thickness(14) };
+            var root = new DockPanel { Margin = new Thickness(14), Background = System.Windows.Media.Brushes.White };
             Content = root;
 
             var header = new StackPanel();
@@ -58,8 +60,8 @@ namespace Hatco.PrecastManholeManager.UI
             });
             header.Children.Add(new TextBlock
             {
-                Text = "Select rows to generate/update their individual 3D section-box views. " +
-                    "Unselected and resolved issues are kept in the register.",
+                Text = "Select the review domains to accept or reopen. Acceptance is a manual decision, not a verified repair. " +
+                    "Legacy records can contain mixed issues and are never closed by a geometry-only check.",
                 TextWrapping = TextWrapping.Wrap,
                 Margin = new Thickness(0, 0, 0, 8)
             });
@@ -99,6 +101,12 @@ namespace Hatco.PrecastManholeManager.UI
                 VerticalContentAlignment = VerticalAlignment.Center
             };
             actions.Children.Add(_margin);
+            if (statusOnly)
+                foreach (UIElement control in actions.Children)
+                    if (!(control is Button)) control.Visibility = Visibility.Collapsed;
+            var acceptanceReason = new TextBox { MinWidth = 340, Margin = new Thickness(0, 6, 0, 8) };
+            header.Children.Add(new TextBlock { Text = "Reason for manual acceptance (required):", Margin = new Thickness(0, 8, 0, 0) });
+            header.Children.Add(acceptanceReason);
 
             var footer = new StackPanel
             {
@@ -110,7 +118,7 @@ namespace Hatco.PrecastManholeManager.UI
             root.Children.Add(footer);
             var markResolved = new Button
             {
-                Content = "Mark Selected Resolved",
+                Content = "Accept Selected (Ignore)",
                 MinWidth = 165,
                 Padding = new Thickness(8, 6, 8, 6),
                 Margin = new Thickness(0, 0, 12, 0)
@@ -139,6 +147,7 @@ namespace Hatco.PrecastManholeManager.UI
             footer.Children.Add(reopen);
             footer.Children.Add(cancel);
             footer.Children.Add(create);
+            if (statusOnly) create.Visibility = Visibility.Collapsed;
             cancel.Click += (s, e) => DialogResult = false;
 
             var grid = new DataGrid
@@ -154,7 +163,7 @@ namespace Hatco.PrecastManholeManager.UI
             root.Children.Add(grid);
             var selectColumn = new DataGridCheckBoxColumn
             {
-                Header = "3D",
+                Header = "Select",
                 Binding = new System.Windows.Data.Binding("Selected")
                 {
                     Mode = System.Windows.Data.BindingMode.TwoWay,
@@ -165,12 +174,14 @@ namespace Hatco.PrecastManholeManager.UI
             };
             grid.Columns.Add(selectColumn);
             Column(grid, "Foundation", "FoundationId", 96);
+            Column(grid, "Domain", "Domain", 100);
             Column(grid, "Status", "Status", 85);
             Column(grid, "Severity", "Severity", 100);
             Column(grid, "Problem / review reason", "Reason", 440);
             Column(grid, "Walls", "Walls", 200);
             Column(grid, "Existing 3D view", "View", 190);
             Column(grid, "Last detection (UTC)", "LastDetected", 190);
+            Column(grid, "Manual acceptance", "Acceptance", 240);
             foreach (DataGridColumn col in grid.Columns.Skip(1))
                 col.IsReadOnly = true;
 
@@ -196,24 +207,27 @@ namespace Hatco.PrecastManholeManager.UI
                     MessageBox.Show(this, "Select at least one row.");
                     return;
                 }
-                if (status == "RESOLVED")
+                if (status == "IGNORED" && (string.IsNullOrWhiteSpace(acceptanceReason.Text) || chosen.Any(x => x.Status != "OPEN" && x.Status != "IGNORED")))
                 {
-                    MessageBoxResult confirmation = MessageBox.Show(this,
-                        "Mark " + chosen.Count + " selected issue(s) as resolved? " +
-                        "Experimental Batch All will no longer skip those foundations.",
-                        "Mark Resolved", MessageBoxButton.YesNo);
-                    if (confirmation != MessageBoxResult.Yes) return;
+                    MessageBox.Show(this, "Select active OPEN/IGNORED issues and enter an acceptance reason.");
+                    return;
                 }
                 foreach (ReviewViewListItem item in chosen)
                 {
-                    item.Issue.Status = status;
-                    item.Issue.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                    if (status == "IGNORED") ReviewState.Accept(item.Issue, Environment.UserName, acceptanceReason.Text);
+                    else
+                    {
+                        item.Issue.Status = status;
+                        item.Issue.AcceptedBy = "";
+                        item.Issue.AcceptanceNote = "";
+                        item.Issue.UpdatedUtc = DateTime.UtcNow.ToString("O");
+                    }
                 }
                 StatusModified = true;
                 CreateViews = false;
                 DialogResult = true;
             };
-            markResolved.Click += (s, e) => setStatus("RESOLVED");
+            markResolved.Click += (s, e) => setStatus("IGNORED");
             reopen.Click += (s, e) => setStatus("OPEN");
 
             create.Click += (s, e) =>

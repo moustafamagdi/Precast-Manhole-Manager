@@ -24,6 +24,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     "Production requires an editable host RVT.");
             if (!unattended && ManholeReviewRegistry.Load(doc).Any(x =>
                 x.FoundationUniqueId == foundation.UniqueId &&
+                (x.Domain == ReviewDomain.Geometry || x.Domain == ReviewDomain.Openings || x.Domain == ReviewDomain.Legacy) &&
                 x.Status == "OPEN"))
                 throw new InvalidOperationException(
                     "This manhole has an OPEN review issue. Resolve it " +

@@ -15,6 +15,7 @@ namespace Hatco.PrecastManholeManager.Services
         public string State { get; set; }
         public string Problem { get; set; }
         public string ViewName { get; set; }
+        public string Readiness { get; set; } = "DELIVERY NOT VERIFIED";
     }
 
     // One-time-project tool: lightweight geometry and existing-cut inventory.
@@ -109,7 +110,7 @@ namespace Hatco.PrecastManholeManager.Services
                         item.State = "REVIEW";
                         item.Problem = string.Join("; ", reasons.Distinct());
                         ManholeReviewRegistry.Upsert(doc, baseElement,
-                            item.Problem, walls, "REQUIRES REVIEW", log);
+                            item.Problem, walls, "REQUIRES REVIEW", log, footprint.Accepted ? ReviewDomain.Openings : ReviewDomain.Geometry);
                     }
                     else if (existing != null && existing.Status == "OPEN")
                     {
@@ -125,19 +126,18 @@ namespace Hatco.PrecastManholeManager.Services
                     item.State = "REVIEW";
                     item.Problem = "Scan error: " + ex.Message;
                     ManholeReviewRegistry.Upsert(doc, baseElement,
-                        item.Problem, null, "ERROR", log);
+                        item.Problem, null, "ERROR", log, ReviewDomain.Geometry);
                 }
                 items.Add(item);
             }
-            return items;
+            return LoadFast(doc);
         }
 
         public static List<SimpleManholeItem> LoadFast(Document doc)
         {
             var issues = ManholeReviewRegistry.Load(doc)
                 .GroupBy(x => x.FoundationUniqueId, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(x =>
-                    x.UpdatedUtc).First(), StringComparer.Ordinal);
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
             var items = new List<SimpleManholeItem>();
             foreach (Element el in new FilteredElementCollector(doc)
                 .OfCategory(BuiltInCategory.OST_StructuralFoundation)
@@ -148,9 +148,11 @@ namespace Hatco.PrecastManholeManager.Services
                     return type != null && BaseTypes.Contains(type.Name);
                 }).OrderBy(e => e.Id.IntegerValue))
             {
-                ManholeReviewIssue issue;
-                bool found = issues.TryGetValue(el.UniqueId, out issue);
-                bool flagged = found && issue.Status == "OPEN";
+                List<ManholeReviewIssue> own;
+                bool found = issues.TryGetValue(el.UniqueId, out own);
+                own = own ?? new List<ManholeReviewIssue>();
+                string status = ReviewState.Status(own);
+                bool flagged = status == "OPEN";
                 items.Add(new SimpleManholeItem
                 {
                     FoundationId = el.Id.IntegerValue,
@@ -158,9 +160,10 @@ namespace Hatco.PrecastManholeManager.Services
                     TypeName = doc.GetElement(el.GetTypeId()).Name,
                     ManholeName = (ManholeIdentityStore.Read(el) ??
                         "NOT ASSIGNED").Trim(),
-                    State = flagged ? "REVIEW" : found && issue.Status == "IGNORED" ? "IGNORED" : "NO ISSUE RECORDED",
-                    Problem = found && (flagged || issue.Status == "IGNORED") ? issue.Reason : "",
-                    ViewName = found ? issue.ViewName : ""
+                    State = flagged ? "REVIEW" : status == "IGNORED" ? "IGNORED" : "NO ISSUE RECORDED",
+                    Problem = ReviewState.Describe(own),
+                    Readiness = ReviewState.Readiness(own),
+                    ViewName = own.FirstOrDefault(x => !string.IsNullOrEmpty(x.ViewName))?.ViewName ?? ""
                 });
             }
             return items;

@@ -200,6 +200,16 @@ namespace Hatco.PrecastManholeManager.Commands
             string summary = (problems.Count > 0 ? committedGroups > 0 ? "PARTIAL REVIEW" : "REVIEW" : "OPENINGS COMPLETE") +
                 " | New=" + newCuts + " Updated=" + updated + " Unchanged=" + unchanged + "\n" + string.Join("\n", outcomes) +
                 "\n" + string.Join("\n", problems) + "\n" + dimensionStatus + "\nReview CSV: " + csv;
+            if (problems.Count > 0)
+                ManholeReviewRegistry.Upsert(doc, foundation, string.Join("; ", problems), footprint.Walls.Select(w => w.Id.IntegerValue),
+                    "OPENINGS REVIEW", log, ReviewDomain.Openings,
+                    evidence: ReviewEvidence.Capture(doc, foundation, footprint.Walls, clearance, review.Rows));
+            // Changed cuts can invalidate earlier dimensions even when the dimension phase is deferred.
+            if (committedGroups > 0)
+            {
+                if (dimensionsComplete) ManholeReviewRegistry.Resolve(doc, foundation, ReviewDomain.Dimensions);
+                else ManholeReviewRegistry.Upsert(doc, foundation, dimensionStatus, null, "DIMENSION REVIEW", log, ReviewDomain.Dimensions, replace: true);
+            }
             // Sheet-note or registry errors must never undo successfully committed walls.
             try
             {
@@ -213,7 +223,11 @@ namespace Hatco.PrecastManholeManager.Commands
                     if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Sheet status not updated.");
                 }
             }
-            catch (Exception ex) { summary += "\nSheet note review: " + ex.Message; log.Error("Opening sheet note", ex); }
+            catch (Exception ex)
+            {
+                summary += "\nSheet note review: " + ex.Message; log.Error("Opening sheet note", ex);
+                ManholeReviewRegistry.Upsert(doc, foundation, "Sheet note: " + ex.Message, null, "LAYOUT REVIEW", log, ReviewDomain.Layout);
+            }
             return new ProductionManholeResult(committedGroups > 0, dimensionsComplete, summary) {
                 DimensionsDeferred = deferred, OpeningsNeedReview = problems.Count > 0
             };

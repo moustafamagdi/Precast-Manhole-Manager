@@ -73,7 +73,7 @@ namespace Hatco.PrecastManholeManager.Commands
                                     : "In-place cutter(s): " + string.Join(",",
                                         plan.InPlaceCutterWallIds.Keys) +
                                       "; cleanup requires verification",
-                                plan.WallIds, "CLEANUP REVIEW", log);
+                                plan.WallIds, "CLEANUP REVIEW", log, ReviewDomain.Openings);
                         }
                         catch (Exception registryError)
                         {
@@ -111,7 +111,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         {
                             ManholeReviewRegistry.Upsert(doc, foundation,
                                 result.Error ?? "Cleanup rolled back",
-                                plan.WallIds, "BLOCKED", log);
+                                plan.WallIds, "BLOCKED", log, ReviewDomain.Openings);
                         }
                         catch (Exception registryError)
                         {
