@@ -11,3 +11,11 @@ Use **Rename batches - Cast in site** to replace the whole word Precast in names
 Validation: Release build, label-policy regressions (moved/custom/split/unplaced/partial sheets, naming) and workflow UI smoke passed. Revit label creation, leader display and collision/annotation-crop visual checks still require a live run. Existing model sheets have not been renamed by the code update alone.
 
 Identity guard: labels require both a recognized manhole base type and the tool-owned Internal MH ID matching exactly MH- followed by ASCII digits (for example MH-01 or MH-170). Arbitrary element names/Marks do not qualify. Invalid IDs are skipped and counted/logged; an old tool label for an invalid/deleted identity is flagged INVALID MANHOLE ID / CHECK.
+
+## Coverage audit
+
+After label updates, a read-only coverage audit now runs automatically. **Check overall coverage - Active plan** also runs it independently. Its denominator is ALL bases currently recognized by LoadFast, not only visible bases. Missing/invalid/duplicate IDs, hidden or crop-clipped bases, missing/duplicate/hidden/cropped labels, missing label bounds, outdated text/sheet information and stale anchors cause REVIEW. Orphan tool labels are reported separately. Custom/split crops and temporary hide/isolate are marked unverified. Empty models cannot pass coverage.
+
+The result includes counts and an `.overall-coverage.csv` in the log folder with one row per recognized base (name and ElementId), label IDs and reasons, plus orphan label rows. Full details are also logged. No model or registry changes occur during this check. A passed automated check is not a pixel/rendering guarantee: occlusion, text collisions and graphical readability still require visual review. If coverage fails after label creation committed, the message explicitly says labels committed and coverage not verified.
+
+Build, UI smoke and label-policy tests passed; the new coverage command still requires a live Revit run on the intended overall plan.

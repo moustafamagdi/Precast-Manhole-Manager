@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview, CompleteSelected, CompletePicked, CheckDrawingsSelected, CheckDrawingsAll, ManualIncompleteViews, OverallPlanLabels, RenameBatchSheets
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview, CompleteSelected, CompletePicked, CheckDrawingsSelected, CheckDrawingsAll, ManualIncompleteViews, OverallPlanLabels, RenameBatchSheets, CheckOverallCoverage
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -151,7 +151,7 @@ namespace Hatco.PrecastManholeManager.UI
             var complete = Button("Complete Manhole", 210, drawings);
             complete.ToolTip = "Prepare/reuse this manhole's sheet and views, create/update its openings, recheck, then update dimensions and presentation. Saves current RVT.";
             complete.Click += (sender, args) => { AutomationMergeOpenings = automationMerge.IsChecked == true; Choose(completeScope.SelectedIndex == 0 ? ProjectAction.CompleteSelected : ProjectAction.CompletePicked, completeScope.SelectedIndex == 0); };
-            var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All", "Check drawings - Selected", "Check drawings - All", "Manual views - Incomplete walls (Selected)", "Overall plan labels - Active plan", "Rename batches - Cast in site");
+            var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All", "Check drawings - Selected", "Check drawings - All", "Manual views - Incomplete walls (Selected)", "Overall plan labels - Active plan", "Rename batches - Cast in site", "Check overall coverage - Active plan");
             drawingTask.Width = 350;
             var drawingHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
             drawings.Children.Add(drawingHint);
@@ -166,11 +166,12 @@ namespace Hatco.PrecastManholeManager.UI
                 "Read-only: check drawings for every manhole. May take time; stop is available between manholes.",
                 "Explicit exception: base-envelope PLAN + four exterior overview views on a sheet. No openings/dimensions. Verify crop and complete manually; review remains open.",
                 "Create/refresh managed text labels in the active overall plan using actual sheet placements. Re-run after sheet moves; manual text positions are retained.",
-                "Replace Precast with Cast in site in MH-BATCH sheet names. Keep sheet numbers and viewports unchanged." };
+                "Replace Precast with Cast in site in MH-BATCH sheet names. Keep sheet numbers and viewports unchanged.",
+                "Read-only: compare every recognized manhole against the active plan and its managed label. Export missing, hidden, clipped, duplicate or outdated labels to CSV." };
             drawingHint.Text = drawingHints[0];
             drawingTask.SelectionChanged += (sender, args) => drawingHint.Text = drawingHints[drawingTask.SelectedIndex];
             var runDrawings = Button("Run Drawing Task", 195, drawings);
-            runDrawings.Click += (sender, args) => Choose(new[] { ProjectAction.SheetsAndDimensions, ProjectAction.SheetsAll, ProjectAction.SheetOnly, ProjectAction.ExistingDimensions, ProjectAction.DimensionOne, ProjectAction.CleanViewPresentation, ProjectAction.CheckDrawingsSelected, ProjectAction.CheckDrawingsAll, ProjectAction.ManualIncompleteViews, ProjectAction.OverallPlanLabels, ProjectAction.RenameBatchSheets }[drawingTask.SelectedIndex], drawingTask.SelectedIndex == 2 || drawingTask.SelectedIndex == 4 || drawingTask.SelectedIndex == 6 || drawingTask.SelectedIndex == 8);
+            runDrawings.Click += (sender, args) => Choose(new[] { ProjectAction.SheetsAndDimensions, ProjectAction.SheetsAll, ProjectAction.SheetOnly, ProjectAction.ExistingDimensions, ProjectAction.DimensionOne, ProjectAction.CleanViewPresentation, ProjectAction.CheckDrawingsSelected, ProjectAction.CheckDrawingsAll, ProjectAction.ManualIncompleteViews, ProjectAction.OverallPlanLabels, ProjectAction.RenameBatchSheets, ProjectAction.CheckOverallCoverage }[drawingTask.SelectedIndex], drawingTask.SelectedIndex == 2 || drawingTask.SelectedIndex == 4 || drawingTask.SelectedIndex == 6 || drawingTask.SelectedIndex == 8);
 
             var advanced = TaskPanel(tabs, "Setup & Advanced", "Numbering, exports and optional diagnostic tools. Use Drawings for normal sheet preparation.");
             var advancedButtons = new WrapPanel(); advanced.Children.Add(advancedButtons);

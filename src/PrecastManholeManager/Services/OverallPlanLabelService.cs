@@ -10,7 +10,7 @@ namespace Hatco.PrecastManholeManager.Services
 {
     // Managed text annotations, not family tags: refreshed explicitly from actual
     // viewports, never from the reservation register. Manual annotations are untouched.
-    internal static class OverallPlanLabelService
+    internal static partial class OverallPlanLabelService
     {
         private static readonly Guid SchemaId = new Guid("BFBDF11A-ED63-4D1C-9CDF-95A5D845BC25");
         private static Schema Storage()
@@ -137,8 +137,15 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Overall labels were not committed.");
             }
+            string coverage;
+            try { coverage = Audit(doc, view, log); }
+            catch (Exception ex)
+            {
+                log.Error("Labels committed, but coverage audit failed", ex);
+                coverage = "Labels committed; COVERAGE NOT VERIFIED: " + ex.Message + "\nLog: " + log.LogPath;
+            }
             return "Created: " + created + "; refreshed: " + updated + "; invalid IDs skipped: " + skipped + "; stale labels flagged: " + stale + "; failed: " + failed +
-                ".\nLocations read from actual viewports. Adjust text positions for legibility. Run again after moving views between sheets.\nThese are managed text labels, not live family tags.\nLog: " + log.LogPath;
+                ".\nLocations read from actual viewports. Adjust text positions for legibility. Run again after moving views between sheets.\nThese are managed text labels, not live family tags.\n\n" + coverage;
         }
 
         private static XYZ Parse(string value)

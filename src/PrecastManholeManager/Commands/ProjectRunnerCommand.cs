@@ -168,6 +168,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                 TaskDialog.Show("Overall plan labels", OverallPlanLabelService.Update(doc, uiDoc.ActiveView, log));
                             else if (window.Action == ProjectAction.RenameBatchSheets)
                                 TaskDialog.Show("Batch sheet names", OverallPlanLabelService.RenameSheets(doc, log));
+                            else if (window.Action == ProjectAction.CheckOverallCoverage)
+                                TaskDialog.Show("Overall plan coverage", OverallPlanLabelService.Audit(doc, uiDoc.ActiveView, log));
                             else if (window.Action == ProjectAction.ProductionOne)
                                 GenerateProductionManhole(uiDoc,
                                     window.SelectedManhole, log, window.ClearanceMm);

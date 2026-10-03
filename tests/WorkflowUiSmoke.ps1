@@ -24,6 +24,8 @@ if(!$tabs.Items[2].Content.Content.Children.Where({$_ -is [Windows.Controls.Text
 if(!$drawingTask.Items.Contains('Overall plan labels - Active plan') -or !$drawingTask.Items.Contains('Rename batches - Cast in site')){throw 'Overall plan / batch name tasks are missing'}
 $drawingTask.SelectedIndex=9
 $drawingTask.SelectedIndex=10
+if(!$drawingTask.Items.Contains('Check overall coverage - Active plan')){throw 'Overall coverage check is missing'}
+$drawingTask.SelectedIndex=11
 $drawingTask.SelectedIndex=0
 $reviewButtons=@($tabs.Items[0].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.WrapPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
 if(!($reviewButtons | Where-Object {$_.Content -eq 'Ignore / Restore Review'})){throw 'Review acknowledgment button is missing'}
