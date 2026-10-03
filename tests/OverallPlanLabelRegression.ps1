@@ -6,6 +6,15 @@ function Assert-Equal($actual, $expected, $label) {
     Write-Output "PASS: $label"
 }
 $policy = [Hatco.PrecastManholeManager.Services.OverallPlanLabelPolicy]
+foreach ($name in @('MH-01','MH-170','MH-1000')) {
+    Assert-Equal ($policy::IsManholeName($name)) $true "Valid assigned name $name"
+}
+foreach ($name in @($null,'','MH-','MH-zzz','MH-170 extra','Other MH-170','MH-170_X','mh-170',"MH-170`n",'Foundation-170')) {
+    Assert-Equal ($policy::IsManholeName($name)) $false "Reject unrelated or malformed name [$name]"
+}
+$rejected = $false
+try { $policy::Label('Foundation-170', [string[]]@('MH-BATCH-029'),5) | Out-Null } catch { $rejected = $true }
+Assert-Equal $rejected $true 'Label formatter cannot bypass the manhole ID guard'
 Assert-Equal ($policy::FoundationId('MH_5079277_PROD_2D_PLAN')) 5079277 'Plan maps to foundation'
 Assert-Equal ($policy::FoundationId('MH_5079277_PROD_2D_OUT_W4')) 5079277 'Exterior view maps to foundation'
 Assert-Equal ($policy::FoundationId('MH_5079277_DRAFT_2D_PLAN')) -1 'Draft is not a production placement'

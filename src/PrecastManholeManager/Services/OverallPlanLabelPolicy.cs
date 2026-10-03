@@ -7,6 +7,11 @@ namespace Hatco.PrecastManholeManager.Services
 {
     internal static class OverallPlanLabelPolicy
     {
+        internal static bool IsManholeName(string name)
+        {
+            return name != null && Regex.IsMatch(name, @"\AMH-[0-9]+\z");
+        }
+
         internal static int FoundationId(string viewName)
         {
             var match = Regex.Match(viewName ?? "", @"^MH_(\d+)_PROD_2D_(PLAN|OUT_W[1-4])$");
@@ -16,6 +21,7 @@ namespace Hatco.PrecastManholeManager.Services
 
         internal static string Label(string name, IEnumerable<string> sheets, int placedViews)
         {
+            if (!IsManholeName(name)) throw new ArgumentException("Expected an assigned MH- followed by digits.", "name");
             var actual = sheets.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct()
                 .OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
             string location = actual.Count == 0 ? "NOT PLACED" :

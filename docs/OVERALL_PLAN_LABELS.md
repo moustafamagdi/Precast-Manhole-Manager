@@ -9,3 +9,5 @@ Supports host manhole bases recognized by the manager with assigned Internal MH 
 Use **Rename batches - Cast in site** to replace the whole word Precast in names of sheets whose number starts with MH-BATCH-. Sheet numbers and placements are unchanged, custom names without that word are retained. New batch sheets use Cast in site Manholes by default. Save the current RVT after checking output.
 
 Validation: Release build, label-policy regressions (moved/custom/split/unplaced/partial sheets, naming) and workflow UI smoke passed. Revit label creation, leader display and collision/annotation-crop visual checks still require a live run. Existing model sheets have not been renamed by the code update alone.
+
+Identity guard: labels require both a recognized manhole base type and the tool-owned Internal MH ID matching exactly MH- followed by ASCII digits (for example MH-01 or MH-170). Arbitrary element names/Marks do not qualify. Invalid IDs are skipped and counted/logged; an old tool label for an invalid/deleted identity is flagged INVALID MANHOLE ID / CHECK.

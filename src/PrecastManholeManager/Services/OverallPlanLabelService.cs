@@ -48,13 +48,21 @@ namespace Hatco.PrecastManholeManager.Services
                 .Where(n => n.OwnerViewId == view.Id && n.GetEntity(schema).IsValid()).ToList();
             var textType = doc.GetDefaultElementTypeId(ElementTypeGroup.TextNoteType);
             if (textType == ElementId.InvalidElementId) throw new InvalidOperationException("Load a text note type first.");
-            int created = 0, updated = 0, stale = 0, failed = 0;
+            int created = 0, updated = 0, stale = 0, failed = 0, skipped = 0;
             var processed = new HashSet<string>();
             using (var tx = new Transaction(doc, "Manholes - Overall plan labels"))
             {
                 tx.Start(); TransactionFailureHandling.Configure(tx, log);
                 foreach (var foundation in bases)
                 {
+                    string name = ManholeIdentityStore.Read(foundation);
+                    if (!OverallPlanLabelPolicy.IsManholeName(name))
+                    {
+                        skipped++;
+                        log.Warn("OVERALL LABEL SKIPPED Foundation=" + foundation.Id +
+                            "; assigned ID must be MH- followed by digits. Actual='" + (name ?? "<missing>") + "'.");
+                        continue;
+                    }
                     var box = foundation.get_BoundingBox(null);
                     if (box == null) { failed++; continue; }
                     var anchor = (box.Min + box.Max) * .5;
@@ -73,8 +81,6 @@ namespace Hatco.PrecastManholeManager.Services
                         sub.Start();
                         try
                         {
-                            string name = ManholeIdentityStore.Read(foundation);
-                            if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Assign a unique Internal MH ID first.");
                             var matches = notes.Where(n => n.GetEntity(schema).Get<string>(schema.GetField("Foundation")) == foundation.UniqueId).ToList();
                             if (matches.Count > 1) throw new InvalidOperationException("Duplicate tool labels in this view; remove the extra label manually.");
                             var placements = ports.ContainsKey(foundation.Id.IntegerValue) ? ports[foundation.Id.IntegerValue] : null;
@@ -119,7 +125,11 @@ namespace Hatco.PrecastManholeManager.Services
                         sub.Start();
                         try
                         {
-                            note.Text = note.Text.Split('\n')[0] + "\nNOT IN CURRENT VIEW / CHECK";
+                            var owner = doc.GetElement(note.GetEntity(schema).Get<string>(schema.GetField("Foundation")));
+                            string ownerName = owner == null ? null : ManholeIdentityStore.Read(owner);
+                            note.Text = OverallPlanLabelPolicy.IsManholeName(ownerName)
+                                ? ownerName + "\nNOT IN CURRENT VIEW / CHECK"
+                                : "INVALID MANHOLE ID / CHECK";
                             sub.Commit(); stale++;
                         }
                         catch (Exception ex) { if (sub.GetStatus() == TransactionStatus.Started) sub.RollBack(); failed++; log.Warn("STALE LABEL " + note.Id + ": " + ex.Message); }
@@ -127,7 +137,7 @@ namespace Hatco.PrecastManholeManager.Services
                 }
                 if (tx.Commit() != TransactionStatus.Committed) throw new InvalidOperationException("Overall labels were not committed.");
             }
-            return "Created: " + created + "; refreshed: " + updated + "; stale labels flagged: " + stale + "; failed: " + failed +
+            return "Created: " + created + "; refreshed: " + updated + "; invalid IDs skipped: " + skipped + "; stale labels flagged: " + stale + "; failed: " + failed +
                 ".\nLocations read from actual viewports. Adjust text positions for legibility. Run again after moving views between sheets.\nThese are managed text labels, not live family tags.\nLog: " + log.LogPath;
         }
 
