@@ -1,0 +1,11 @@
+# Overall plan manhole labels
+
+Open the intended overall plan before opening the manager. In Drawings choose **Overall plan labels - Active plan**, then **Run Drawing Task**. No grid-row selection is required. Bases in the active view receive a two-line managed TextNote and leader using the current default text type. Adjust text positions/type manually for readability. Run again after sheet changes: text updates in place; if a base moves the label follows its displacement while preserving its manual offset. These are explicit-refresh annotations, not live family tags.
+
+Placement comes from current Viewports of the production PLAN / OUT_W1–W4 view names (`MH_<foundationId>_PROD_2D_*`), never from reserved sheet slots. Keep these internal view names; title-on-sheet may be changed. A single sheet displays its actual SheetNumber. Split placement lists all sheet numbers; fewer than five placed views is marked PARTIAL; no placements is NOT PLACED. Existing manual annotations are not touched. Duplicate tool labels are reported rather than deleted. Tool labels whose base is absent/outside the current view are marked NOT IN CURRENT VIEW / CHECK, not silently deleted.
+
+Supports host manhole bases recognized by the manager with assigned Internal MH IDs, in an unsplit rectangular plan crop (or crop disabled). Check annotation crop, visibility and text overlap visually; automatic label collision arrangement is not implemented. Nearby labels may need manual spacing. Viewport name-based mapping cannot discover arbitrarily renamed or duplicated production views.
+
+Use **Rename batches - Cast in site** to replace the whole word Precast in names of sheets whose number starts with MH-BATCH-. Sheet numbers and placements are unchanged, custom names without that word are retained. New batch sheets use Cast in site Manholes by default. Save the current RVT after checking output.
+
+Validation: Release build, label-policy regressions (moved/custom/split/unplaced/partial sheets, naming) and workflow UI smoke passed. Revit label creation, leader display and collision/annotation-crop visual checks still require a live run. Existing model sheets have not been renamed by the code update alone.

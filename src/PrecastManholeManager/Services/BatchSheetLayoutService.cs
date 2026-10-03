@@ -110,7 +110,7 @@ namespace Hatco.PrecastManholeManager.Services
                             .Any(s => s.Id != sheet.Id && s.SheetNumber == code))
                             throw new InvalidOperationException("Sheet number already in use: " + code);
                         sheet.SheetNumber = code;
-                        sheet.Name = "Precast Manholes - " + (Page(index) + 1).ToString("000");
+                        sheet.Name = "Cast in site Manholes - " + (Page(index) + 1).ToString("000");
                         pages[Page(index)] = sheet;
                         log.Info("BATCH NEW SHEET " + sheet.SheetNumber + " Foundation=" + foundation.Id.IntegerValue);
                         PerformanceMeasurement.Call(log, "Batch.NewSheet.Regenerate", sheet.SheetNumber, () => doc.Regenerate());

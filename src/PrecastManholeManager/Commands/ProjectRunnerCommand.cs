@@ -164,6 +164,10 @@ namespace Hatco.PrecastManholeManager.Commands
                                 PrepareSelectedSheet(uiDoc, window.SelectedManhole, log);
                             else if (window.Action == ProjectAction.ManualIncompleteViews)
                                 PrepareSelectedSheet(uiDoc, window.SelectedManhole, log, manualIncomplete: true);
+                            else if (window.Action == ProjectAction.OverallPlanLabels)
+                                TaskDialog.Show("Overall plan labels", OverallPlanLabelService.Update(doc, uiDoc.ActiveView, log));
+                            else if (window.Action == ProjectAction.RenameBatchSheets)
+                                TaskDialog.Show("Batch sheet names", OverallPlanLabelService.RenameSheets(doc, log));
                             else if (window.Action == ProjectAction.ProductionOne)
                                 GenerateProductionManhole(uiDoc,
                                     window.SelectedManhole, log, window.ClearanceMm);
