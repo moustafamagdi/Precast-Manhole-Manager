@@ -15,7 +15,7 @@ namespace Hatco.PrecastManholeManager.Commands
 {
     public sealed partial class ProjectRunnerCommand
     {
-        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false, bool mergeOverlapping = false, bool dimensionsAfterSheets = false, bool fullAutomation = false)
+        private static void RunUnattended(UIApplication app, DiagnosticLogger log, double clearance, bool timingDiagnostic = false, bool cropOrderExperiment = false, bool extraRegeneration = true, bool sheetsOnly = false, bool mergeOverlapping = false, bool dimensionsAfterSheets = false, bool fullAutomation = false, IList<SimpleManholeItem> targets = null)
         {
             if (fullAutomation) { sheetsOnly = true; dimensionsAfterSheets = false; timingDiagnostic = false; }
             if (dimensionsAfterSheets) { sheetsOnly = true; timingDiagnostic = false; }
@@ -43,16 +43,21 @@ namespace Hatco.PrecastManholeManager.Commands
             if (titleblock == null) throw new InvalidOperationException("Load an A0/A1 titleblock.");
             if (!new FilteredElementCollector(doc).OfClass(typeof(TextNoteType)).Any())
                 throw new InvalidOperationException("Load a text type.");
+            if (targets != null && (!fullAutomation || targets.Count == 0)) throw new InvalidOperationException("A non-empty full automation scope is required.");
+            if (targets != null) foreach (var target in targets) Resolve(doc, target);
+            var targetIds = targets == null ? null : new HashSet<string>(targets.Select(x => x.UniqueId));
             var numbering = ManholeNumberingService.Preview(doc);
+            int targetCount = targetIds == null ? numbering.Rows.Count : numbering.Rows.Count(x => targetIds.Contains(x.FoundationUniqueId));
+            if (targetCount == 0) throw new InvalidOperationException("No recognized manhole in the requested scope.");
             if (numbering.Errors.Count > 0) throw new InvalidOperationException(string.Join("\n", numbering.Errors));
             if (numbering.Rows.Count == 0) throw new InvalidOperationException("No eligible manholes found.");
             foreach (var row in numbering.Rows)
-                if (!row.NewNumber) BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
+                if (!row.NewNumber && (targetIds == null || targetIds.Contains(row.FoundationUniqueId))) BatchSheetLayoutService.Find(doc, doc.GetElement(new ElementId(row.FoundationId)));
             string folder = Path.Combine(Path.GetDirectoryName(log.LogPath), "Batch_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + "_" + Guid.NewGuid().ToString("N").Substring(0,6));
             string output = doc.PathName;
-            var ask = new TaskDialog(fullAutomation ? "Full Automation - All" : "Generate / Update All") {
-                MainInstruction = (fullAutomation ? "Run FULL AUTOMATION for " : dimensionsAfterSheets ? "Prepare SHEETS then DIMENSIONS for " : sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + numbering.Rows.Count + " manholes unattended?",
-                MainContent = (fullAutomation ? "Sheets -> create/update openings -> geometry recheck -> dimensions -> plan marks / NO BUBBLE NTS. No prompts between phases. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ". No automatic base repair, profile reset or moved-view refresh.\n" : "") + "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
+            var ask = new TaskDialog(targetIds != null ? "Complete Manhole" : fullAutomation ? "Full Automation - All" : "Generate / Update All") {
+                MainInstruction = (fullAutomation ? "Run FULL AUTOMATION for " : dimensionsAfterSheets ? "Prepare SHEETS then DIMENSIONS for " : sheetsOnly ? "Prepare SHEETS ONLY for " : "Run ") + targetCount + " manholes unattended?",
+                MainContent = (targets == null ? "" : "Scope: " + string.Join(", ", targets.Select(x => x.ManholeName + " [" + x.FoundationId + "]")) + "\n") + (fullAutomation ? "Sheets -> create/update openings -> geometry recheck -> dimensions -> plan marks / NO BUBBLE NTS. No prompts between phases. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ". No automatic base repair, profile reset or moved-view refresh.\n" : "") + "Pipes and ducts only. Clearance per side: " + clearance + " mm.\n" +
                     (!sheetsOnly ? "Each opening/overlapping group commits independently. Merge overlapping openings: " + (mergeOverlapping ? "ON" : "OFF") + ".\n" : "") +
                     (dimensionsAfterSheets ? "Stage 1: create/reuse and place views, then save. Stage 2: opening/body/base dimensions for all prepared manholes, including REVIEW cases. No opening creation or repair. No prompts between stages.\n" : sheetsOnly && !fullAutomation ? "SHEETS ONLY: creates/reuses body views and reserved rows. No opening pass; existing physical cuts remain unchanged.\n" : "") +
                     (timingDiagnostic ? "TIMING DIAGNOSTIC: at most 3 new documentation attempts, no opening pass. Extra regeneration=" + extraRegeneration + ". Saves changes in the current RVT.\n" : "") +
@@ -100,15 +105,16 @@ namespace Hatco.PrecastManholeManager.Commands
                 {
                     app.Application.FailuresProcessing += handler;
                     progress.Start();
-                    progress.Update(0, numbering.Rows.Count, "Assigning IDs and reserving every manhole position...");
-                    ManholeNumberingService.Apply(doc, numbering, log);
-                    var items = SimpleProjectScanService.LoadFast(doc).OrderBy(i=>BatchSheetLayoutService.ManholeOrder(i.ManholeName))
+                    progress.Update(0, targetCount, "Assigning IDs and reserving every manhole position...");
+                    ManholeNumberingService.Apply(doc, numbering, log, targetIds);
+                    var allItems = SimpleProjectScanService.LoadFast(doc);
+                    var items = allItems.Where(i => targetIds == null || targetIds.Contains(i.UniqueId)).OrderBy(i=>BatchSheetLayoutService.ManholeOrder(i.ManholeName))
                         .ThenBy(i=>i.ManholeName, StringComparer.OrdinalIgnoreCase).ThenBy(i=>i.FoundationId).ToList();
                     using (var tx = new Transaction(doc, "HATCO - Reserve Stable Batch Rows"))
                     {
                         tx.Start(); TransactionFailureHandling.Configure(tx, log);
                         PerformanceMeasurement.Call(log, "Batch.ReserveRows", doc.Title,
-                            () => BatchSheetLayoutService.Reserve(doc, items.Select(i=>Resolve(doc,i)).ToList(), titleblock, log));
+                            () => BatchSheetLayoutService.Reserve(doc, allItems.Select(i=>Resolve(doc,i)).ToList(), titleblock, log, targetIds));
                         if (PerformanceMeasurement.Call(log, "Transaction.Commit.Reservations", doc.Title,
                             () => tx.Commit()) != TransactionStatus.Committed) throw new InvalidOperationException("Could not reserve sheet rows.");
                     }
@@ -123,7 +129,7 @@ namespace Hatco.PrecastManholeManager.Commands
                     if (sheetsOnly) stopped = progress.CancelRequested ? "Sheets-only pass stopped by user; saved progress retained." : "Sheets-only pass finished. Opening stage was not run. See VIEWS statuses in the report.";
                     if (fullAutomation)
                     {
-                        automationSummary = RunFullAutomationPhases(uidoc, items, log, progress, writer, clearance, mergeOverlapping);
+                        automationSummary = RunFullAutomationPhases(uidoc, items, log, progress, writer, clearance, mergeOverlapping, targetIds == null ? null : new HashSet<int>(items.Select(i => i.FoundationId)));
                         stopped = progress.CancelRequested ? "Full automation stopped by user; committed progress saved." : "Full automation phases finished; review report for incomplete items.";
                     }
                     if (dimensionsAfterSheets)
@@ -222,7 +228,7 @@ namespace Hatco.PrecastManholeManager.Commands
                 }
             }
             string summary = (stopped.Length == 0 ? "Run completed." : stopped) +
-                "\nManholes with prepared views: " + documented.Count + " / " + numbering.Rows.Count +
+                "\nManholes with prepared views: " + documented.Count + " / " + targetCount +
                 (fullAutomation ? "\n" + automationSummary : sheetsOnly ? "\nOpening stage: not requested." : "\nProcessed openings: " + processed + " / " + numbering.Rows.Count + "\nCommitted: " + committed +
                 "\nReview: " + review + "\nSaved through item: " + savedThrough +
                 "\nCommitted with dimension review: " + dimensionReview) +

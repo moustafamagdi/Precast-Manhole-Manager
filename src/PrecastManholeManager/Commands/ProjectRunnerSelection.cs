@@ -54,6 +54,19 @@ namespace Hatco.PrecastManholeManager.Commands
             return result;
         }
 
+        private static SimpleManholeItem PickOneManhole(UIDocument uidoc)
+        {
+            var known = SimpleProjectScanService.LoadFast(uidoc.Document);
+            try
+            {
+                var picked = uidoc.Selection.PickObject(ObjectType.Element,
+                    new ManholeBaseSelectionFilter(new HashSet<int>(known.Select(x => x.FoundationId))),
+                    "Pick one manhole base to complete openings, views, sheet and dimensions. Esc cancels.");
+                return known.Single(x => x.FoundationId == picked.ElementId.IntegerValue);
+            }
+            catch (Autodesk.Revit.Exceptions.OperationCanceledException) { return null; }
+        }
+
         private sealed class ManholeBaseSelectionFilter : ISelectionFilter
         {
             private readonly HashSet<int> allowed;

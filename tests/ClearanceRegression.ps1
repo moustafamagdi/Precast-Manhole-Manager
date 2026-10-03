@@ -445,3 +445,13 @@ Assert-That ($noteWidth.Invoke($null,[object[]]@([double]1,[double]0.1,[double]2
 $invalidWidthRejected=$false
 try { $noteWidth.Invoke($null,[object[]]@([double]::NaN,[double]0.1,[double]2)) } catch { $invalidWidthRejected=$true }
 Assert-That $invalidWidthRejected 'Non-finite note bounds fail explicitly rather than reaching Revit'
+
+$presentationScope=$assembly.GetType('Hatco.PrecastManholeManager.Services.ManholeViewPresentationService').GetMethod('InScope',[Reflection.BindingFlags]'NonPublic,Static')
+$oneScope=New-Object 'System.Collections.Generic.HashSet[int]'
+[void]$oneScope.Add(123)
+Assert-That ($presentationScope.Invoke($null,[object[]]@('MH_123_PROD_2D_PLAN',$oneScope.PSObject.BaseObject))) 'Scoped completion includes its own plan'
+Assert-That ($presentationScope.Invoke($null,[object[]]@('MH_123_PROD_2D_OUT_W4',$oneScope.PSObject.BaseObject))) 'Scoped completion includes its own section viewport'
+Assert-That (!$presentationScope.Invoke($null,[object[]]@('MH_1234_PROD_2D_PLAN',$oneScope.PSObject.BaseObject))) 'Scoped completion cannot match another foundation by prefix'
+$oneScope.Clear()
+Assert-That (!$presentationScope.Invoke($null,[object[]]@('MH_123_PROD_2D_PLAN',$oneScope.PSObject.BaseObject))) 'Empty scope never expands to every manhole'
+Assert-That ($presentationScope.Invoke($null,[object[]]@('MH_123_PROD_2D_PLAN',$null))) 'Unscoped presentation keeps full-run behavior'

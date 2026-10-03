@@ -147,7 +147,7 @@ namespace Hatco.PrecastManholeManager.Services
         }
 
         public static void Apply(Document doc,
-            ManholeNumberingPlan approved, DiagnosticLogger log)
+            ManholeNumberingPlan approved, DiagnosticLogger log, ISet<string> scope = null)
         {
             if (doc.IsReadOnly || doc.IsLinked)
                 throw new InvalidOperationException(
@@ -183,6 +183,7 @@ namespace Hatco.PrecastManholeManager.Services
                 {
                     foreach (ManholeNumberingRow row in approved.Rows)
                     {
+                        if (scope != null && !scope.Contains(row.FoundationUniqueId)) continue;
                         Element foundation = doc.GetElement(
                             new ElementId(row.FoundationId));
                         if (foundation == null ||
@@ -230,10 +231,11 @@ namespace Hatco.PrecastManholeManager.Services
                     throw;
                 }
             }
+            var applied = approved.Rows.Where(r => scope == null || scope.Contains(r.FoundationUniqueId)).ToList();
             log.Info("INTERNAL MH NUMBERING COMMITTED: " +
-                approved.Rows.Count + " total, " +
-                approved.NewlyNumbered + " assigned, " +
-                approved.ExistingPreserved + " unchanged. " +
+                applied.Count + " total, " +
+                applied.Count(r => r.NewNumber) + " assigned, " +
+                applied.Count(r => !r.NewNumber) + " unchanged. " +
                 "No native Mark or project number was modified.");
         }
 

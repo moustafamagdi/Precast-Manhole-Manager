@@ -15,7 +15,7 @@ namespace Hatco.PrecastManholeManager.Commands
         // Uses the outer batch's failure handler, MEP cache, report and final-save guard.
         // Opening eligibility is independent of successful documentation.
         private static string RunFullAutomationPhases(UIDocument uidoc, IList<SimpleManholeItem> items,
-            DiagnosticLogger log, BatchProgressWindow progress, StreamWriter writer, double clearance, bool merge)
+            DiagnosticLogger log, BatchProgressWindow progress, StreamWriter writer, double clearance, bool merge, ISet<int> presentationScope = null)
         {
             var doc = uidoc.Document;
             int attempted = 0, openingReview = 0, checkedCount = 0, checksFailed = 0;
@@ -85,7 +85,7 @@ namespace Hatco.PrecastManholeManager.Commands
                         log.Info("AUTOMATION PRESENTATION CHECKPOINT saved through " + done);
                     }
                     return !progress.CancelRequested;
-                });
+                }, presentationScope);
             doc.Save(new SaveOptions());
             return "Opening attempts: " + attempted + "/" + items.Count + "; opening review/errors: " + openingReview +
                 "\nGeometry checks: " + checkedCount + "; check errors: " + checksFailed + "\n" + dimensions + "\n" + presentation;

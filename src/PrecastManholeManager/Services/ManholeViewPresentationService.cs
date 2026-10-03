@@ -10,6 +10,13 @@ namespace Hatco.PrecastManholeManager.Services
     {
         private static readonly Regex PlanName = new Regex(@"^MH_\d+_(?:PROD|DRAFT)_2D_PLAN$");
         private static readonly Regex ViewName = new Regex(@"^MH_\d+_(?:PROD|DRAFT)_2D_(?:PLAN|OUT_W[1-4])$");
+        internal static bool InScope(string name, System.Collections.Generic.ISet<int> scope)
+        {
+            if (scope == null) return true;
+            int id;
+            var parts = (name ?? "").Split('_');
+            return parts.Length > 1 && parts[0] == "MH" && int.TryParse(parts[1], out id) && scope.Contains(id);
+        }
         public static bool IsManagedPlan(string name) => PlanName.IsMatch(name ?? "");
         public static bool IsOwnSection(string planName, string markerName) => IsManagedPlan(planName) &&
             Enumerable.Range(1, 4).Any(n => markerName == planName.Substring(0, planName.Length - 5) + "_OUT_W" + n);
@@ -40,10 +47,10 @@ namespace Hatco.PrecastManholeManager.Services
 
         // Run after all sections exist: later-created sections can appear in earlier plans.
         // Each plan commits independently so one uneditable view cannot stop the others.
-        public static string ApplyAll(Document doc, DiagnosticLogger log, Func<int, int, bool> proceed = null)
+        public static string ApplyAll(Document doc, DiagnosticLogger log, Func<int, int, bool> proceed = null, System.Collections.Generic.ISet<int> scope = null)
         {
             var plans = new FilteredElementCollector(doc).OfClass(typeof(ViewPlan)).Cast<ViewPlan>()
-                .Where(v => !v.IsTemplate && IsManagedPlan(v.Name)).ToList();
+                .Where(v => !v.IsTemplate && IsManagedPlan(v.Name) && InScope(v.Name, scope)).ToList();
             var markers = new FilteredElementCollector(doc).OfCategory(BuiltInCategory.OST_Viewers)
                 .WhereElementIsNotElementType().ToElements();
             int completed = 0, failed = 0, changed = 0;
@@ -63,7 +70,7 @@ namespace Hatco.PrecastManholeManager.Services
                 catch (Exception ex) { failed++; log.Error("PLAN MARKS REVIEW " + plan.Name, ex); }
             }
             var allPorts = new FilteredElementCollector(doc).OfClass(typeof(Viewport)).Cast<Viewport>()
-                .Where(p => ViewName.IsMatch(doc.GetElement(p.ViewId)?.Name ?? "")).ToList();
+                .Where(p => ViewName.IsMatch(doc.GetElement(p.ViewId)?.Name ?? "") && InScope(doc.GetElement(p.ViewId)?.Name, scope)).ToList();
             ElementType type;
             try { type = allPorts.Count == 0 ? null : RequiredViewportType(doc, allPorts[0]); }
             catch (InvalidOperationException)

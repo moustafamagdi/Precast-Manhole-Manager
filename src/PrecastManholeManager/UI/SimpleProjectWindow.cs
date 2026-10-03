@@ -12,7 +12,7 @@ namespace Hatco.PrecastManholeManager.UI
     internal enum ProjectAction
     {
         Close, Scan, CleanScan, RecheckReviewOnly, NumberAll, ReviewOne, RecheckOne, Make3D, DraftSheet, ProductionOne, ProductionAll, DimensionOne, SixRowLayoutSheet, ExportExcel,
-        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview
+        ExistingOne, ExistingAll, ExistingDimensions, ExistingPicked, ExistingActiveView, RepairPicked, RepairActiveView, Review3DAll, SheetOnly, SheetsAll, SheetsAndDimensions, CleanViewPresentation, FullAutomation, ToggleIgnoreReview, CompleteSelected, CompletePicked
     }
 
     // Intentionally modal: the Revit command performs the selected operation
@@ -93,7 +93,7 @@ namespace Hatco.PrecastManholeManager.UI
             _timing.Checked += (s, e) => _cropOrder.IsEnabled = true;
             _timing.Unchecked += (s, e) => { _cropOrder.IsChecked = false; _cropOrder.IsEnabled = false; };
 
-            var tabs = new TabControl { Height = 270, Margin = new Thickness(0, 0, 0, 12) };
+            var tabs = new TabControl { Height = 315, Margin = new Thickness(0, 0, 0, 12) };
             top.Children.Add(tabs);
 
             var reviewPanel = TaskPanel(tabs, "1. Check & Review", "Recheck current geometry and missing openings. Checking does not create openings or drawings.");
@@ -147,6 +147,10 @@ namespace Hatco.PrecastManholeManager.UI
             automate.ToolTip = "All manholes: sheets, create/update openings, recheck, dimensions and presentation. Saves current RVT. No automatic base repair, profile reset or moved-view refresh.";
             automate.Click += (sender, args) => { AutomationMergeOpenings = automationMerge.IsChecked == true; Choose(ProjectAction.FullAutomation, false); };
             drawings.Children.Add(new TextBlock { Text = "Full Automation includes opening changes and checkpoints in the current RVT.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
+            var completeScope = Choice(drawings, "Complete one:", "Selected row", "Pick one base in Revit");
+            var complete = Button("Complete Manhole", 210, drawings);
+            complete.ToolTip = "Prepare/reuse this manhole's sheet and views, create/update its openings, recheck, then update dimensions and presentation. Saves current RVT.";
+            complete.Click += (sender, args) => { AutomationMergeOpenings = automationMerge.IsChecked == true; Choose(completeScope.SelectedIndex == 0 ? ProjectAction.CompleteSelected : ProjectAction.CompletePicked, completeScope.SelectedIndex == 0); };
             var drawingTask = Choice(drawings, "Task:", "Sheets + dimensions - All", "Prepare sheets - All", "Prepare sheet - Selected", "Dimensions - All prepared", "Dimensions - Selected", "Plan marks + viewport type - All");
             drawingTask.Width = 350;
             var drawingHint = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) };
@@ -411,7 +415,7 @@ namespace Hatco.PrecastManholeManager.UI
                 double.TryParse(_clearance.Text, NumberStyles.Float,
                     CultureInfo.InvariantCulture, out clearance)) &&
                 !double.IsNaN(clearance) && !double.IsInfinity(clearance) && clearance >= 0;
-            if (!valid && (requested == ProjectAction.FullAutomation || requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
+            if (!valid && (requested == ProjectAction.CompleteSelected || requested == ProjectAction.CompletePicked || requested == ProjectAction.FullAutomation || requested == ProjectAction.ProductionOne || requested == ProjectAction.ProductionAll ||
                 requested == ProjectAction.ExistingOne || requested == ProjectAction.ExistingAll ||
                 requested == ProjectAction.ExistingPicked || requested == ProjectAction.ExistingActiveView ||
                 requested == ProjectAction.RepairPicked || requested == ProjectAction.RepairActiveView ||

@@ -83,6 +83,14 @@ namespace Hatco.PrecastManholeManager.Commands
                             }
                             else if (window.Action == ProjectAction.NumberAll)
                                 AssignAllManholeNames(doc, log);
+                            else if (window.Action == ProjectAction.CompleteSelected || window.Action == ProjectAction.CompletePicked)
+                            {
+                                var target = window.Action == ProjectAction.CompleteSelected ? window.SelectedManhole : PickOneManhole(uiDoc);
+                                if (target == null) continue;
+                                RunUnattended(input.Application, log, window.ClearanceMm, mergeOverlapping: window.AutomationMergeOpenings,
+                                    fullAutomation: true, targets: new List<SimpleManholeItem> { target });
+                                return Result.Succeeded;
+                            }
                             else if (window.Action == ProjectAction.FullAutomation)
                             {
                                 RunUnattended(input.Application, log, window.ClearanceMm, mergeOverlapping: window.AutomationMergeOpenings, fullAutomation: true);
