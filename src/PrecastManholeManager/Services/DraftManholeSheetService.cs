@@ -16,7 +16,7 @@ namespace Hatco.PrecastManholeManager.Services
     // not five orthographic 3D views. Does not modify model geometry.
     // Caller owns ONE Transaction, so any layout error rolls back the
     // entire sheet and its dependent views.
-    internal static class DraftManholeSheetService
+    internal static partial class DraftManholeSheetService
     {
         public static DraftSheetResult Generate(Document doc, Element foundation,
             VirtualFoundationResult footprint, DiagnosticLogger log,
@@ -288,7 +288,7 @@ namespace Hatco.PrecastManholeManager.Services
             string name, ViewFamilyType sectionType,
             Line axis, XYZ midpoint, XYZ outward,
             double wallThicknessFt, double bottomZ, double topZ,
-            double pad, DiagnosticLogger log)
+            double pad, DiagnosticLogger log, double? overviewDepthFt = null)
         {
             View existing = new FilteredElementCollector(doc)
                 .OfClass(typeof(View)).Cast<View>()
@@ -336,7 +336,7 @@ namespace Hatco.PrecastManholeManager.Services
                 Transform = frame,
                 Min = new XYZ(-halfW, -halfH, 0),
                 Max = new XYZ(halfW, halfH,
-                    standOff + wallThicknessFt + extensionInside)
+                    standOff + (overviewDepthFt ?? wallThicknessFt) + extensionInside)
             };
             ViewSection section = PerformanceMeasurement.Call(log, "ViewSection.CreateSection", name,
                 () => ViewSection.CreateSection(doc, sectionType.Id, sectionBox));

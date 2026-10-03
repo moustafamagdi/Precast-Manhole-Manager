@@ -18,6 +18,9 @@ $drawingTask=$drawingChoices | Where-Object {$_.Items.Contains('Check drawings -
 if(!$drawingTask -or !$drawingTask.Items.Contains('Check drawings - All')){throw 'Read-only drawing checks are missing'}
 $drawingTask.SelectedIndex=6
 $drawingTask.SelectedIndex=7
+if(!$drawingTask.Items.Contains('Manual views - Incomplete walls (Selected)')){throw 'Selected-only manual documentation exception is missing'}
+$drawingTask.SelectedIndex=8
+if(!$tabs.Items[2].Content.Content.Children.Where({$_ -is [Windows.Controls.TextBlock] -and $_.Text -like 'Explicit exception:*'})){throw 'Manual exception must explain its scope'}
 $drawingTask.SelectedIndex=0
 $reviewButtons=@($tabs.Items[0].Content.Content.Children | Where-Object {$_ -is [Windows.Controls.WrapPanel]} | ForEach-Object {$_.Children} | Where-Object {$_ -is [Windows.Controls.Button]})
 if(!($reviewButtons | Where-Object {$_.Content -eq 'Ignore / Restore Review'})){throw 'Review acknowledgment button is missing'}

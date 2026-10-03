@@ -162,6 +162,8 @@ namespace Hatco.PrecastManholeManager.Commands
                                     window.SelectedManhole, log);
                             else if (window.Action == ProjectAction.SheetOnly)
                                 PrepareSelectedSheet(uiDoc, window.SelectedManhole, log);
+                            else if (window.Action == ProjectAction.ManualIncompleteViews)
+                                PrepareSelectedSheet(uiDoc, window.SelectedManhole, log, manualIncomplete: true);
                             else if (window.Action == ProjectAction.ProductionOne)
                                 GenerateProductionManhole(uiDoc,
                                     window.SelectedManhole, log, window.ClearanceMm);
